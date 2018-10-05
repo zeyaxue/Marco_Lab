@@ -32,13 +32,6 @@ ps #  USE THIS for DAtest
 
 
 # 3 # DAtest using CheeseOutcome as predictor
-sam.colname <- colnames(sample_data(ps))  # all variable names
-covar.name <- sam.colname[!grepl(paste(c("CheeseOutcome","SampleID"), collapse="|"), 
-                          sam.colname)]  # confounding variable 
-mytest <- testDA(ps, predictor = "CheeseOutcome", covars = covar.name, R=10, 
-                 tests = c("anc", "aov", "lao", "lao2", "ds2", "ds2x","ere", 
-                           "ere2", "erq", "erq2", "fri", "msf", "zig"),
-                 effectSize = 10, k=c(5,10,15))
 # plot results
 plot(mytest)
 # Print summary statistics (medians)
@@ -48,7 +41,7 @@ mytest$details
 # Average run times of each method:
 mytest$run.times
 ## Power analysis
-po.anc <- powerDA(ps, predictor = "CheeseOutcome", covars = covar.name, R=10,
+po.anc <- powerDA(ps, predictor = "CheeseOutcome", covars = "SampleType", R=10,
                   test = "anc", k=c(5,10,15))
 plot(po.anc)
 summary(po.anc)
