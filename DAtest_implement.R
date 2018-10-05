@@ -32,6 +32,8 @@ ps #  USE THIS for DAtest
 
 
 # 3 # DAtest using CheeseOutcome as predictor
+# Use function for individial methods
+source(file.path(path.out,"DAtest_ANCOM.R"))  # call DA.anc()
 # plot results
 plot(mytest)
 # Print summary statistics (medians)
