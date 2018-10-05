@@ -32,10 +32,11 @@ ps #  USE THIS for DAtest
 
 
 # 3 # DAtest using CheeseOutcome as predictor
-# Use function for individial methods
-source(file.path(path.out,"DAtest_ANCOM.R"))  # call DA.anc()
-# plot results
-plot(mytest)
+# Can't include confounding variable as it makes some tests not run
+mytest <- testDA(ps, predictor = "CheeseOutcome", R = 10, 
+                 tests = c("anc", "aov", "lao", "lao2", "ds2", "ds2x","ere", 
+                           "ere2", "erq", "erq2", "fri", "msf", "zig"),
+                 effectSize = 30, k = c(5,10,15), verbose = TRUE)
 # Print summary statistics (medians)
 summary(mytest)
 # Details from the run:
@@ -48,3 +49,44 @@ po.anc <- powerDA(ps, predictor = "CheeseOutcome", covars = "SampleType", R=10,
 plot(po.anc)
 summary(po.anc)
 
+
+# 4 # DA test on milk  
+ps.milk <- subset_samples(ps, SampleType %in% c("HTST_milk","Raw_milk","HTST_feed"))
+saveRDS(ps.milk, file.path(path.out, "ps.milk.rds"))
+ps.milk
+mytest.milk <- testDA(ps, predictor = "CheeseOutcome", R = 10, 
+                      tests = c("anc", "aov", "lao", "lao2", "ds2", "ds2x","ere",
+                                "ere2", "erq", "erq2", "fri", "msf", "zig"),
+                      effectSize = 10, k = c(10, 20, 30), verbose = TRUE)
+summary(mytest.milk)
+write.csv(summary(mytest.milk), 
+          file.path(path.out, "mytest_milk.csv"), 
+          row.names = FALSE)
+# subset to contain only HTST milk 
+ps.htst <- subset_samples(ps.milk, SampleType %in% "HTST_milk")
+saveRDS(ps.htst, file.path(path.out, "ps.htst.rds"))
+ps.htst
+mytest.htst <- testDA(ps, predictor = "CheeseOutcome", R = 10, 
+                      tests = c("anc", "aov", "lao", "lao2", "ds2", "ds2x","ere",
+                                "ere2", "erq", "erq2", "fri", "msf", "zig"),
+                      effectSize = 10, k = c(10, 20, 30), verbose = TRUE)
+write.csv(summary(mytest.htst), 
+          file.path(path.out, "mytest_htst.csv"), 
+          row.names = FALSE)
+
+
+# 5 # DA test on Cheddar cheese ps 
+ps.cheese <- subset_samples(ps, SampleType %in% c("Cheese_0D","Cheese_120D",
+                                                  "Cheese_30D","Cheese_90D"))
+saveRDS(ps.cheese, file.path(path.out, "ps.cheese.rds"))
+ps.cheese
+ps.chedd <- subset_samples(ps.cheese, CheeseType %in% "Cheddar")
+saveRDS(ps.chedd, file.path(path.out, "ps.chedd.rds"))
+ps.chedd
+mytest.chedd <- testDA(ps, predictor = "CheeseOutcome", R = 10, 
+                       tests = c("anc", "aov", "lao", "lao2", "ds2", "ds2x","ere",
+                                 "ere2", "erq", "erq2", "fri", "msf", "zig"),
+                       effectSize = 10, k = c(10, 20, 30), verbose = TRUE)
+write.csv(summary(mytest.chedd), 
+          file.path(path.out, "mytest_chedd.csv"), 
+          row.names = FALSE)
