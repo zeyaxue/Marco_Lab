@@ -1,0 +1,193 @@
+---
+title: "PICRUST-phyloseq-analysis"
+author: "Zeya Zhengyao Xue"
+date: "May 8, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Load needed packages
+```{r}
+library(phyloseq);packageVersion("phyloseq")
+library(ggplot2);packageVersion("ggplot2")
+library(reshape2)
+library(cowplot)
+library(plyr)
+library(dplyr)
+library(RColorBrewer)
+library(biomformat)
+```
+
+
+## Funtion level analysis
+```{r}
+setwd("G:/My Drive/UC_Davis/Marco_lab/milk_microbiota/Hilmar_weekly_samples/QIIME2")
+
+FunTab = read_biom("picrust/Predicted_Function.biom")
+
+samdf <- read.csv("mapping/Run1-5_samdf-mc2.csv")
+rownames(samdf) <- samdf$SampleID
+
+#Add taxonomy to FunTab
+FunTab2 = as(biom_data(FunTab), "matrix")
+FunTab3 = otu_table(FunTab2, taxa_are_rows=TRUE)
+TaxTab = as.matrix(observation_metadata(FunTab), rownames.force=TRUE)
+TaxTab2 = tax_table(TaxTab)
+
+#Merge as one phyloseq object 
+ps = phyloseq(otu_table(FunTab3,taxa_are_rows = FALSE),tax_table(TaxTab2), sample_data(samdf))
+ps
+
+#Remove all negative control and seq control samples
+ps.sample <- subset_samples(ps, SampleOrCtrl == "Sample" )
+ps.sample
+
+#Following Bletz et al. 2016: Pathways with < 10 counts were removed from the table.
+#I modified to contain only >100
+ps100 = filter_taxa(ps.sample, function(x) sum(x) > 100, TRUE)
+ps100
+
+#Rarefy
+#min_lib <- min(sample_sums(ps100))
+#calculate alpha diversity by defining a function
+set.seed(123)
+calculate_rarefaction_curves <- function(psdata, measures, depths) {
+  estimate_rarified_richness <- function(psdata, measures, depth) {
+    if(max(sample_sums(psdata)) < depth) return()
+    psdata <- prune_samples(sample_sums(psdata) >= depth, psdata)
+    rarified_psdata <- rarefy_even_depth(psdata, depth, verbose = FALSE)
+    alpha_diversity <- estimate_richness(rarified_psdata, measures = measures)
+    # as.matrix forces the use of melt.array, which includes the Sample names (rownames)
+    molten_alpha_diversity <- melt(as.matrix(alpha_diversity), varnames = c("SampleID", 'measures'), value.name = 'Alpha_diversity')
+    molten_alpha_diversity
+  }
+  names(depths) <- depths # this enables automatic addition of the Depth to the output by ldply
+  rarefaction_curve_data <- ldply(depths, estimate_rarified_richness, psdata = psdata, measures = measures, .id = 'Depth', .progress = ifelse(interactive(), 'text', 'none'))
+  #convert Depth from factor to numeric
+  rarefaction_curve_data$Depth <- as.numeric(levels(rarefaction_curve_data$Depth))[rarefaction_curve_data$Depth]
+  rarefaction_curve_data
+}
+
+rarefaction_curve_data <- calculate_rarefaction_curves(ps100, c("Observed", "Shannon","Simpson","Chao1"), rep(c(1, 100, 200, 500, 1000), each = 10))
+rarefaction_curve_data$SampleID <- gsub("X","",rarefaction_curve_data$SampleID)
+summary(rarefaction_curve_data)
+
+#summarize alpha diversity
+rarefaction_curve_data_summary <- ddply(rarefaction_curve_data, c('Depth', 'SampleID', 'measures'), summarise, Alpha_diversity_mean = mean(Alpha_diversity), Alpha_diversity_sd = sd(Alpha_diversity))
+
+#Add sample data
+rarefaction_curve_data_summary_verbose <- merge(rarefaction_curve_data_summary, data.frame(sample_data(ps100)), by.x = 'SampleID', by.y = 'row.names')
+
+#plot out rarefaction curve
+ggplot(data = rarefaction_curve_data_summary_verbose, aes(
+  x = Depth, 
+  y = Alpha_diversity_mean, 
+  ymin = Alpha_diversity_mean - Alpha_diversity_sd, 
+  ymax = Alpha_diversity_mean + Alpha_diversity_sd,
+  color = SampleOrCtrl,
+  group = SampleID)) +
+  scale_fill_brewer(palette = "Set2") + 
+  geom_line()+
+  geom_pointrange(size=0.1)+
+  #geom_boxplot(position = position_dodge(0.77))+
+  facet_wrap(facets = ~ measures, scales = "free")
+```
+
+
+## Rarefy at 200 level
+```{r}
+set.seed(123)
+ps100.rare <- rarefy_even_depth(ps100, sample.size = 200, replace = TRUE, rngseed = 123 , trimOTUs = TRUE, verbose = TRUE) 
+saveRDS(ps100.rare,"picrust/ps100.rare.rds")
+```
+
+
+## Define phyloseq to lefse table function phyloseq_to_lefs()
+This is for pathway only at the most detailed level. For higher level of pathway addignment names, change column names accordingly.
+```{r}
+pathway.tab <- ps100.rare@tax_table
+pathway.tab %>% colnames()
+# phyloseq_to_lefse
+require(dplyr)
+require(tibble)
+# this script convert phyloseq object into lefse recognized file format
+phyloseq_to_lefs <- function(physeq){
+  # aggregate to KEGG_Pathways1 level
+  ps_lefse <- physeq %>% tax_glom(taxrank = "KEGG_Pathways3", NArm = FALSE)
+  
+  # extract taxonomic data from phyloseq object and then stored in a vector called lefse_tax
+  lefse_tax <- ps_lefse %>% tax_table %>% data.frame(stringsAsFactors=FALSE)
+  lefse_tax <- replace(lefse_tax, is.na(lefse_tax), 'Unclassified')
+  lefse_tax <- lefse_tax %>% group_by(KEGG_Pathways1, KEGG_Pathways2, KEGG_Pathways3) %>% mutate(id = paste(KEGG_Pathways1, KEGG_Pathways2, KEGG_Pathways3, sep = "|")) %>% ungroup %>% pull(id)
+  
+  # extract otu abundance matrix from phyloeq object and annotated with tax information
+  lefse_matrix <- otu_table(ps_lefse) %>% data.frame(stringsAsFactors = F) %>% t %>% data.frame
+  colnames(lefse_matrix) <- lefse_tax 
+  
+  # extract sample matadata and order sample same in lefse_matrix
+  lefse_sample <- sample_data(ps_lefse)
+  
+  # convert factor in lefse_sample into character in order to combine sample and abundance data
+  lefse_sample_isfactor <- sapply(lefse_sample, is.factor)
+  lefse_sample[,lefse_sample_isfactor] <- lefse_sample[,lefse_sample_isfactor] %>% lapply(as.character)
+  lefse_sample <- lefse_sample %>% data.frame
+  
+  lefse_table <- full_join(rownames_to_column(lefse_sample), rownames_to_column(lefse_matrix), by = ("rowname" = "rowname")) %>% t
+  
+  return(lefse_table)
+}
+```
+
+## Subset to contain milk samples
+```{r}
+picr.milk <- subset_samples(ps100.rare, SampleType %in% c("HTST_milk","Raw_milk","HTST_feed"))
+saveRDS(picr.milk,"picrust/picr.milk.rds")
+picr.milk
+
+#PMA treated sample
+picr.milkY <- subset_samples(picr.milk, PMA %in% "Y")
+saveRDS(picr.milkY,"picrust/picr.milkY.rds")
+picr.milkY 
+# HTST milk 
+picr.milkY.htst <- subset_samples(picr.milkY, SampleType %in% "HTST_milk")
+lefse.tbl.milkY.htst <- phyloseq_to_lefs(picr.milkY.htst)
+write.csv(lefse.tbl.milkY.htst, "picrust/lefse-table/lefse.tbl.milkY.htst.csv")
+# HTST feed
+picr.milkY.feed <- subset_samples(picr.milkY, SampleType %in% "HTST_feed")
+lefse.tbl.milkY.feed <- phyloseq_to_lefs(picr.milkY.feed)
+write.csv(lefse.tbl.milkY.feed, "picrust/lefse-table/lefse.tbl.milkY.feed.csv")
+
+#PMA untreated samples
+picr.milkN <- subset_samples(picr.milk, PMA %in% "N")
+saveRDS(picr.milkN,"picrust/picr.milkN.rds")
+picr.milkN #249 taxa and 188 samples
+# HTST milk 
+picr.milkN.htst <- subset_samples(picr.milkN, SampleType %in% "HTST_milk")
+lefse.tbl.milkN.htst <- phyloseq_to_lefs(picr.milkN.htst)
+write.csv(lefse.tbl.milkN.htst, "picrust/lefse-table/lefse.tbl.milkN.htst.csv")
+# HTST feed
+picr.milkN.feed <- subset_samples(picr.milkN, SampleType %in% "HTST_feed")
+lefse.tbl.milkN.feed <- phyloseq_to_lefs(picr.milkN.feed)
+write.csv(lefse.tbl.milkN.feed, "picrust/lefse-table/lefse.tbl.milkN.feed.csv")
+
+```
+
+## Subset to contain cheese samples
+```{r}
+picr.cheese <- subset_samples(ps100.rare, SampleType %in% c("Cheese_0D","Cheese_30D","Cheese_90D","Cheese_120D"))
+saveRDS(picr.cheese,"picrust/picr.cheese.rds")
+picr.cheese
+
+#PMA treated sample
+picr.cheeseY <- subset_samples(picr.cheese, PMA %in% "Y")
+saveRDS(picr.cheeseY,"picrust/picr.cheeseY.rds")
+picr.cheeseY 
+# All cheese 
+picr.milkY.htst <- subset_samples(picr.milkY, SampleType %in% "HTST_milk")
+lefse.tbl.milkY.htst <- phyloseq_to_lefs(picr.milkY.htst)
+write.csv(lefse.tbl.milkY.htst, "picrust/lefse-table/lefse.tbl.milkY.htst.csv")
+```
+
