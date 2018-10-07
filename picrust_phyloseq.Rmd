@@ -23,6 +23,7 @@ library(RColorBrewer)
 
 # Define project path
 path <- "G:/My Drive/UC_Davis/Marco_lab/milk_microbiota/Hilmar_weekly_samples/QIIME2/"
+# copy the .Rmd file to the path directory to generate html report
 ```
 
 ## Define function to use DESeq2 for differential analysis between cheese outcome
@@ -32,23 +33,49 @@ gmMean = function(x, na.rm=TRUE){
   exp(sum(log(x[x > 0]), na.rm=na.rm) / length(x))
 }
 
+# Differential abundance and generate diagnostic plots and write sig tables
 CheeseOutcomeDA <- function(ps, path.out) {
   psdds <- phyloseq_to_deseq2(ps, ~ CheeseOutcome)
   geoMeans <- apply(counts(psdds), 1, gm_mean)
   psdds <- estimateSizeFactors(psdds, geoMeans = geoMeans)
   dds <- DESeq(psdds, test = "Wald", fitType = "local") 
-  plotDispEsts(dds) #  need to inspect visually using local fit type
+  plotDispEsts(dds, ylim = c(1e-6, 1e1)) #  need to inspect visually using local fit type
   res <- results(dds, cooksCutoff = FALSE)
+  mcols(res, use.names=TRUE)
   plotMA(res)
-  hist( res$pvalue, breaks=20, col="grey" )
+  hist(res$pvalue, breaks=20, col="grey" )
+  attr(res,"filterThreshold")
+  plot(attr(res,"filterNumRej"),type="b",
+     xlab="quantiles of 'baseMean'",
+     ylab="number of rejections")
   alpha <- 0.01
   sigtab = res[which(res$padj < alpha), ]
   sigtab = cbind(as(sigtab, "data.frame"), as(tax_table(ps)[rownames(sigtab), ], "matrix"))
   write.csv(sigtab, file.path(path.out))
 }
+
+# Independent filtering to remove weakly-expressed genes, which is impossible to 
+# DA because the low read count suffer from high Poissson noise greater than 
+# biological differences
+# The goal is to improve the power of our test by reducing noise
+## The DESeq2 software automatically performs independent filtering which 
+## maximizes the number of genes with padj < 0.1
+
+  
+  # create bins using the quantile function
+qs <- c( 0, quantile( res$baseMean[res$baseMean > 0], 0:7/7 ) )
+# "cut" the genes into the bins
+bins <- cut( res$baseMean, qs )
+# rename the levels of the bins using the middle point
+levels(bins) <- paste0("~",round(.5*qs[-1] + .5*qs[-length(qs)]))
+# calculate the ratio of £p£ values less than .01 for each bin
+ratios <- tapply( res$pvalue, bins, function(p) mean( p < .01, na.rm=TRUE ) )
+# plot these ratios
+barplot(ratios, xlab="mean normalized count", ylab="ratio of small $p$ values")
 ```
 
-## Funtion level analysis
+
+## Subset and DESeq2 analysis level analysis
 The starting point is a picrust .biom file generated using Galaxy.
 ```{r}
 # Read the sample information data frame  
