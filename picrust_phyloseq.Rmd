@@ -13,6 +13,7 @@ knitr::opts_chunk$set(echo = TRUE)
 ```{r}
 library(phyloseq);packageVersion("phyloseq")
 library(biomformat);packageVersion("biomformat")
+library(DESeq2); packageVersion("DESeq2")
 library(ggplot2);packageVersion("ggplot2")
 library(reshape2)
 library(cowplot)
@@ -24,6 +25,28 @@ library(RColorBrewer)
 path <- "G:/My Drive/UC_Davis/Marco_lab/milk_microbiota/Hilmar_weekly_samples/QIIME2/"
 ```
 
+## Define function to use DESeq2 for differential analysis between cheese outcome
+```{r}
+# calculate geometric means prior to estimate size factors
+gmMean = function(x, na.rm=TRUE){
+  exp(sum(log(x[x > 0]), na.rm=na.rm) / length(x))
+}
+
+CheeseOutcomeDA <- function(ps, path.out) {
+  psdds <- phyloseq_to_deseq2(ps, ~ CheeseOutcome)
+  geoMeans <- apply(counts(psdds), 1, gm_mean)
+  psdds <- estimateSizeFactors(psdds, geoMeans = geoMeans)
+  dds <- DESeq(psdds, test = "Wald", fitType = "local") 
+  plotDispEsts(dds) #  need to inspect visually using local fit type
+  res <- results(dds, cooksCutoff = FALSE)
+  plotMA(res)
+  hist( res$pvalue, breaks=20, col="grey" )
+  alpha <- 0.01
+  sigtab = res[which(res$padj < alpha), ]
+  sigtab = cbind(as(sigtab, "data.frame"), as(tax_table(ps)[rownames(sigtab), ], "matrix"))
+  write.csv(sigtab, file.path(path.out))
+}
+```
 
 ## Funtion level analysis
 The starting point is a picrust .biom file generated using Galaxy.
@@ -41,21 +64,31 @@ funtab = as(biom_data(funtab), "matrix")
 funtab = otu_table(funtab, taxa_are_rows=TRUE)
 
 # Merge as one phyloseq object 
-ps <- phyloseq(otu_table(funtab3,taxa_are_rows = FALSE),tax_table(taxtab), sample_data(samdf))
+ps <- phyloseq(otu_table(funtab,taxa_are_rows = FALSE),tax_table(taxtab), sample_data(samdf))
+saveRDS(ps, file.path(path, "picrust/ps.rds"))
 ps
 
 # Following Bletz et al. 2016: Pathways with < 10 counts were removed from the table.
 ps10 <- filter_taxa(ps, function(x) sum(x) > 10, TRUE)
+saveRDS(ps10, file.path(path, "picrust/ps10.rds"))
 ps10
+
+# 1 # HTST milk samples 
+ps.htst <- subset_samples(ps10, SampleType %in% "HTST_milk")
+saveRDS(ps.htst, file.path(path, "picrust/ps.htst.rds"))
+ps.htst
+# PMA 
+ps.htstY <- subset_samples(ps.htst, PMA %in% "Y")
+saveRDS(ps.htstY, file.path(path, "picrust/ps.htstY.rds"))
+ps.htstY
+CheeseOutcomeDA(ps.htstY, path.out = file.path(path, "picrust/deseq_table/sigtab.htstY.csv"))
+
+
 ```
 
 
 ## Subset to contain milk samples
 ```{r}
-picr.milk <- subset_samples(ps100.rare, SampleType %in% c("HTST_milk","Raw_milk","HTST_feed"))
-saveRDS(picr.milk,"picrust/picr.milk.rds")
-picr.milk
-
 #PMA treated sample
 picr.milkY <- subset_samples(picr.milk, PMA %in% "Y")
 saveRDS(picr.milkY,"picrust/picr.milkY.rds")
