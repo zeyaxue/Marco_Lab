@@ -45,7 +45,10 @@ CheeseOutcomeDA <- function(ps, path.out) {
   dds <- DESeq(psdds, test = "Wald", fitType = "local") 
   plotDispEsts(dds, ylim = c(1e-6, 1e1)) #  need to inspect visually using local fit type
   alpha <- 0.1 #  padj for indepenent filtering and expect FDR < alpha
-  res <- results(dds, alpha = alpha, lfcThreshold = log2(1.5), altHypothesis = "greaterAbs")
+  res <- results(dds, alpha = alpha, 
+                 lfcThreshold = log2(1.5), 
+                 altHypothesis = "greaterAbs", 
+                 cooksCutoff = FALSE) #  turnoff outlier detection
   mcols(res, use.names=TRUE)  
   plotMA(res) # diagnostic description
   hist(res$pvalue, breaks=20, col="grey" ) # diagnostic plot
@@ -54,7 +57,7 @@ CheeseOutcomeDA <- function(ps, path.out) {
     print("There are no significant features whose padj < 0.1 and |lfc| > log2(1.5)")
   } else {
     sigtab <- cbind(as(sigtab, "data.frame"), as(tax_table(ps)[rownames(sigtab), ], "matrix"))
-    write.csv(sigtab, file.path(path.out))
+    write.csv(sigtab, file.path(path,path.out))
   }
 }
 ```
