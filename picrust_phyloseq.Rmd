@@ -357,3 +357,29 @@ saveRDS(psko.ched120N, file.path(path, "picrust/psko.ched120N.rds"))
 psko.ched120N
 CheeseOutcomeDA(psko.ched120N, path.out = file.path(path, "picrust/deseq_table/kosigtab.ched120N.csv"))
 ```
+
+## Map to KEGG pathway
+After running the above script, I found that the only difference observed is in
+the KO level analysis of HTST milk treated with PMA. 
+```{r}
+library(pathview)
+library(gage)
+library(gageData)
+
+
+# Load the res table with "K" removed from row names
+res <- read.csv(file.path(path, "picrust/deseq_table/kosigtab.htstY.csv"))
+
+# named vector of fold changes
+foldchanges <- res$log2FoldChange
+names(foldchanges) <- res$X 
+head(foldchanges)
+
+# Get the results
+## KEGG, BioCarta pathways, genes frequently are not coregulated, hence it could 
+## be informative to let same.dir = FALSE
+## http://www.gettinggeneticsdone.com/2015/12/tutorial-rna-seq-differential.html
+keggres <- gage(foldchanges, gsets = go.gsets(), same.dir = FALSE)
+lapply(keggres, head)
+```
+
