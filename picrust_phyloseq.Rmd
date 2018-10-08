@@ -37,7 +37,7 @@ gmMean = function(x, na.rm=TRUE){
 ## fold change is slits vs no slits
 CheeseOutcomeDA <- function(ps, path.out) {
   psdds <- phyloseq_to_deseq2(ps.htst, ~ CheeseOutcome)
-  geoMeans <- apply(counts(psdds), 1, gm_mean)
+  geoMeans <- apply(counts(psdds), 1, gmMean)
   psdds <- estimateSizeFactors(psdds, geoMeans = geoMeans)
   dds <- DESeq(psdds, test = "Wald", fitType = "local") 
   plotDispEsts(dds, ylim = c(1e-6, 1e1)) #  need to inspect visually using local fit type
@@ -87,54 +87,262 @@ ps.htstY <- subset_samples(ps.htst, PMA %in% "Y")
 saveRDS(ps.htstY, file.path(path, "picrust/ps.htstY.rds"))
 ps.htstY
 CheeseOutcomeDA(ps.htstY, path.out = file.path(path, "picrust/deseq_table/sigtab.htstY.csv"))
+# no PMA 
+ps.htstN <- subset_samples(ps.htst, PMA %in% "N")
+saveRDS(ps.htstN, file.path(path, "picrust/ps.htstN.rds"))
+ps.htstN
+CheeseOutcomeDA(ps.htstN, path.out = file.path(path, "picrust/deseq_table/sigtab.htstN.csv"))
 
+# 2 # Feed milk samples
+ps.feed <- subset_samples(ps10, SampleType %in% "HTST_feed")
+saveRDS(ps.feed, file.path(path, "picrust/ps.feed.rds"))
+ps.feed
+# PMA 
+ps.feedY <- subset_samples(ps.feed, PMA %in% "Y")
+saveRDS(ps.feedY, file.path(path, "picrust/ps.feedY.rds"))
+ps.feedY
+CheeseOutcomeDA(ps.feedY, path.out = file.path(path, "picrust/deseq_table/sigtab.feedY.csv"))
+# no PMA 
+ps.feedN <- subset_samples(ps.feed, PMA %in% "N")
+saveRDS(ps.feedN, file.path(path, "picrust/ps.feedN.rds"))
+ps.feedN
+CheeseOutcomeDA(ps.feedN, path.out = file.path(path, "picrust/deseq_table/sigtab.feedN.csv"))
 
+# 3 # Raw milk samples
+ps.raw <- subset_samples(ps10, SampleType %in% "Raw_milk")
+saveRDS(ps.raw, file.path(path, "picrust/ps.raw.rds"))
+ps.raw
+# PMA 
+ps.rawY <- subset_samples(ps.raw, PMA %in% "Y")
+saveRDS(ps.rawY, file.path(path, "picrust/ps.rawY.rds"))
+ps.rawY
+CheeseOutcomeDA(ps.feedY, path.out = file.path(path, "picrust/deseq_table/sigtab.rawY.csv"))
+# no PMA 
+ps.rawN <- subset_samples(ps.raw, PMA %in% "N")
+saveRDS(ps.rawN, file.path(path, "picrust/ps.rawN.rds"))
+ps.rawN
+CheeseOutcomeDA(ps.rawN, path.out = file.path(path, "picrust/deseq_table/sigtab.rawN.csv"))
+
+# 4 # All Cheddar samples 
+ps.ched <- subset_samples(ps10, CheeseType %in% "Cheddar")
+ps.ched <- subset_samples(ps.ched, 
+                          SampleType %in% c("Cheese_0D","Cheese_30D","Cheese_90D","Cheese_120D"))
+saveRDS(ps.ched, file.path(path, "picrust/ps.ched.rds"))
+ps.ched
+# PMA 
+ps.chedY <- subset_samples(ps.ched, PMA %in% "Y")
+saveRDS(ps.chedY, file.path(path, "picrust/ps.chedY.rds"))
+ps.chedY
+CheeseOutcomeDA(ps.chedY, path.out = file.path(path, "picrust/deseq_table/sigtab.chedY.csv"))
+# no PMA 
+ps.chedN <- subset_samples(ps.ched, PMA %in% "N")
+saveRDS(ps.chedN, file.path(path, "picrust/ps.chedN.rds"))
+ps.chedN
+CheeseOutcomeDA(ps.chedN, path.out = file.path(path, "picrust/deseq_table/sigtab.chedN.csv"))
+
+# 5 # Cheedar 0 day 
+ps.ched0 <- subset_samples(ps.ched, SampleType %in% "Cheese_0D")
+saveRDS(ps.ched0, file.path(path, "picrust/ps.ched0.rds"))
+ps.ched0
+# PMA 
+ps.ched0Y <- subset_samples(ps.ched0, PMA %in% "Y")
+saveRDS(ps.ched0Y, file.path(path, "picrust/ps.ched0Y.rds"))
+ps.ched0Y
+CheeseOutcomeDA(ps.ched0Y, path.out = file.path(path, "picrust/deseq_table/sigtab.ched0Y.csv"))
+# no PMA 
+ps.ched0N <- subset_samples(ps.ched0, PMA %in% "N")
+saveRDS(ps.ched0N, file.path(path, "picrust/ps.ched0N.rds"))
+ps.ched0N
+CheeseOutcomeDA(ps.ched0N, path.out = file.path(path, "picrust/deseq_table/sigtab.ched0N.csv"))
+
+# 6 # Cheedar 30 day 
+ps.ched30 <- subset_samples(ps.ched, SampleType %in% "Cheese_30D")
+saveRDS(ps.ched30, file.path(path, "picrust/ps.ched30.rds"))
+ps.ched30
+# PMA 
+ps.ched30Y <- subset_samples(ps.ched30, PMA %in% "Y")
+saveRDS(ps.ched30Y, file.path(path, "picrust/ps.ched30Y.rds"))
+ps.ched30Y
+CheeseOutcomeDA(ps.ched30Y, path.out = file.path(path, "picrust/deseq_table/sigtab.ched30Y.csv"))
+# no PMA 
+ps.ched30N <- subset_samples(ps.ched30, PMA %in% "N")
+saveRDS(ps.ched30N, file.path(path, "picrust/ps.ched30N.rds"))
+ps.ched30N
+CheeseOutcomeDA(ps.ched30N, path.out = file.path(path, "picrust/deseq_table/sigtab.ched30N.csv"))
+
+# 7 # Cheedar 90 day 
+ps.ched90 <- subset_samples(ps.ched, SampleType %in% "Cheese_90D")
+saveRDS(ps.ched90, file.path(path, "picrust/ps.ched90.rds"))
+ps.ched90
+# PMA 
+ps.ched90Y <- subset_samples(ps.ched90, PMA %in% "Y")
+saveRDS(ps.ched90Y, file.path(path, "picrust/ps.ched90Y.rds"))
+ps.ched90Y
+CheeseOutcomeDA(ps.ched90Y, path.out = file.path(path, "picrust/deseq_table/sigtab.ched90Y.csv"))
+# no PMA 
+ps.ched90N <- subset_samples(ps.ched90, PMA %in% "N")
+saveRDS(ps.ched90N, file.path(path, "picrust/ps.ched90N.rds"))
+ps.ched90N
+CheeseOutcomeDA(ps.ched90N, path.out = file.path(path, "picrust/deseq_table/sigtab.ched90N.csv"))
+
+# 8 # Cheedar 120 day 
+ps.ched120 <- subset_samples(ps.ched, SampleType %in% "Cheese_120D")
+saveRDS(ps.ched120, file.path(path, "picrust/ps.ched120.rds"))
+ps.ched120
+# PMA 
+ps.ched120Y <- subset_samples(ps.ched120, PMA %in% "Y")
+saveRDS(ps.ched120Y, file.path(path, "picrust/ps.ched120Y.rds"))
+ps.ched120Y
+CheeseOutcomeDA(ps.ched120Y, path.out = file.path(path, "picrust/deseq_table/sigtab.ched120Y.csv"))
+# no PMA 
+ps.ched120N <- subset_samples(ps.ched120, PMA %in% "N")
+saveRDS(ps.ched120N, file.path(path, "picrust/ps.ched120N.rds"))
+ps.ched120N
+CheeseOutcomeDA(ps.ched120N, path.out = file.path(path, "picrust/deseq_table/sigtab.ched120N.csv"))
 ```
 
 
-## Subset to contain milk samples
+
+
+## Subset and DESeq2 analysis of KO 
 ```{r}
-#PMA treated sample
-picr.milkY <- subset_samples(picr.milk, PMA %in% "Y")
-saveRDS(picr.milkY,"picrust/picr.milkY.rds")
-picr.milkY 
-# HTST milk 
-picr.milkY.htst <- subset_samples(picr.milkY, SampleType %in% "HTST_milk")
-lefse.tbl.milkY.htst <- phyloseq_to_lefs(picr.milkY.htst)
-write.csv(lefse.tbl.milkY.htst, "picrust/lefse-table/lefse.tbl.milkY.htst.csv")
-# HTST feed
-picr.milkY.feed <- subset_samples(picr.milkY, SampleType %in% "HTST_feed")
-lefse.tbl.milkY.feed <- phyloseq_to_lefs(picr.milkY.feed)
-write.csv(lefse.tbl.milkY.feed, "picrust/lefse-table/lefse.tbl.milkY.feed.csv")
+# Read the KO table 
+KOtab = read_biom(file.path(path, "picrust/PredictedKO.biom"))
+# Get taxonomy  
+taxtab.ko = as.matrix(observation_metadata(KOtab), rownames.force=TRUE) 
+taxtab.ko = tax_table(taxtab.ko)
+# Add taxonomy to KOtab
+KOtab = as(biom_data(KOtab), "matrix")
+KOtab = otu_table(KOtab, taxa_are_rows=TRUE)
 
-#PMA untreated samples
-picr.milkN <- subset_samples(picr.milk, PMA %in% "N")
-saveRDS(picr.milkN,"picrust/picr.milkN.rds")
-picr.milkN #249 taxa and 188 samples
-# HTST milk 
-picr.milkN.htst <- subset_samples(picr.milkN, SampleType %in% "HTST_milk")
-lefse.tbl.milkN.htst <- phyloseq_to_lefs(picr.milkN.htst)
-write.csv(lefse.tbl.milkN.htst, "picrust/lefse-table/lefse.tbl.milkN.htst.csv")
-# HTST feed
-picr.milkN.feed <- subset_samples(picr.milkN, SampleType %in% "HTST_feed")
-lefse.tbl.milkN.feed <- phyloseq_to_lefs(picr.milkN.feed)
-write.csv(lefse.tbl.milkN.feed, "picrust/lefse-table/lefse.tbl.milkN.feed.csv")
+# Merge as one phyloseq object 
+psko <- phyloseq(otu_table(KOtab,taxa_are_rows = FALSE),tax_table(taxtab.ko), sample_data(samdf))
+saveRDS(psko, file.path(path, "picrust/psko.rds"))
+psko
 
-```
+# Following Bletz et al. 2016: Pathways with < 10 counts were removed from the table.
+psko10 <- filter_taxa(psko, function(x) sum(x) > 10, TRUE)
+saveRDS(psko10, file.path(path, "picrust/psko10.rds"))
+psko10
 
-## Subset to contain cheese samples
-```{r}
-picr.cheese <- subset_samples(ps100.rare, SampleType %in% c("Cheese_0D","Cheese_30D","Cheese_90D","Cheese_120D"))
-saveRDS(picr.cheese,"picrust/picr.cheese.rds")
-picr.cheese
+# 1 # HTST milk samples 
+psko.htst <- subset_samples(psko10, SampleType %in% "HTST_milk")
+saveRDS(psko.htst, file.path(path, "picrust/psko.htst.rds"))
+psko.htst
+# PMA 
+psko.htstY <- subset_samples(psko.htst, PMA %in% "Y")
+saveRDS(psko.htstY, file.path(path, "picrust/psko.htstY.rds"))
+psko.htstY
+CheeseOutcomeDA(psko.htstY, path.out = file.path(path, "picrust/deseq_table/kosigtab.htstY.csv"))
+# no PMA 
+psko.htstN <- subset_samples(psko.htst, PMA %in% "N")
+saveRDS(psko.htstN, file.path(path, "picrust/psko.htstN.rds"))
+psko.htstN
+CheeseOutcomeDA(psko.htstN, path.out = file.path(path, "picrust/deseq_table/kosigtab.htstN.csv"))
 
-#PMA treated sample
-picr.cheeseY <- subset_samples(picr.cheese, PMA %in% "Y")
-saveRDS(picr.cheeseY,"picrust/picr.cheeseY.rds")
-picr.cheeseY 
-# All cheese 
-picr.milkY.htst <- subset_samples(picr.milkY, SampleType %in% "HTST_milk")
-lefse.tbl.milkY.htst <- phyloseq_to_lefs(picr.milkY.htst)
-write.csv(lefse.tbl.milkY.htst, "picrust/lefse-table/lefse.tbl.milkY.htst.csv")
-```
+# 2 # Feed milk samples
+psko.feed <- subset_samples(psko10, SampleType %in% "HTST_feed")
+saveRDS(psko.feed, file.path(path, "picrust/psko.feed.rds"))
+psko.feed
+# PMA 
+psko.feedY <- subset_samples(psko.feed, PMA %in% "Y")
+saveRDS(psko.feedY, file.path(path, "picrust/psko.feedY.rds"))
+psko.feedY
+CheeseOutcomeDA(psko.feedY, path.out = file.path(path, "picrust/deseq_table/kosigtab.feedY.csv"))
+# no PMA 
+psko.feedN <- subset_samples(psko.feed, PMA %in% "N")
+saveRDS(psko.feedN, file.path(path, "picrust/psko.feedN.rds"))
+psko.feedN
+CheeseOutcomeDA(psko.feedN, path.out = file.path(path, "picrust/deseq_table/kosigtab.feedN.csv"))
 
+# 3 # Raw milk samples
+psko.raw <- subset_samples(psko10, SampleType %in% "Raw_milk")
+saveRDS(psko.raw, file.path(path, "picrust/psko.raw.rds"))
+psko.raw
+# PMA 
+psko.rawY <- subset_samples(psko.raw, PMA %in% "Y")
+saveRDS(psko.rawY, file.path(path, "picrust/psko.rawY.rds"))
+psko.rawY
+CheeseOutcomeDA(psko.feedY, path.out = file.path(path, "picrust/deseq_table/kosigtab.rawY.csv"))
+# no PMA 
+psko.rawN <- subset_samples(psko.raw, PMA %in% "N")
+saveRDS(psko.rawN, file.path(path, "picrust/psko.rawN.rds"))
+psko.rawN
+CheeseOutcomeDA(psko.rawN, path.out = file.path(path, "picrust/deseq_table/kosigtab.rawN.csv"))
+
+# 4 # All Cheddar samples 
+psko.ched <- subset_samples(psko10, CheeseType %in% "Cheddar")
+psko.ched <- subset_samples(psko.ched, 
+                          SampleType %in% c("Cheese_0D","Cheese_30D","Cheese_90D","Cheese_120D"))
+saveRDS(psko.ched, file.path(path, "picrust/psko.ched.rds"))
+psko.ched
+# PMA 
+psko.chedY <- subset_samples(psko.ched, PMA %in% "Y")
+saveRDS(psko.chedY, file.path(path, "picrust/psko.chedY.rds"))
+psko.chedY
+CheeseOutcomeDA(psko.chedY, path.out = file.path(path, "picrust/deseq_table/kosigtab.chedY.csv"))
+# no PMA 
+psko.chedN <- subset_samples(psko.ched, PMA %in% "N")
+saveRDS(psko.chedN, file.path(path, "picrust/psko.chedN.rds"))
+psko.chedN
+CheeseOutcomeDA(psko.chedN, path.out = file.path(path, "picrust/deseq_table/kosigtab.chedN.csv"))
+
+# 5 # Cheedar 0 day 
+psko.ched0 <- subset_samples(psko.ched, SampleType %in% "Cheese_0D")
+saveRDS(psko.ched0, file.path(path, "picrust/psko.ched0.rds"))
+psko.ched0
+# PMA 
+psko.ched0Y <- subset_samples(psko.ched0, PMA %in% "Y")
+saveRDS(psko.ched0Y, file.path(path, "picrust/psko.ched0Y.rds"))
+psko.ched0Y
+CheeseOutcomeDA(psko.ched0Y, path.out = file.path(path, "picrust/deseq_table/kosigtab.ched0Y.csv"))
+# no PMA 
+psko.ched0N <- subset_samples(psko.ched0, PMA %in% "N")
+saveRDS(psko.ched0N, file.path(path, "picrust/psko.ched0N.rds"))
+psko.ched0N
+CheeseOutcomeDA(psko.ched0N, path.out = file.path(path, "picrust/deseq_table/kosigtab.ched0N.csv"))
+
+# 6 # Cheedar 30 day 
+psko.ched30 <- subset_samples(psko.ched, SampleType %in% "Cheese_30D")
+saveRDS(psko.ched30, file.path(path, "picrust/psko.ched30.rds"))
+psko.ched30
+# PMA 
+psko.ched30Y <- subset_samples(psko.ched30, PMA %in% "Y")
+saveRDS(psko.ched30Y, file.path(path, "picrust/psko.ched30Y.rds"))
+psko.ched30Y
+CheeseOutcomeDA(psko.ched30Y, path.out = file.path(path, "picrust/deseq_table/kosigtab.ched30Y.csv"))
+# no PMA 
+psko.ched30N <- subset_samples(psko.ched30, PMA %in% "N")
+saveRDS(psko.ched30N, file.path(path, "picrust/psko.ched30N.rds"))
+psko.ched30N
+CheeseOutcomeDA(psko.ched30N, path.out = file.path(path, "picrust/deseq_table/kosigtab.ched30N.csv"))
+
+# 7 # Cheedar 90 day 
+psko.ched90 <- subset_samples(psko.ched, SampleType %in% "Cheese_90D")
+saveRDS(psko.ched90, file.path(path, "picrust/psko.ched90.rds"))
+psko.ched90
+# PMA 
+psko.ched90Y <- subset_samples(psko.ched90, PMA %in% "Y")
+saveRDS(psko.ched90Y, file.path(path, "picrust/psko.ched90Y.rds"))
+psko.ched90Y
+CheeseOutcomeDA(psko.ched90Y, path.out = file.path(path, "picrust/deseq_table/kosigtab.ched90Y.csv"))
+# no PMA 
+psko.ched90N <- subset_samples(psko.ched90, PMA %in% "N")
+saveRDS(psko.ched90N, file.path(path, "picrust/psko.ched90N.rds"))
+psko.ched90N
+CheeseOutcomeDA(psko.ched90N, path.out = file.path(path, "picrust/deseq_table/kosigtab.ched90N.csv"))
+
+# 8 # Cheedar 120 day 
+psko.ched120 <- subset_samples(psko.ched, SampleType %in% "Cheese_120D")
+saveRDS(psko.ched120, file.path(path, "picrust/psko.ched120.rds"))
+psko.ched120
+# PMA 
+psko.ched120Y <- subset_samples(psko.ched120, PMA %in% "Y")
+saveRDS(psko.ched120Y, file.path(path, "picrust/psko.ched120Y.rds"))
+psko.ched120Y
+CheeseOutcomeDA(psko.ched120Y, path.out = file.path(path, "picrust/deseq_table/kosigtab.ched120Y.csv"))
+# no PMA 
+psko.ched120N <- subset_samples(psko.ched120, PMA %in% "N")
+saveRDS(psko.ched120N, file.path(path, "picrust/psko.ched120N.rds"))
+psko.ched120N
+CheeseOutcomeDA(psko.ched120N, path.out = file.path(path, "picrust/deseq_table/kosigtab.ched120N.csv"))
