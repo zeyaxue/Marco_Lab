@@ -1,0 +1,8 @@
+#SampleID	BarcodeSequence	LinkerPrimerSequence	BarcodeNumber	Lysis_method	Description
+91	AGAGGTGT	GTGTGCCAGCMGCCGCGGTAA	138	Vortex	Vortex_1
+92	AGCAGAAC	GTGTGCCAGCMGCCGCGGTAA	139	Vortex	Vortex_2
+93	AGCTCATG	GTGTGCCAGCMGCCGCGGTAA	140	Bead_beating_short	Bead_beating_short_1
+94	AGTCAGAG	GTGTGCCAGCMGCCGCGGTAA	141	Bead_beating_short	Bead_beating_short_2
+95	AGTCTGAC	GTGTGCCAGCMGCCGCGGTAA	142	Bead_beating_long	Bead_beating_long_1
+96	ATCGAAGG	GTGTGCCAGCMGCCGCGGTAA	143	Bead_beating_long	Bead_beating_long_2
+NC	ATGCAAGG	GTGTGCCAGCMGCCGCGGTAA	144	Control	Control
