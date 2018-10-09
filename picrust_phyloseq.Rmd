@@ -19,7 +19,6 @@ library(reshape2)
 library(cowplot)
 library(plyr)
 library(dplyr)
-library(RColorBrewer)
 
 # Define project path
 path <- "G:/My Drive/UC_Davis/Marco_lab/milk_microbiota/Hilmar_weekly_samples/QIIME2/"
@@ -57,7 +56,7 @@ CheeseOutcomeDA <- function(ps, path.out) {
     print("There are no significant features whose padj < 0.1 and |lfc| > log2(1.5)")
   } else {
     sigtab <- cbind(as(sigtab, "data.frame"), as(tax_table(ps)[rownames(sigtab), ], "matrix"))
-    write.csv(sigtab, file.path(path,path.out))
+    write.csv(sigtab, file.path(path.out))
   }
 }
 ```
@@ -209,6 +208,33 @@ ps.ched120N <- subset_samples(ps.ched120, PMA %in% "N")
 saveRDS(ps.ched120N, file.path(path, "picrust/ps.ched120N.rds"))
 ps.ched120N
 CheeseOutcomeDA(ps.ched120N, path.out = file.path(path, "picrust/deseq_table/sigtab.ched120N.csv"))
+
+# 9 # Subset to contain only paried sample
+samdf.4hr <- read.csv(file.path(path, "mapping/Run1-5_samdf-mc2_4hrTL.csv"))
+rownames(samdf.4hr) <- samdf.4hr$SampleID
+# Merge as a new phyloseq object
+tax <- tax_table(ps10)
+otu <- otu_table(ps10)
+ps.4hr <- phyloseq(otu_table(otu, taxa_are_rows = FALSE), tax_table(tax), 
+                   sample_data(samdf.4hr))
+saveRDS(ps.4hr, file.path(path, "picrust/ps.4hr.rds"))
+ps.4hr
+## HTST milk
+ps.4hr.htst <- subset_samples(ps.4hr, SampleType %in% "HTST_milk")
+saveRDS(ps.4hr.htst, file.path(path, "picrust/ps.4hr.htst.rds"))
+ps.4hr.htst
+### PMA
+ps.4hr.htstY <- subset_samples(ps.4hr.htst, PMA %in% "Y")
+saveRDS(ps.4hr.htstY, file.path(path, "picrust/ps.4hr.htstY.rds"))
+ps.4hr.htstY
+CheeseOutcomeDA(ps.4hr.htstY, path.out = file.path(path, "picrust/deseq_table/sigtab.4hr.htstY.csv"))
+### no PMA
+ps.4hr.htstN <- subset_samples(ps.4hr.htst, PMA %in% "N")
+saveRDS(ps.4hr.htstN, file.path(path, "picrust/ps.4hr.htstN.rds"))
+ps.4hr.htstN
+CheeseOutcomeDA(ps.4hr.htstN, path.out = file.path(path, "picrust/deseq_table/sigtab.4hr.htstN.csv"))
+
+
 ```
 
 
@@ -356,4 +382,39 @@ psko.ched120N <- subset_samples(psko.ched120, PMA %in% "N")
 saveRDS(psko.ched120N, file.path(path, "picrust/psko.ched120N.rds"))
 psko.ched120N
 CheeseOutcomeDA(psko.ched120N, path.out = file.path(path, "picrust/deseq_table/kosigtab.ched120N.csv"))
+
+# 9 # Subset to contain only paried sample
+taxko <- tax_table(psko10)
+otuko <- otu_table(psko10)
+psko.4hr <- phyloseq(otu_table(otuko, taxa_are_rows = FALSE), tax_table(taxko), 
+                     sample_data(samdf.4hr))
+saveRDS(psko.4hr, file.path(path, "picrust/psko.4hr.rds"))
+psko.4hr
+## HTST milk
+psko.4hr.htst <- subset_samples(psko.4hr, SampleType %in% "HTST_milk")
+saveRDS(psko.4hr.htst, file.path(path, "picrust/psko.4hr.htst.rds"))
+psko.4hr.htst
+### PMA
+psko.4hr.htstY <- subset_samples(psko.4hr.htst, PMA %in% "Y")
+saveRDS(psko.4hr.htstY, file.path(path, "picrust/psko.4hr.htstY.rds"))
+psko.4hr.htstY
+CheeseOutcomeDA(psko.4hr.htstY, path.out = file.path(path, "picrust/deseq_table/sigtabko.4hr.htstY.csv"))
+### no PMA
+psko.4hr.htstN <- subset_samples(psko.4hr.htst, PMA %in% "N")
+saveRDS(psko.4hr.htstN, file.path(path, "picrust/psko.4hr.htstN.rds"))
+psko.4hr.htstN
+CheeseOutcomeDA(psko.4hr.htstN, path.out = file.path(path, "picrust/deseq_table/sigtabko.4hr.htstN.csv"))
 ```
+
+## Make plots for sigtab.htstY
+```{r}
+df <- read.csv(file.path(path, "picrust/deseq_table/kosigtab.htstY.csv"))
+
+ggplot(df, aes(x = X, y = log2FoldChange))+
+  geom_bar(stat = "identity")+
+  labs(y = "Log2 Fold Change")+
+  coord_flip()+
+  theme_minimal()+
+  theme(axis.text.x = element_text(angle=90))
+```
+
