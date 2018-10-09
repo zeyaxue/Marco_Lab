@@ -16,7 +16,7 @@ validate_mapping_file.py -m /home/marcolabuser/Zach/mock_community/mock_mapfile.
 
 
 #extracting barcodes from both R1 and R2 files 
-#not entirely sure what to do here - do I extract barcodes individually for R1 and R2, or do I run this script with both files together?  Since I'm treating the reads as single ended, I decided to extract barcodes separately from each file
+#treating the reads as single ended, I extracted barcodes separately from each file
 #R1 files
 extract_barcodes.py -f /home/marcolabuser/Yetong/MERITS-WP5_S1_L001_R1_001.fastq --bc1_len 8 -m /home/marcolabuser/Zach/mock_community/mock_mapfile.txt -o /home/marcolabuser/Zach/mock_community/R1/
 
