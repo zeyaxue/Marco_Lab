@@ -1,5 +1,5 @@
 ---
-title: "cheddar_DESeq2_phyloseq"
+title: "taxa_DESeq2_phyloseq"
 author: "Zeya Zhengyao Xue"
 date: "October 8, 2018"
 output: html_document
@@ -54,7 +54,7 @@ ps100.sam
 ```
 
 
-## Define function to use DESeq2 for differential analysis between cheese outcome
+## Define function to use DESeq2 for differential analysis 
 ```{r}
 # calculate geometric means prior to estimate size factors
 gmMean = function(x, na.rm=TRUE){
@@ -64,8 +64,8 @@ gmMean = function(x, na.rm=TRUE){
 # Differential abundance and generate diagnostic plots and write sig tables 
 ## fold change is slits vs no slits
 ## Uses default Benjamini-Hochberg pvalue adjust
-CheeseOutcomeDA <- function(ps, path.out) {
-  psdds <- phyloseq_to_deseq2(ps, ~ CheeseOutcome)
+DA <- function(ps, path.out, variable = c("CheeseOutcome","TimeSinceCleaning")) {
+  psdds <- phyloseq_to_deseq2(ps, ~ variable)
   geoMeans <- apply(counts(psdds), 1, gmMean)
   psdds <- estimateSizeFactors(psdds, geoMeans = geoMeans)
   dds <- DESeq(psdds, test = "Wald", fitType = "local") 
@@ -139,10 +139,10 @@ CheeseOutcomeDA(ps.chedY.noL120,
                 path.out = file.path(path, "cheddar/deseq_table/sigtab.chedY.noL120.csv"))
 ```
 
-## Taxonomic DA of HTST milk 
+## Taxonomic DA of HTST milk that has been adjusted for cell count using qPCR results
 This is PMA treated samples
 ```{r}
-# 7 # HTST milk that has been adjusted for cell count using qPCR results
+# 7 # HTST milk 
 ps.htst <- subset_samples(ps100.sam, SampleType %in% "HTST_milk")
 saveRDS(ps.htst, file.path(path, "cheddar/ps.htst.rds"))
 ps.htst
@@ -152,7 +152,7 @@ ps.htstY
 CheeseOutcomeDA(ps.htstY, 
                 path.out = file.path(path, "milk/deseq_table/sigtab.htstY.csv"))
 
-# 8 # HTST milk
+# 8 # HTST milk that are 
 ```
 
 
