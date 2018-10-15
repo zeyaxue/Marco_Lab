@@ -92,8 +92,6 @@ TiSinCleaningDA <- function(ps, path.out) {
 ```
 
 
-
-
 ## Prepare phyloseq objects 
 ```{r}
 # remake a unrarefied ps object with low coverage samples filtered
@@ -116,6 +114,17 @@ ps100.sam <- subset_samples(ps100, SampleOrCtrl == "Sample" )
 #ps100.sam <- ps100.sam %>% tax_glom(taxrank = "Genus")
 saveRDS(ps100.sam, file.path(path, "decontam/phyloseq/ps100.sam.rds"))
 ps100.sam
+
+# Feed and HTST milk that are paired with cheddar (based on the 4hr timeline)
+ps.milk <- subset_samples(ps100.sam, SampleType %in% c("HTST_milk","HTST_feed"))
+samdf.4hr <- read.csv(file.path(path, "mapping/Run1-5_samdf-mc2_4hrTL.csv"))
+rownames(samdf.4hr) <- samdf.4hr$SampleID
+# Merge as a new phyloseq object
+tree <- phy_tree(ps.milk)
+tax <- tax_table(ps.milk)
+otu <- otu_table(ps.milk)
+ps.milk4 <- phyloseq(otu_table(otu, taxa_are_rows = FALSE), tax_table(tax),sample_data(samdf.4hr), phy_tree(tree))
+
 ```
 
 
@@ -175,15 +184,23 @@ This is PMA treated samples
 ```{r}
 # 7 # HTST milk 
 ps.htst <- subset_samples(ps100.sam, SampleType %in% "HTST_milk")
-saveRDS(ps.htst, file.path(path, "cheddar/ps.htst.rds"))
+saveRDS(ps.htst, file.path(path, "milk/ps.htst.rds"))
+ps.htst
+ps.htstY <- subset_samples(ps.htst, PMA %in% "Y")
+saveRDS(ps.htstY, file.path(path, "milk/ps.htstY.rds"))
+ps.htstY
+CheeseOutcomeDA(ps.htstY, 
+                path.out = file.path(path, "milk/deseq_table/sigtab.htstY.csv"))
+TiSinCleaningDA(ps.htstY, 
+                path.out = file.path(path, "milk/deseq_table_TiSinCleaning/sigtab.htstY.csv"))
+
+# 8 # HTST milk that are paired with cheese (4hr timeline)
+ps.htst4 <- subset_samples(ps.milk4, SampleType %in% "HTST_milk")
+saveRDS(ps.htst4, file.path(path, "cheddar/ps.htst.rds"))
 ps.htst
 ps.htstY <- subset_samples(ps.htst, PMA %in% "Y")
 saveRDS(ps.htstY, file.path(path, "cheddar/ps.htstY.rds"))
 ps.htstY
-CheeseOutcomeDA(ps.htstY, 
-                path.out = file.path(path, "milk/deseq_table/sigtab.htstY.csv"))
-
-# 8 # HTST milk that are paired with cheese (4hr timeline)
 ```
 
 
