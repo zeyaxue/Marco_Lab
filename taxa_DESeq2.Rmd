@@ -30,7 +30,72 @@ path <- "G:/My Drive/UC_Davis/Marco_lab/milk_microbiota/Hilmar_weekly_samples/QI
 # copy the .Rmd file to the path directory to generate html report
 
 set.seed(123) #  for reproducibility
+```
 
+
+## Define function to use DESeq2 for differential analysis 
+```{r}
+# calculate geometric means prior to estimate size factors
+gmMean = function(x, na.rm=TRUE){
+  exp(sum(log(x[x > 0]), na.rm=na.rm) / length(x))
+}
+
+# Cheese Outcome Differential abundance and generate diagnostic plots and write sig tables 
+## fold change is slits vs no slits
+## Uses default Benjamini-Hochberg pvalue adjust
+CheeseOutcomeDA <- function(ps, path.out) {
+  psdds <- phyloseq_to_deseq2(ps, ~ CheeseOutcome)
+  geoMeans <- apply(counts(psdds), 1, gmMean)
+  psdds <- estimateSizeFactors(psdds, geoMeans = geoMeans)
+  dds <- DESeq(psdds, test = "Wald", fitType = "local") 
+  plotDispEsts(dds, ylim = c(1e-6, 1e2)) 
+  alpha <- 0.1 #  padj for indepenent filtering and expect FDR < alpha
+  res <- results(dds, alpha = alpha, 
+                 lfcThreshold = log2(1.5), 
+                 altHypothesis = "greaterAbs") #  turn on outlier detection
+  mcols(res, use.names=TRUE)  
+  plotMA(res) # diagnostic description
+  hist(res$pvalue, breaks=20, col="grey" ) # diagnostic plot
+  sigtab = res[which(res$padj < alpha), ] # diagnostic plot
+  if (nrow(sigtab) == 0) {
+    print("There are no significant features whose padj < 0.1 and |lfc| > log2(1.5)")
+  } else {
+    sigtab <- cbind(as(sigtab, "data.frame"), as(tax_table(ps)[rownames(sigtab), ], "matrix"))
+    write.csv(sigtab, file.path(path.out))
+  }
+}
+
+
+# TimeSinceCleaning Differential abundance and generate diagnostic plots and write sig tables 
+TiSinCleaningDA <- function(ps, path.out) {
+  psdds <- phyloseq_to_deseq2(ps, ~ TimeSinceCleaning)
+  geoMeans <- apply(counts(psdds), 1, gmMean)
+  psdds <- estimateSizeFactors(psdds, geoMeans = geoMeans)
+  dds <- DESeq(psdds, test = "Wald", fitType = "local") 
+  plotDispEsts(dds, ylim = c(1e-6, 1e2)) 
+  alpha <- 0.1 #  padj for indepenent filtering and expect FDR < alpha
+  res <- results(dds, alpha = alpha, 
+                 lfcThreshold = log2(1.5), 
+                 altHypothesis = "greaterAbs") #  turn on outlier detection
+  mcols(res, use.names=TRUE)  
+  plotMA(res) # diagnostic description
+  hist(res$pvalue, breaks=20, col="grey" ) # diagnostic plot
+  sigtab = res[which(res$padj < alpha), ] # diagnostic plot
+  if (nrow(sigtab) == 0) {
+    print("There are no significant features whose padj < 0.1 and |lfc| > log2(1.5)")
+  } else {
+    sigtab <- cbind(as(sigtab, "data.frame"), as(tax_table(ps)[rownames(sigtab), ], "matrix"))
+    write.csv(sigtab, file.path(path.out))
+  }
+}
+
+```
+
+
+
+
+## Prepare phyloseq objects 
+```{r}
 # remake a unrarefied ps object with low coverage samples filtered
 ## The starting ps is removed of ASV with undetermined phylum and ASV < 0.00005
 ps05.Phy05 <- readRDS(file.path(path, "decontam/phyloseq/ps05.Phy05.rds"))
@@ -54,40 +119,6 @@ ps100.sam
 ```
 
 
-## Define function to use DESeq2 for differential analysis 
-```{r}
-# calculate geometric means prior to estimate size factors
-gmMean = function(x, na.rm=TRUE){
-  exp(sum(log(x[x > 0]), na.rm=na.rm) / length(x))
-}
-
-# Differential abundance and generate diagnostic plots and write sig tables 
-## fold change is slits vs no slits
-## Uses default Benjamini-Hochberg pvalue adjust
-DA <- function(ps, path.out, variable = c("CheeseOutcome","TimeSinceCleaning")) {
-  psdds <- phyloseq_to_deseq2(ps, ~ variable)
-  geoMeans <- apply(counts(psdds), 1, gmMean)
-  psdds <- estimateSizeFactors(psdds, geoMeans = geoMeans)
-  dds <- DESeq(psdds, test = "Wald", fitType = "local") 
-  plotDispEsts(dds, ylim = c(1e-6, 1e2)) 
-  alpha <- 0.1 #  padj for indepenent filtering and expect FDR < alpha
-  res <- results(dds, alpha = alpha, 
-                 lfcThreshold = log2(1.5), 
-                 altHypothesis = "greaterAbs") #  turn on outlier detection
-  mcols(res, use.names=TRUE)  
-  plotMA(res) # diagnostic description
-  hist(res$pvalue, breaks=20, col="grey" ) # diagnostic plot
-  sigtab = res[which(res$padj < alpha), ] # diagnostic plot
-  if (nrow(sigtab) == 0) {
-    print("There are no significant features whose padj < 0.1 and |lfc| > log2(1.5)")
-  } else {
-    sigtab <- cbind(as(sigtab, "data.frame"), as(tax_table(ps)[rownames(sigtab), ], "matrix"))
-    write.csv(sigtab, file.path(path.out))
-  }
-}
-```
-
-
 ## Taxonomic DA of Cheddar 
 This is PMA treated samples
 ```{r}
@@ -107,8 +138,8 @@ CheeseOutcomeDA(ps.chedY, path.out = file.path(path, "cheddar/deseq_table/sigtab
 ps.chedY.noL <- subset_taxa(ps.chedY, !Genus %in% "Lactococcus")
 saveRDS(ps.chedY.noL, file.path(path, "cheddar/ps.chedY.noL.rds"))
 ps.chedY.noL
-CheeseOutcomeDA(ps.chedY.noL, 
-                path.out = file.path(path, "cheddar/deseq_table/sigtab.chedY.noL.csv"))
+DA(ps.chedY.noL, var = CheeseOutcome,
+   path.out = file.path(path, "cheddar/deseq_table/sigtab.chedY.noL.csv"))
 
 # 3 # 0-day Cheddar samples without Lactococcus
 ps.chedY.noL0 <- subset_samples(ps.chedY.noL, SampleType %in% "Cheese_0D")
@@ -139,7 +170,7 @@ CheeseOutcomeDA(ps.chedY.noL120,
                 path.out = file.path(path, "cheddar/deseq_table/sigtab.chedY.noL120.csv"))
 ```
 
-## Taxonomic DA of HTST milk that has been adjusted for cell count using qPCR results
+## Taxonomic DA of HTST milk that has not been adjusted for cell count using qPCR results
 This is PMA treated samples
 ```{r}
 # 7 # HTST milk 
@@ -152,7 +183,7 @@ ps.htstY
 CheeseOutcomeDA(ps.htstY, 
                 path.out = file.path(path, "milk/deseq_table/sigtab.htstY.csv"))
 
-# 8 # HTST milk that are 
+# 8 # HTST milk that are paired with cheese (4hr timeline)
 ```
 
 
