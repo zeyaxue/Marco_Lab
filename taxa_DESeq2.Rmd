@@ -17,8 +17,9 @@ taxonomy profile.
 ```{r}
 library(phyloseq);packageVersion("phyloseq")
 library(DESeq2);packageVersion("DESeq2")
-#library(ggplot2);packageVersion("ggplot2")
-#library(reshape2)
+library(ggplot2)
+library(reshape2)
+library(superheat)
 #library(cowplot)
 library(plyr)
 library(dplyr)
@@ -92,6 +93,44 @@ TiSinCleaningDA <- function(ps, path.out) {
 ```
 
 
+
+## Define function for plotting 
+```{r}
+# Heat plot based on CheeseOutcome
+ChouHeat <- function(ps, samType, w, h, path.out) {
+  my_palette <- colorRampPalette(c("red", "yellow", "green"))(n = 299)
+  # defines the color breaks manually for a "skewed" color transition
+  col_breaks = c(seq(-1,0,length=100),      # for red
+                 seq(0.01,0.8,length=100),  # for yellow
+                 seq(0.81,1,length=100))    # for green
+
+  ps <- ps %>% transform_sample_counts(function(x) x/sum(x) )  #get abundance in %
+  taxa.df <- psmelt(ps)
+  taxa.agg <- aggregate(Abundance ~ REC + CheeseOutcome,
+                        data = taxa.df,
+                        mean)
+  taxa.cast <- dcast(taxa.agg, REC ~ CheeseOutcome, mean, value.var = "Abundance")
+  #taxa.cast <- t(taxa.cast)
+  row.names(taxa.cast) <- taxa.cast[,1]
+  taxa.cast <- taxa.cast[, -1]
+
+  pdf(path.out, width = w, height = h)
+  superheat(taxa.cast,
+            left.label.size = 0.4, 
+            bottom.label.size = 0.1,
+            order.rows = rev(order(rownames(taxa.cast))),
+            #order.cols = c("1",2,3), # follow raw --> feed --> htst milk
+            col.dendrogram = FALSE,
+            grid.hline = FALSE,
+            title = "samType",
+            title.size = 6,
+            title.alignment = "center")
+  dev.off()
+}
+```
+
+
+
 ## Prepare phyloseq objects 
 ```{r}
 # remake a unrarefied ps object with low coverage samples filtered
@@ -111,20 +150,30 @@ ps100
 
 # remove all NC and seq control samples 
 ps100.sam <- subset_samples(ps100, SampleOrCtrl == "Sample" )
-#ps100.sam <- ps100.sam %>% tax_glom(taxrank = "Genus")
+ps100.sam <- ps100.sam %>% tax_glom(taxrank = "Genus")
 saveRDS(ps100.sam, file.path(path, "decontam/phyloseq/ps100.sam.rds"))
 ps100.sam
 
-# Feed and HTST milk that are paired with cheddar (based on the 4hr timeline)
+# Feed and HTST milk with information on TimeSinceCleaning
 ps.milk <- subset_samples(ps100.sam, SampleType %in% c("HTST_milk","HTST_feed"))
-samdf.4hr <- read.csv(file.path(path, "mapping/Run1-5_samdf-mc2_4hrTL.csv"))
-rownames(samdf.4hr) <- samdf.4hr$SampleID
-# Merge as a new phyloseq object
+ps.milk
+## Read in new sample information dataframe 
+sam.milk <- read.csv(file.path(path, "mapping/sam_milk_HTST0369.csv"))
+rownames(sam.milk) <- sam.milk$SampleID
+## Merge as a new phyloseq object
 tree <- phy_tree(ps.milk)
 tax <- tax_table(ps.milk)
 otu <- otu_table(ps.milk)
-ps.milk4 <- phyloseq(otu_table(otu, taxa_are_rows = FALSE), tax_table(tax),sample_data(samdf.4hr), phy_tree(tree))
+ps.milk <- phyloseq(otu_table(otu, taxa_are_rows = FALSE), tax_table(tax),sample_data(sam.milk), phy_tree(tree))
+saveRDS(ps.milk, file.path(path, "milk/ps.milk.rds"))
+ps.milk
 
+# Feed and HTST milk that are paired with cheddar (based on the 4hr timeline)
+samdf.4hr <- read.csv(file.path(path, "mapping/Run1-5_samdf-mc2_4hrTL.csv"))
+rownames(samdf.4hr) <- samdf.4hr$SampleID
+ps.milk4 <- phyloseq(otu_table(otu, taxa_are_rows = FALSE), tax_table(tax),sample_data(samdf.4hr), phy_tree(tree))
+saveRDS(ps.milk4, file.path(path, "milk/ps.milk4.rds"))
+ps.milk4
 ```
 
 
@@ -183,7 +232,7 @@ CheeseOutcomeDA(ps.chedY.noL120,
 This is PMA treated samples
 ```{r}
 # 7 # HTST milk 
-ps.htst <- subset_samples(ps100.sam, SampleType %in% "HTST_milk")
+ps.htst <- subset_samples(ps.milk, SampleType %in% "HTST_milk")
 saveRDS(ps.htst, file.path(path, "milk/ps.htst.rds"))
 ps.htst
 ps.htstY <- subset_samples(ps.htst, PMA %in% "Y")
@@ -191,22 +240,24 @@ saveRDS(ps.htstY, file.path(path, "milk/ps.htstY.rds"))
 ps.htstY
 CheeseOutcomeDA(ps.htstY, 
                 path.out = file.path(path, "milk/deseq_table/sigtab.htstY.csv"))
+TaxaHeat(ps.htstY, samType = "PMA treated HTST milk", w = 350, h = 350,
+         path.out = file.path(path, "milk/fig/htstY.pdf"))
 TiSinCleaningDA(ps.htstY, 
                 path.out = file.path(path, "milk/deseq_table_TiSinCleaning/sigtab.htstY.csv"))
 
 # 8 # HTST milk that are paired with cheese (4hr timeline)
 ps.htst4 <- subset_samples(ps.milk4, SampleType %in% "HTST_milk")
-saveRDS(ps.htst4, file.path(path, "cheddar/ps.htst.rds"))
-ps.htst
-ps.htstY <- subset_samples(ps.htst, PMA %in% "Y")
+saveRDS(ps.htst4, file.path(path, "milk/ps.htst4.rds"))
+ps.htst4
+ps.htst4Y <- subset_samples(ps.htst4, PMA %in% "Y")
 saveRDS(ps.htstY, file.path(path, "cheddar/ps.htstY.rds"))
-ps.htstY
+ps.htst4Y
+CheeseOutcomeDA(ps.htst4Y, 
+                path.out = file.path(path, "milk/deseq_table/sigtab.htst4Y.csv"))
+TiSinCleaningDA(ps.htst4Y, 
+                path.out = file.path(path, "milk/deseq_table_TiSinCleaning/sigtab.htst4Y.csv"))
 ```
 
 
-## Taxonomic analysis of each sample type 
-This is PMA untreated samples
-```{r}
-
-```
-
+## Taxonomic DA of HTST milk that ARE adjusted for cell count using qPCR results
+This is PMA treated samples
