@@ -9,6 +9,7 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+
 I used old .Rmd and html with rarefied feature table to generate alpha and beta 
 diversity figures. This script is focused on differential abudance testing on 
 taxonomy profile.
@@ -45,19 +46,20 @@ gmMean = function(x, na.rm=TRUE){
 ## fold change is slits vs no slits
 ## Uses default Benjamini-Hochberg pvalue adjust
 CheeseOutcomeDA <- function(ps, path.out) {
+  ps <- ps %>% tax_glom(taxrank = "Genus")
   psdds <- phyloseq_to_deseq2(ps, ~ CheeseOutcome)
   geoMeans <- apply(counts(psdds), 1, gmMean)
   psdds <- estimateSizeFactors(psdds, geoMeans = geoMeans)
   dds <- DESeq(psdds, test = "Wald", fitType = "local") 
   plotDispEsts(dds, ylim = c(1e-6, 1e2)) 
-  alpha <- 0.1 #  padj for indepenent filtering and expect FDR < alpha
+  alpha <- 0.5 #  padj for indepenent filtering and expect FDR < alpha
   res <- results(dds, alpha = alpha, 
                  lfcThreshold = log2(1.5), 
-                 altHypothesis = "greaterAbs") #  turn on outlier detection
+                 altHypothesis = "greaterAbs")
   mcols(res, use.names=TRUE)  
   plotMA(res) # diagnostic description
   hist(res$pvalue, breaks=20, col="grey" ) # diagnostic plot
-  sigtab = res[which(res$padj < alpha), ] # diagnostic plot
+  sigtab = res[which(res$padj < alpha), ] 
   if (nrow(sigtab) == 0) {
     print("There are no significant features whose padj < 0.1 and |lfc| > log2(1.5)")
   } else {
@@ -81,7 +83,7 @@ TiSinCleaningDA <- function(ps, path.out) {
   mcols(res, use.names=TRUE)  
   plotMA(res) # diagnostic description
   hist(res$pvalue, breaks=20, col="grey" ) # diagnostic plot
-  sigtab = res[which(res$padj < alpha), ] # diagnostic plot
+  sigtab = res[which(res$padj < alpha), ] 
   if (nrow(sigtab) == 0) {
     print("There are no significant features whose padj < 0.1 and |lfc| > log2(1.5)")
   } else {
@@ -96,7 +98,7 @@ TiSinCleaningDA <- function(ps, path.out) {
 
 ## Define function for plotting 
 ```{r}
-# Heat plot based on CheeseOutcome
+# Heat plot based on CheeseOutcome. This function will plot only the top 30 taxa
 ChouHeat <- function(ps, samType, w, h, path.out) {
   my_palette <- colorRampPalette(c("red", "yellow", "green"))(n = 299)
   # defines the color breaks manually for a "skewed" color transition
@@ -104,28 +106,35 @@ ChouHeat <- function(ps, samType, w, h, path.out) {
                  seq(0.01,0.8,length=100),  # for yellow
                  seq(0.81,1,length=100))    # for green
 
-  ps <- ps %>% transform_sample_counts(function(x) x/sum(x) )  #get abundance in %
+  #ps <- ps %>% transform_sample_counts(function(x) x/sum(x) )  #get abundance in %
   taxa.df <- psmelt(ps)
-  taxa.agg <- aggregate(Abundance ~ REC + CheeseOutcome,
+  taxa.agg <- aggregate(Abundance ~ Genus + CheeseOutcome,
                         data = taxa.df,
                         mean)
-  taxa.cast <- dcast(taxa.agg, REC ~ CheeseOutcome, mean, value.var = "Abundance")
-  #taxa.cast <- t(taxa.cast)
-  row.names(taxa.cast) <- taxa.cast[,1]
+  taxa.cast <- dcast(taxa.agg, Genus ~ CheeseOutcome, mean, value.var = "Abundance")
+  # need to change results from factor to numeric because of R
+  row.names(taxa.cast) <- taxa.cast$Genus
   taxa.cast <- taxa.cast[, -1]
-
+  indx <- sapply(taxa.cast, is.factor)
+  taxa.cast[indx] <- lapply(taxa.cast[indx], function(x) as.numeric(as.character(x))) 
+  taxa.cast30 <- cbind(taxa.cast, total = rowSums(taxa.cast)) #  need numeric values
+  taxa.cast30$taxa <- rownames(taxa.cast30)
+  taxa.cast30 <- head(arrange(taxa.cast30,desc(total)), n = 30)
+  row.names(taxa.cast30) <- taxa.cast30$taxa
+  taxa.cast30 <- taxa.cast30[, -c(3,4)]
+  
   pdf(path.out, width = w, height = h)
-  superheat(taxa.cast,
+  superheat(taxa.cast30,
             left.label.size = 0.4, 
             bottom.label.size = 0.1,
-            order.rows = rev(order(rownames(taxa.cast))),
+            order.rows = rev(order(rownames(taxa.cast30))),
             #order.cols = c("1",2,3), # follow raw --> feed --> htst milk
-            col.dendrogram = FALSE,
             grid.hline = FALSE,
-            title = "samType",
+            title = samType,
             title.size = 6,
             title.alignment = "center")
   dev.off()
+  
 }
 ```
 
@@ -150,7 +159,7 @@ ps100
 
 # remove all NC and seq control samples 
 ps100.sam <- subset_samples(ps100, SampleOrCtrl == "Sample" )
-ps100.sam <- ps100.sam %>% tax_glom(taxrank = "Genus")
+#ps100.sam <- ps100.sam %>% tax_glom(taxrank = "Genus")
 saveRDS(ps100.sam, file.path(path, "decontam/phyloseq/ps100.sam.rds"))
 ps100.sam
 
@@ -175,6 +184,7 @@ ps.milk4 <- phyloseq(otu_table(otu, taxa_are_rows = FALSE), tax_table(tax),sampl
 saveRDS(ps.milk4, file.path(path, "milk/ps.milk4.rds"))
 ps.milk4
 ```
+
 
 
 ## Taxonomic DA of Cheddar 
@@ -228,6 +238,7 @@ CheeseOutcomeDA(ps.chedY.noL120,
                 path.out = file.path(path, "cheddar/deseq_table/sigtab.chedY.noL120.csv"))
 ```
 
+
 ## Taxonomic DA of HTST milk that has not been adjusted for cell count using qPCR results
 This is PMA treated samples
 ```{r}
@@ -240,10 +251,11 @@ saveRDS(ps.htstY, file.path(path, "milk/ps.htstY.rds"))
 ps.htstY
 CheeseOutcomeDA(ps.htstY, 
                 path.out = file.path(path, "milk/deseq_table/sigtab.htstY.csv"))
-TaxaHeat(ps.htstY, samType = "PMA treated HTST milk", w = 350, h = 350,
+ChouHeat(ps.htstY, samType = "PMA treated HTST milk", w = 8.5, h = 11,
          path.out = file.path(path, "milk/fig/htstY.pdf"))
 TiSinCleaningDA(ps.htstY, 
                 path.out = file.path(path, "milk/deseq_table_TiSinCleaning/sigtab.htstY.csv"))
+
 
 # 8 # HTST milk that are paired with cheese (4hr timeline)
 ps.htst4 <- subset_samples(ps.milk4, SampleType %in% "HTST_milk")
