@@ -32,24 +32,24 @@ path <- "G:/My Drive/UC_Davis/Marco_lab/milk_microbiota/Hilmar_weekly_samples/QI
 # copy the .Rmd file to the path directory to generate html report
 
 set.seed(123) #  for reproducibility
+
+# character vector for the comm 14 most abundant taxa
+comm14 <- c("Acinetobacter", "Bacillus", "Corynebacterium", "Clostridium",
+                 "Enterococcus", "Escherichia", "Lactococcus", "Macrococcus",
+                 "Mycoplasma", "Pseudomonas", "Staphylococcus", "Streptococcus",
+                 "Thermus", "Turicibacter", "Other")
 ```
 
 
 ## Define function to use DESeq2 for differential analysis 
 ```{r}
-# calculate geometric means prior to estimate size factors
-gmMean = function(x, na.rm=TRUE){
-  exp(sum(log(x[x > 0]), na.rm=na.rm) / length(x))
-}
-
 # Cheese Outcome Differential abundance and generate diagnostic plots and write sig tables 
 ## fold change is slits vs no slits
 ## Uses default Benjamini-Hochberg pvalue adjust
 CheeseOutcomeDA <- function(ps, path.out) {
   ps <- ps %>% tax_glom(taxrank = "Genus")
   psdds <- phyloseq_to_deseq2(ps, ~ CheeseOutcome)
-  geoMeans <- apply(counts(psdds), 1, gmMean)
-  psdds <- estimateSizeFactors(psdds, geoMeans = geoMeans)
+  
   dds <- DESeq(psdds, test = "Wald", fitType = "local") 
   plotDispEsts(dds, ylim = c(1e-6, 1e2)) 
   alpha <- 0.5 #  padj for indepenent filtering and expect FDR < alpha
@@ -61,7 +61,7 @@ CheeseOutcomeDA <- function(ps, path.out) {
   hist(res$pvalue, breaks=20, col="grey" ) # diagnostic plot
   sigtab = res[which(res$padj < alpha), ] 
   if (nrow(sigtab) == 0) {
-    print("There are no significant features whose padj < 0.1 and |lfc| > log2(1.5)")
+    print("There are no significant features whose padj < 0.5 and |lfc| > log2(1.5)")
   } else {
     sigtab <- cbind(as(sigtab, "data.frame"), as(tax_table(ps)[rownames(sigtab), ], "matrix"))
     write.csv(sigtab, file.path(path.out))
@@ -71,21 +71,25 @@ CheeseOutcomeDA <- function(ps, path.out) {
 
 # TimeSinceCleaning Differential abundance and generate diagnostic plots and write sig tables 
 TiSinCleaningDA <- function(ps, path.out) {
-  psdds <- phyloseq_to_deseq2(ps, ~ TimeSinceCleaning)
+  ps <- ps %>% tax_glom(taxrank = "Genus")
+  psdds <- phyloseq_to_deseq2(ps, design = ~ TimeSinceCleaning)
   geoMeans <- apply(counts(psdds), 1, gmMean)
-  psdds <- estimateSizeFactors(psdds, geoMeans = geoMeans)
+  #psdds <- estimateSizeFactors(psdds, geoMeans = geoMeans)
   dds <- DESeq(psdds, test = "Wald", fitType = "local") 
+  
+  
+  
   plotDispEsts(dds, ylim = c(1e-6, 1e2)) 
-  alpha <- 0.1 #  padj for indepenent filtering and expect FDR < alpha
+  alpha <- 0.5 #  padj for indepenent filtering and expect FDR < alpha
   res <- results(dds, alpha = alpha, 
-                 lfcThreshold = log2(1.5), 
+                 lfcThreshold = log2(1), 
                  altHypothesis = "greaterAbs") #  turn on outlier detection
   mcols(res, use.names=TRUE)  
   plotMA(res) # diagnostic description
   hist(res$pvalue, breaks=20, col="grey" ) # diagnostic plot
   sigtab = res[which(res$padj < alpha), ] 
   if (nrow(sigtab) == 0) {
-    print("There are no significant features whose padj < 0.1 and |lfc| > log2(1.5)")
+    print("There are no significant features whose padj < 0.5 and |lfc| > log2(1.5)")
   } else {
     sigtab <- cbind(as(sigtab, "data.frame"), as(tax_table(ps)[rownames(sigtab), ], "matrix"))
     write.csv(sigtab, file.path(path.out))
@@ -93,7 +97,6 @@ TiSinCleaningDA <- function(ps, path.out) {
 }
 
 ```
-
 
 
 ## Define function for plotting 
@@ -107,6 +110,7 @@ ChouHeat <- function(ps, samType, w, h, path.out) {
                  seq(0.81,1,length=100))    # for green
 
   #ps <- ps %>% transform_sample_counts(function(x) x/sum(x) )  #get abundance in %
+  ps <- ps %>% tax_glom(taxrank = "Genus")
   taxa.df <- psmelt(ps)
   taxa.agg <- aggregate(Abundance ~ Genus + CheeseOutcome,
                         data = taxa.df,
@@ -134,10 +138,122 @@ ChouHeat <- function(ps, samType, w, h, path.out) {
             title.size = 6,
             title.alignment = "center")
   dev.off()
+}
+
+
+# Heat plot based on TimeSinceCleaning. This function will plot only the top 30 taxa
+TiSiHeat <- function(ps, samType, w, h, path.out) {
+  my_palette <- colorRampPalette(c("red", "yellow", "green"))(n = 299)
+  # defines the color breaks manually for a "skewed" color transition
+  col_breaks = c(seq(-1,0,length=100),      # for red
+                 seq(0.01,0.8,length=100),  # for yellow
+                 seq(0.81,1,length=100))    # for green
+
+  #ps <- ps %>% transform_sample_counts(function(x) x/sum(x) )  #get abundance in %
+  ps <- ps %>% tax_glom(taxrank = "Genus")
+  taxa.df <- psmelt(ps)
+  taxa.agg <- aggregate(Abundance ~ Genus + TimeSinceCleaning,
+                        data = taxa.df,
+                        mean)
+  taxa.cast <- dcast(taxa.agg, Genus ~ TimeSinceCleaning, mean, value.var = "Abundance")
+  # need to change results from factor to numeric because of R
+  row.names(taxa.cast) <- taxa.cast$Genus
+  taxa.cast <- taxa.cast[, -1]
+  indx <- sapply(taxa.cast, is.factor)
+  taxa.cast[indx] <- lapply(taxa.cast[indx], function(x) as.numeric(as.character(x))) 
+  taxa.cast30 <- cbind(taxa.cast, total = rowSums(taxa.cast)) #  need numeric values
+  taxa.cast30$taxa <- rownames(taxa.cast30)
+  taxa.cast30 <- head(arrange(taxa.cast30,desc(total)), n = 30)
+  row.names(taxa.cast30) <- taxa.cast30$taxa
+  taxa.cast30 <- taxa.cast30[, -c(5,6)]
   
+  pdf(path.out, width = w, height = h)
+  superheat(taxa.cast30,
+            left.label.size = 0.4, 
+            bottom.label.size = 0.1,
+            order.rows = rev(order(rownames(taxa.cast30))),
+            #order.cols = c("1",2,3), # follow raw --> feed --> htst milk
+            grid.hline = FALSE,
+            title = samType,
+            title.size = 6,
+            title.alignment = "center")
+  dev.off()
+}
+
+
+# Stacked bar plot 
+ChouBar <- function(ps, taxa, samType, w, h, path.out){
+  ps <- ps %>% tax_glom(taxrank = "Genus") #%>%transform_sample_counts(function(x) x/sum(x) ) 
+  TaxTab <- tax_table(ps) %>% as.data.frame()
+  taxa_names(ps) <- TaxTab$Genus
+  allTaxa <- taxa_names(ps)
+  ps.notaxa <- prune_taxa(allTaxa[!(allTaxa %in% taxa)], ps)
+  taxa.filt <- ps.notaxa@tax_table[,6] %>% as.character() #6 for genus level 
+  
+  # change the taxa that are not within the 13 common taxa to "Other" 
+  TaxTab2 <- psmelt(ps)
+  # merge/average per SampleType and CheeseOutcome
+  TaxTab2_agg <- aggregate(Abundance ~ SampleType + CheeseOutcome + Genus,
+                           data = TaxTab2,
+                           mean)
+  TaxTab2_agg$Genus <- as.character(TaxTab2_agg$Genus)
+  TaxTab2_agg[TaxTab2_agg$Genus %in% taxa.filt,]$Genus <- "Other"
+
+  #Set colors for plotting
+  mycol = c("#A6CEE3", "#438EC0", "#63A8A0", "#98D277", "#3BA432", "#F16667", 
+            "#E62F27", "#F9A963", "#FE982C", "#ED8F47", "#C3AAD2", "#7D54A5", 
+            "#B9A499", "#EAD27A", "#B15928")
+  TaxTab2_agg$Genus = factor(TaxTab2_agg$Genus, levels = taxa)
+  
+  #pdf(path.out, width = w, height = h)
+  ggplot(TaxTab2_agg, aes(x = CheeseOutcome, y = Abundance, fill = Genus)) +
+    facet_wrap(~SampleType, scales = "fixed") +
+    geom_bar(stat = "identity") + 
+    scale_fill_manual(values = mycol)+
+    # Remove x axis title
+    theme(axis.title.x = element_blank()) + 
+    guides(fill = guide_legend(reverse = FALSE, keywidth = 1, keyheight = 1)) +
+    ylab("Relative Abundance \n") 
+  #dev.off()
+}
+
+
+# Stacked bar plot for time since cleaning
+TiSinBar <- function(ps, taxa, samType, w, h, path.out){
+  ps <- ps %>% tax_glom(taxrank = "Genus") #%>%transform_sample_counts(function(x) x/sum(x) ) 
+  TaxTab <- tax_table(ps) %>% as.data.frame()
+  taxa_names(ps) <- TaxTab$Genus
+  allTaxa <- taxa_names(ps)
+  ps.notaxa <- prune_taxa(allTaxa[!(allTaxa %in% taxa)], ps)
+  taxa.filt <- ps.notaxa@tax_table[,6] %>% as.character() #6 for genus level 
+  
+  # change the taxa that are not within the 13 common taxa to "Other" 
+  TaxTab2 <- psmelt(ps)
+  # merge/average per SampleType and TimeSinceCleaning
+  TaxTab2_agg <- aggregate(Abundance ~ SampleType + TimeSinceCleaning + Genus,
+                           data = TaxTab2,
+                           mean)
+  TaxTab2_agg$Genus <- as.character(TaxTab2_agg$Genus)
+  TaxTab2_agg[TaxTab2_agg$Genus %in% taxa.filt,]$Genus <- "Other"
+
+  #Set colors for plotting
+  mycol = c("#A6CEE3", "#438EC0", "#63A8A0", "#98D277", "#3BA432", "#F16667", 
+            "#E62F27", "#F9A963", "#FE982C", "#ED8F47", "#C3AAD2", "#7D54A5", 
+            "#B9A499", "#EAD27A", "#B15928")
+  TaxTab2_agg$Genus = factor(TaxTab2_agg$Genus, levels = taxa)
+  
+  #pdf(path.out, width = w, height = h)
+  ggplot(TaxTab2_agg, aes(x = TimeSinceCleaning, y = Abundance, fill = Genus)) +
+    facet_wrap(~SampleType, scales = "fixed") +
+    geom_bar(stat = "identity") + 
+    scale_fill_manual(values = mycol)+
+    # Remove x axis title
+    theme(axis.title.x = element_blank()) + 
+    guides(fill = guide_legend(reverse = FALSE, keywidth = 1, keyheight = 1)) +
+    ylab("Relative Abundance \n") 
+  #dev.off()
 }
 ```
-
 
 
 ## Prepare phyloseq objects 
@@ -186,7 +302,6 @@ ps.milk4
 ```
 
 
-
 ## Taxonomic DA of Cheddar 
 This is PMA treated samples
 ```{r}
@@ -206,8 +321,8 @@ CheeseOutcomeDA(ps.chedY, path.out = file.path(path, "cheddar/deseq_table/sigtab
 ps.chedY.noL <- subset_taxa(ps.chedY, !Genus %in% "Lactococcus")
 saveRDS(ps.chedY.noL, file.path(path, "cheddar/ps.chedY.noL.rds"))
 ps.chedY.noL
-DA(ps.chedY.noL, var = CheeseOutcome,
-   path.out = file.path(path, "cheddar/deseq_table/sigtab.chedY.noL.csv"))
+CheeseOutcomeDA(ps.chedY.noL, 
+                path.out = file.path(path, "cheddar/deseq_table/sigtab.chedY.noL.csv"))
 
 # 3 # 0-day Cheddar samples without Lactococcus
 ps.chedY.noL0 <- subset_samples(ps.chedY.noL, SampleType %in% "Cheese_0D")
@@ -255,6 +370,8 @@ ChouHeat(ps.htstY, samType = "PMA treated HTST milk", w = 8.5, h = 11,
          path.out = file.path(path, "milk/fig/htstY.pdf"))
 TiSinCleaningDA(ps.htstY, 
                 path.out = file.path(path, "milk/deseq_table_TiSinCleaning/sigtab.htstY.csv"))
+TiSiHeat(ps.htstY, samType = "PMA treated HTST milk", w = 8.5, h = 11,
+         path.out = file.path(path, "milk/fig_TiSinCleaning/htstY.pdf"))
 
 
 # 8 # HTST milk that are paired with cheese (4hr timeline)
@@ -262,14 +379,107 @@ ps.htst4 <- subset_samples(ps.milk4, SampleType %in% "HTST_milk")
 saveRDS(ps.htst4, file.path(path, "milk/ps.htst4.rds"))
 ps.htst4
 ps.htst4Y <- subset_samples(ps.htst4, PMA %in% "Y")
-saveRDS(ps.htstY, file.path(path, "cheddar/ps.htstY.rds"))
+saveRDS(ps.htstY, file.path(path, "milk/ps.htstY.rds"))
 ps.htst4Y
 CheeseOutcomeDA(ps.htst4Y, 
                 path.out = file.path(path, "milk/deseq_table/sigtab.htst4Y.csv"))
-TiSinCleaningDA(ps.htst4Y, 
-                path.out = file.path(path, "milk/deseq_table_TiSinCleaning/sigtab.htst4Y.csv"))
+ChouHeat(ps.htst4Y, samType = "PMA treated paired HTST milk", w = 8.5, h = 11,
+         path.out = file.path(path, "milk/fig/htst4Y.pdf"))
+
+
 ```
 
 
 ## Taxonomic DA of HTST milk that ARE adjusted for cell count using qPCR results
-This is PMA treated samples
+DESeq2 keeps giving error because after qpcr adjustment, it is not raw counts anymore.
+```{r eval=FALSE, include=FALSE}
+qPCR <- read.csv(file.path(path, "mapping/Milk_sample_qPCR.csv"))
+# transform to percentage
+ps.milkq <- ps.milk %>% 
+  tax_glom(taxrank = "Genus") %>% 
+  transform_sample_counts(function(x) x/sum(x) )  
+otuq <- otu_table(ps.milkq) %>% data.frame()
+otuq$Sampleid <- row.names(otuq)
+colnames(otuq) <- gsub("X","",colnames(otuq))
+otu.q <- merge(x = qPCR, y = otuq, by.x = "SampleID", by.y = "Sampleid")
+coln <- colnames(otu.q[,c(20:91)]) #  character vector with all feature names
+otu.q2 <- otu.q %>% mutate_at(.vars =  coln, .funs = funs(.*LogCellsML))
+row.names(otu.q2) <- otu.q2[,1] #sample id as row names for formatting with phyloseq
+otu.q3 <- otu.q2[,-c(1:19)] #remove all the meta information so the resulting otu table can be transformed into a numeric matrix
+otu.q3 <- as.matrix(otu.q3)
+
+# Merge as a new phyloseq object
+ps.milkq <- phyloseq(otu_table(otu.q3, taxa_are_rows = FALSE), 
+                     tax_table(ps.milkq),
+                     sample_data(ps.milkq), 
+                     phy_tree(ps.milkq))
+# remove features that sum up to 0
+#ps.milkq <- filter_taxa(ps.milkq, function(x) sum(x) > 0, TRUE)
+#ps.milkq <- prune_samples(sample_sums(ps.milkq)>=0, ps.milkq)
+saveRDS(ps.milkq, file.path(path, "milk/ps.milkq.rds"))
+ps.milkq
+
+
+
+# 9 # HTST milk that has been adjusted with qPCR values
+ps.htstq <- subset_samples(ps.milkq, SampleType %in% "HTST_milk")
+saveRDS(ps.htstq, file.path(path, "milk/ps.htstq.rds"))
+ps.htstq
+ps.htstqY <- subset_samples(ps.htstq, PMA %in% "Y")
+saveRDS(ps.htstqY, file.path(path, "milk/ps.htstqY.rds"))
+ps.htstqY
+CheeseOutcomeDA(ps.htstqY, 
+                path.out = file.path(path, "milk/deseq_table/sigtab.htstqY.csv"))
+ChouBar(ps.htstqY, 
+        taxa = comm14,
+        samType = "PMA treated HTST milk", w = 6, h = 5,
+        path.out = file.path(path, "milk/fig/htstqY2.pdf"))
+TiSinCleaningDA(ps.htstqY, 
+                path.out = file.path(path, "milk/deseq_table_TiSinCleaning/sigtab.htstqY.csv"))
+TiSinBar(ps.htstqY, 
+        taxa = comm14,
+        samType = "PMA treated HTST milk", w = 6, h = 5,
+        path.out = file.path(path, "milk/fig_TiSinCleaning/htstqY2.pdf"))
+
+
+# 10 # HTST milk around the 4hr timeline that has been adjusted with qPCR values
+CheeseOutcomeDA(ps.htstqY, 
+                path.out = file.path(path, "milk/deseq_table/sigtab.htstqY.csv"))
+ChouBar(ps.htstqY, 
+        taxa = comm14,
+        samType = "PMA treated HTST milk", w = 6, h = 5,
+        path.out = file.path(path, "milk/fig/htstqY2.pdf"))
+
+```
+
+
+## Plotting and saving as pdf
+```{r}
+ps.milkY <- subset_samples(ps.milk, PMA %in% "Y")
+ChouBar(ps.milkY, 
+        taxa = comm14,
+        samType = "PMA treated HTST milk", w = 6, h = 5,
+        path.out = file.path(path, "milk/fig/milkY.pdf"))
+
+
+ps.milkqY <- subset_samples(ps.milkq, PMA %in% "Y")
+ChouBar(ps.milkqY, 
+        taxa = comm14,
+        samType = "PMA treated HTST milk", w = 6, h = 5,
+        path.out = file.path(path, "milk/fig/milkqY.pdf"))
+TiSinBar(ps.milkqY, 
+        taxa = comm14,
+        samType = "PMA treated HTST milk", w = 6, h = 5,
+        path.out = file.path(path, "milk/fig_TiSinCleaning/htstqY2.pdf"))
+
+
+
+ps.milkq4 <- phyloseq(otu_table(ps.milkq), tax_table(ps.milkq),sample_data(samdf.4hr), phy_tree(ps.milkq))
+ps.milkq4Y <- subset_samples(ps.milkq4, PMA %in% "Y")
+ChouBar(ps.milkq4Y, 
+        taxa = comm14,
+        samType = "PMA treated HTST milk", w = 6, h = 5,
+        path.out = file.path(path, "milk/fig/milkq4Y.pdf"))
+
+```
+
