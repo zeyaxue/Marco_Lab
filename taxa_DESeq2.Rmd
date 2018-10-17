@@ -54,14 +54,14 @@ CheeseOutcomeDA <- function(ps, path.out) {
   plotDispEsts(dds, ylim = c(1e-6, 1e2)) 
   alpha <- 0.5 #  padj for indepenent filtering and expect FDR < alpha
   res <- results(dds, alpha = alpha, 
-                 lfcThreshold = log2(1.5), 
+                 lfcThreshold = 0, 
                  altHypothesis = "greaterAbs")
   mcols(res, use.names=TRUE)  
   plotMA(res) # diagnostic description
   hist(res$pvalue, breaks=20, col="grey" ) # diagnostic plot
   sigtab = res[which(res$padj < alpha), ] 
   if (nrow(sigtab) == 0) {
-    print("There are no significant features whose padj < 0.5 and |lfc| > log2(1.5)")
+    print("There are no significant features whose padj < 0.5 and |lfc| > 0")
   } else {
     sigtab <- cbind(as(sigtab, "data.frame"), as(tax_table(ps)[rownames(sigtab), ], "matrix"))
     write.csv(sigtab, file.path(path.out))
@@ -72,28 +72,67 @@ CheeseOutcomeDA <- function(ps, path.out) {
 # TimeSinceCleaning Differential abundance and generate diagnostic plots and write sig tables 
 TiSinCleaningDA <- function(ps, path.out) {
   ps <- ps %>% tax_glom(taxrank = "Genus")
+  sample_data(ps)$TimeSinceCleaning <- factor(sample_data(ps)$TimeSinceCleaning)
   psdds <- phyloseq_to_deseq2(ps, design = ~ TimeSinceCleaning)
-  geoMeans <- apply(counts(psdds), 1, gmMean)
-  #psdds <- estimateSizeFactors(psdds, geoMeans = geoMeans)
+  
   dds <- DESeq(psdds, test = "Wald", fitType = "local") 
-  
-  
-  
   plotDispEsts(dds, ylim = c(1e-6, 1e2)) 
   alpha <- 0.5 #  padj for indepenent filtering and expect FDR < alpha
-  res <- results(dds, alpha = alpha, 
-                 lfcThreshold = log2(1), 
-                 altHypothesis = "greaterAbs") #  turn on outlier detection
-  mcols(res, use.names=TRUE)  
-  plotMA(res) # diagnostic description
-  hist(res$pvalue, breaks=20, col="grey" ) # diagnostic plot
-  sigtab = res[which(res$padj < alpha), ] 
-  if (nrow(sigtab) == 0) {
-    print("There are no significant features whose padj < 0.5 and |lfc| > log2(1.5)")
-  } else {
-    sigtab <- cbind(as(sigtab, "data.frame"), as(tax_table(ps)[rownames(sigtab), ], "matrix"))
-    write.csv(sigtab, file.path(path.out))
+
+  res03 <- results(dds, contrast = c("TimeSinceCleaning", "0", "3"),
+                   alpha = alpha, lfcThreshold = 0, altHypothesis = "greaterAbs")
+  res06 <- results(dds, contrast = c("TimeSinceCleaning", "0", "6"),
+                   alpha = alpha, lfcThreshold = 0, altHypothesis = "greaterAbs")
+  res09 <- results(dds, contrast = c("TimeSinceCleaning", "0", "9"),
+                   alpha = alpha, lfcThreshold = 0, altHypothesis = "greaterAbs")
+  res36 <- results(dds, contrast = c("TimeSinceCleaning", "3", "6"),
+                   alpha = alpha, lfcThreshold = 0, altHypothesis = "greaterAbs")
+  res39 <- results(dds, contrast = c("TimeSinceCleaning", "3", "9"),
+                   alpha = alpha, lfcThreshold = 0, altHypothesis = "greaterAbs")
+  res69 <- results(dds, contrast = c("TimeSinceCleaning", "6", "9"),
+                   alpha = alpha, lfcThreshold = 0, altHypothesis = "greaterAbs")
+  
+  f <- function(res){
+    mcols(res, use.names = TRUE)
+    sigtab <- res[which(res$padj < alpha), ]
   }
+  
+  f2 <- function(sigtab){
+    cbind(as(sigtab, "data.frame"), as(tax_table(ps)[rownames(sigtab), ], "matrix"))
+  }
+  
+  sigtab03 <- f(res03)
+  sigtab06 <- f(res06)
+  sigtab09 <- f(res09)
+  sigtab36 <- f(res36)
+  sigtab39 <- f(res39)
+  sigtab69 <- f(res69)
+  
+  if (nrow(sigtab03) > 0){
+    sigtab03 <- f2(sigtab03)
+    write.csv(sigtab03, file.path(path.out, "03.csv"))
+  }
+  if (nrow(sigtab06) > 0){
+    sigtab06 <- f2(sigtab06) 
+    write.csv(sigtab06, file.path(path.out, "06.csv"))
+  }
+  if (nrow(sigtab09) > 0){
+    sigtab09 <- f2(sigtab09) 
+    write.csv(sigtab09, file.path(path.out, "09.csv"))
+  }
+  if (nrow(sigtab36) > 0){
+   sigtab36 <- f2(sigtab36) 
+   write.csv(sigtab36, file.path(path.out, "36.csv"))
+  }
+  if (nrow(sigtab39) > 0){
+    sigtab39 <- f2(sigtab39) 
+    write.csv(sigtab39, file.path(path.out, "39.csv"))
+  }
+  if (nrow(sigtab69) > 0){
+    sigtab69 <- f2(sigtab69) 
+    write.csv(sigtab69, file.path(path.out, "69.csv"))
+  }
+  
 }
 
 ```
@@ -369,7 +408,7 @@ CheeseOutcomeDA(ps.htstY,
 ChouHeat(ps.htstY, samType = "PMA treated HTST milk", w = 8.5, h = 11,
          path.out = file.path(path, "milk/fig/htstY.pdf"))
 TiSinCleaningDA(ps.htstY, 
-                path.out = file.path(path, "milk/deseq_table_TiSinCleaning/sigtab.htstY.csv"))
+                path.out = file.path(path, "milk/deseq_table_TiSinCleaning/htstY"))
 TiSiHeat(ps.htstY, samType = "PMA treated HTST milk", w = 8.5, h = 11,
          path.out = file.path(path, "milk/fig_TiSinCleaning/htstY.pdf"))
 
