@@ -93,7 +93,7 @@ TiSinCleaningDA <- function(ps, path.out) {
   
   dds <- DESeq(psdds, test = "Wald", fitType = "local") 
   plotDispEsts(dds, ylim = c(1e-6, 1e2)) 
-  alpha <- 0.1 #  padj for indepenent filtering and expect FDR < alpha
+  alpha <- 0.5 #  padj for indepenent filtering and expect FDR < alpha
 
   res03 <- results(dds, contrast = c("TimeSinceCleaning", "0", "3"),
                    alpha = alpha, lfcThreshold = log2(1.5), 
@@ -167,17 +167,17 @@ TiSinCleaningDAnoMean <- function(ps, path.out) {
   alpha <- 0.5 #  padj for indepenent filtering and expect FDR < alpha
 
   res03 <- results(dds, contrast = c("TimeSinceCleaning", "0", "3"),
-                   alpha = alpha, lfcThreshold = 0, altHypothesis = "greaterAbs")
+                   alpha = alpha, lfcThreshold = log2(1.5), altHypothesis = "greaterAbs")
   res06 <- results(dds, contrast = c("TimeSinceCleaning", "0", "6"),
-                   alpha = alpha, lfcThreshold = 0, altHypothesis = "greaterAbs")
+                   alpha = alpha, lfcThreshold = log2(1.5), altHypothesis = "greaterAbs")
   res09 <- results(dds, contrast = c("TimeSinceCleaning", "0", "9"),
-                   alpha = alpha, lfcThreshold = 0, altHypothesis = "greaterAbs")
+                   alpha = alpha, lfcThreshold = log2(1.5), altHypothesis = "greaterAbs")
   res36 <- results(dds, contrast = c("TimeSinceCleaning", "3", "6"),
-                   alpha = alpha, lfcThreshold = 0, altHypothesis = "greaterAbs")
+                   alpha = alpha, lfcThreshold = log2(1.5), altHypothesis = "greaterAbs")
   res39 <- results(dds, contrast = c("TimeSinceCleaning", "3", "9"),
-                   alpha = alpha, lfcThreshold = 0, altHypothesis = "greaterAbs")
+                   alpha = alpha, lfcThreshold = log2(1.5), altHypothesis = "greaterAbs")
   res69 <- results(dds, contrast = c("TimeSinceCleaning", "6", "9"),
-                   alpha = alpha, lfcThreshold = 0, altHypothesis = "greaterAbs")
+                   alpha = alpha, lfcThreshold = log2(1.5), altHypothesis = "greaterAbs")
   
   f <- function(res){
     mcols(res, use.names = TRUE)
