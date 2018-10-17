@@ -43,12 +43,18 @@ comm14 <- c("Acinetobacter", "Bacillus", "Corynebacterium", "Clostridium",
 
 ## Define function to use DESeq2 for differential analysis 
 ```{r}
+# calculate geometric means prior to estimate size factors
+gmMean = function(x, na.rm=TRUE){
+  exp(sum(log(x[x > 0]), na.rm=na.rm) / length(x))
+}
+
 # Cheese Outcome Differential abundance and generate diagnostic plots and write sig tables 
 ## fold change is slits vs no slits
 ## Uses default Benjamini-Hochberg pvalue adjust
 CheeseOutcomeDA <- function(ps, path.out) {
   ps <- ps %>% tax_glom(taxrank = "Genus")
   psdds <- phyloseq_to_deseq2(ps, ~ CheeseOutcome)
+  geoMeans <- apply(counts(psdds), 1, gmMean)
   
   dds <- DESeq(psdds, test = "Wald", fitType = "local") 
   plotDispEsts(dds, ylim = c(1e-6, 1e2)) 
@@ -74,6 +80,7 @@ TiSinCleaningDA <- function(ps, path.out) {
   ps <- ps %>% tax_glom(taxrank = "Genus")
   sample_data(ps)$TimeSinceCleaning <- factor(sample_data(ps)$TimeSinceCleaning)
   psdds <- phyloseq_to_deseq2(ps, design = ~ TimeSinceCleaning)
+  geoMeans <- apply(counts(psdds), 1, gmMean)
   
   dds <- DESeq(psdds, test = "Wald", fitType = "local") 
   plotDispEsts(dds, ylim = c(1e-6, 1e2)) 
