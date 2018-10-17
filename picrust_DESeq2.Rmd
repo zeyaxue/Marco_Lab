@@ -43,9 +43,9 @@ CheeseOutcomeDA <- function(ps, path.out) {
   psdds <- estimateSizeFactors(psdds, geoMeans = geoMeans)
   dds <- DESeq(psdds, test = "Wald", fitType = "local") 
   plotDispEsts(dds, ylim = c(1e-6, 1e1)) #  need to inspect visually using local fit type
-  alpha <- 0.1 #  padj for indepenent filtering and expect FDR < alpha
+  alpha <- 0.5 #  padj for indepenent filtering and expect FDR < alpha
   res <- results(dds, alpha = alpha, 
-                 lfcThreshold = log2(1.5), 
+                 lfcThreshold = 0, 
                  altHypothesis = "greaterAbs", 
                  cooksCutoff = FALSE) #  turnoff outlier detection
   mcols(res, use.names=TRUE)  
@@ -53,10 +53,215 @@ CheeseOutcomeDA <- function(ps, path.out) {
   hist(res$pvalue, breaks=20, col="grey" ) # diagnostic plot
   sigtab = res[which(res$padj < alpha), ] # diagnostic plot
   if (nrow(sigtab) == 0) {
-    print("There are no significant features whose padj < 0.1 and |lfc| > log2(1.5)")
+    print("There are no significant features whose padj < 0.5 and |lfc| > 0")
   } else {
     sigtab <- cbind(as(sigtab, "data.frame"), as(tax_table(ps)[rownames(sigtab), ], "matrix"))
     write.csv(sigtab, file.path(path.out))
+  }
+}
+
+CheeseOutcomeDAnoMean <- function(ps, path.out) {
+  psdds <- phyloseq_to_deseq2(ps, ~ CheeseOutcome)
+  
+  dds <- DESeq(psdds, test = "Wald", fitType = "local") 
+  plotDispEsts(dds, ylim = c(1e-6, 1e1)) #  need to inspect visually using local fit type
+  alpha <- 0.5 #  padj for indepenent filtering and expect FDR < alpha
+  res <- results(dds, alpha = alpha, 
+                 lfcThreshold = 0, 
+                 altHypothesis = "greaterAbs", 
+                 cooksCutoff = FALSE) #  turnoff outlier detection
+  mcols(res, use.names=TRUE)  
+  plotMA(res) # diagnostic description
+  hist(res$pvalue, breaks=20, col="grey" ) # diagnostic plot
+  sigtab = res[which(res$padj < alpha), ] # diagnostic plot
+  if (nrow(sigtab) == 0) {
+    print("There are no significant features whose padj < 0.5 and |lfc| > 0")
+  } else {
+    sigtab <- cbind(as(sigtab, "data.frame"), as(tax_table(ps)[rownames(sigtab), ], "matrix"))
+    write.csv(sigtab, file.path(path.out))
+  }
+}
+
+
+# TimeSinceCleaning Differential abundance and generate diagnostic plots and write sig tables 
+TiSinCleaningDA <- function(ps, path.out) {
+  sample_data(ps)$TimeSinceCleaning <- factor(sample_data(ps)$TimeSinceCleaning)
+  
+  psdds <- phyloseq_to_deseq2(ps, design = ~ TimeSinceCleaning)
+  geoMeans <- apply(counts(psdds), 1, gmMean)
+  psdds <- estimateSizeFactors(psdds, geoMeans = geoMeans)
+  
+  dds <- DESeq(psdds, test = "Wald", fitType = "local") 
+  plotDispEsts(dds, ylim = c(1e-6, 1e2)) 
+  alpha <- 0.1 #  padj for indepenent filtering and expect FDR < alpha
+
+  res03 <- results(dds, contrast = c("TimeSinceCleaning", "0", "3"),
+                   alpha = alpha, lfcThreshold = log2(1.5), 
+                   altHypothesis = "greaterAbs")
+  res06 <- results(dds, contrast = c("TimeSinceCleaning", "0", "6"),
+                   alpha = alpha, lfcThreshold = log2(1.5), 
+                   altHypothesis = "greaterAbs")
+  res09 <- results(dds, contrast = c("TimeSinceCleaning", "0", "9"),
+                   alpha = alpha, lfcThreshold = log2(1.5), 
+                   altHypothesis = "greaterAbs")
+  res36 <- results(dds, contrast = c("TimeSinceCleaning", "3", "6"),
+                   alpha = alpha, lfcThreshold = log2(1.5), 
+                   altHypothesis = "greaterAbs")
+  res39 <- results(dds, contrast = c("TimeSinceCleaning", "3", "9"),
+                   alpha = alpha, lfcThreshold = log2(1.5), 
+                   altHypothesis = "greaterAbs")
+  res69 <- results(dds, contrast = c("TimeSinceCleaning", "6", "9"),
+                   alpha = alpha, lfcThreshold = log2(1.5), 
+                   altHypothesis = "greaterAbs")
+  
+  f <- function(res){
+    mcols(res, use.names = TRUE)
+    sigtab <- res[which(res$padj < alpha), ]
+  }
+  
+  f2 <- function(sigtab){
+    cbind(as(sigtab, "data.frame"), as(tax_table(ps)[rownames(sigtab), ], "matrix"))
+  }
+  
+  sigtab03 <- f(res03)
+  sigtab06 <- f(res06)
+  sigtab09 <- f(res09)
+  sigtab36 <- f(res36)
+  sigtab39 <- f(res39)
+  sigtab69 <- f(res69)
+  
+  if (nrow(sigtab03) > 0){
+    sigtab03 <- f2(sigtab03)
+    write.csv(sigtab03, file.path(path.out, "03.csv"))
+  }
+  if (nrow(sigtab06) > 0){
+    sigtab06 <- f2(sigtab06) 
+    write.csv(sigtab06, file.path(path.out, "06.csv"))
+  }
+  if (nrow(sigtab09) > 0){
+    sigtab09 <- f2(sigtab09) 
+    write.csv(sigtab09, file.path(path.out, "09.csv"))
+  }
+  if (nrow(sigtab36) > 0){
+   sigtab36 <- f2(sigtab36) 
+   write.csv(sigtab36, file.path(path.out, "36.csv"))
+  }
+  if (nrow(sigtab39) > 0){
+    sigtab39 <- f2(sigtab39) 
+    write.csv(sigtab39, file.path(path.out, "39.csv"))
+  }
+  if (nrow(sigtab69) > 0){
+    sigtab69 <- f2(sigtab69) 
+    write.csv(sigtab69, file.path(path.out, "69.csv"))
+  }
+}
+
+
+TiSinCleaningDAnoMean <- function(ps, path.out) {
+  sample_data(ps)$TimeSinceCleaning <- factor(sample_data(ps)$TimeSinceCleaning)
+  
+  psdds <- phyloseq_to_deseq2(ps, design = ~ TimeSinceCleaning)
+  
+  dds <- DESeq(psdds, test = "Wald", fitType = "local") 
+  plotDispEsts(dds, ylim = c(1e-6, 1e2)) 
+  alpha <- 0.5 #  padj for indepenent filtering and expect FDR < alpha
+
+  res03 <- results(dds, contrast = c("TimeSinceCleaning", "0", "3"),
+                   alpha = alpha, lfcThreshold = 0, altHypothesis = "greaterAbs")
+  res06 <- results(dds, contrast = c("TimeSinceCleaning", "0", "6"),
+                   alpha = alpha, lfcThreshold = 0, altHypothesis = "greaterAbs")
+  res09 <- results(dds, contrast = c("TimeSinceCleaning", "0", "9"),
+                   alpha = alpha, lfcThreshold = 0, altHypothesis = "greaterAbs")
+  res36 <- results(dds, contrast = c("TimeSinceCleaning", "3", "6"),
+                   alpha = alpha, lfcThreshold = 0, altHypothesis = "greaterAbs")
+  res39 <- results(dds, contrast = c("TimeSinceCleaning", "3", "9"),
+                   alpha = alpha, lfcThreshold = 0, altHypothesis = "greaterAbs")
+  res69 <- results(dds, contrast = c("TimeSinceCleaning", "6", "9"),
+                   alpha = alpha, lfcThreshold = 0, altHypothesis = "greaterAbs")
+  
+  f <- function(res){
+    mcols(res, use.names = TRUE)
+    sigtab <- res[which(res$padj < alpha), ]
+  }
+  
+  f2 <- function(sigtab){
+    cbind(as(sigtab, "data.frame"), as(tax_table(ps)[rownames(sigtab), ], "matrix"))
+  }
+  
+  sigtab03 <- f(res03)
+  sigtab06 <- f(res06)
+  sigtab09 <- f(res09)
+  sigtab36 <- f(res36)
+  sigtab39 <- f(res39)
+  sigtab69 <- f(res69)
+  
+  if (nrow(sigtab03) > 0){
+    sigtab03 <- f2(sigtab03)
+    write.csv(sigtab03, file.path(path.out, "03.csv"))
+  }
+  if (nrow(sigtab06) > 0){
+    sigtab06 <- f2(sigtab06) 
+    write.csv(sigtab06, file.path(path.out, "06.csv"))
+  }
+  if (nrow(sigtab09) > 0){
+    sigtab09 <- f2(sigtab09) 
+    write.csv(sigtab09, file.path(path.out, "09.csv"))
+  }
+  if (nrow(sigtab36) > 0){
+   sigtab36 <- f2(sigtab36) 
+   write.csv(sigtab36, file.path(path.out, "36.csv"))
+  }
+  if (nrow(sigtab39) > 0){
+    sigtab39 <- f2(sigtab39) 
+    write.csv(sigtab39, file.path(path.out, "39.csv"))
+  }
+  if (nrow(sigtab69) > 0){
+    sigtab69 <- f2(sigtab69) 
+    write.csv(sigtab69, file.path(path.out, "69.csv"))
+  }
+}
+
+# DA function for milk type
+MilkDA <- function(ps, path.out) {
+  psdds <- phyloseq_to_deseq2(ps, design = ~ SampleType)
+  geoMeans <- apply(counts(psdds), 1, gmMean)
+  psdds <- estimateSizeFactors(psdds, geoMeans = geoMeans)
+  
+  dds <- DESeq(psdds, test = "Wald", fitType = "local") 
+  plotDispEsts(dds, ylim = c(1e-6, 1e2)) 
+  alpha <- 0.5 #  padj for indepenent filtering and expect FDR < alpha
+
+  res01 <- results(dds, contrast = c("SampleType", "Raw_milk", "HTST_feed"),
+                   alpha = alpha, lfcThreshold = 0, altHypothesis = "greaterAbs")
+  res02 <- results(dds, contrast = c("SampleType", "Raw_milk", "HTST_milk"),
+                   alpha = alpha, lfcThreshold = 0, altHypothesis = "greaterAbs")
+  res12 <- results(dds, contrast = c("SampleType", "HTST_feed", "HTST_milk"),
+                   alpha = alpha, lfcThreshold = 0, altHypothesis = "greaterAbs")
+  
+  f <- function(res){
+    mcols(res, use.names = TRUE)
+    sigtab <- res[which(res$padj < alpha), ]
+  }
+  
+  f2 <- function(sigtab){
+    cbind(as(sigtab, "data.frame"), as(tax_table(ps)[rownames(sigtab), ], "matrix"))
+  }
+  
+  sigtab01 <- f(res01)
+  sigtab02 <- f(res02)
+  sigtab12 <- f(res12)
+  
+  if (nrow(sigtab01) > 0){
+    sigtab01 <- f2(sigtab01)
+    write.csv(sigtab01, file.path(path.out, "01.csv"))
+  }
+  if (nrow(sigtab02) > 0){
+    sigtab02 <- f2(sigtab02) 
+    write.csv(sigtab02, file.path(path.out, "02.csv"))
+  }
+  if (nrow(sigtab12) > 0){
+    sigtab12 <- f2(sigtab12) 
+    write.csv(sigtab12, file.path(path.out, "12.csv"))
   }
 }
 ```
@@ -284,7 +489,7 @@ psko.feed
 psko.feedY <- subset_samples(psko.feed, PMA %in% "Y")
 saveRDS(psko.feedY, file.path(path, "picrust/psko.feedY.rds"))
 psko.feedY
-CheeseOutcomeDA(psko.feedY, path.out = file.path(path, "picrust/deseq_table/kosigtab.feedY.csv"))
+CheeseOutcomeDAno(psko.feedY, path.out = file.path(path, "picrust/deseq_table/kosigtab.feedY.csv"))
 # no PMA 
 psko.feedN <- subset_samples(psko.feed, PMA %in% "N")
 saveRDS(psko.feedN, file.path(path, "picrust/psko.feedN.rds"))
@@ -417,4 +622,40 @@ ggplot(df, aes(x = X, y = log2FoldChange))+
   theme_minimal()+
   theme(axis.text.x = element_text(angle=90))
 ```
+
+## pathway and KO DA based on Time Since Cleaning
+```{r}
+# Pathway level
+ps10.tsclean <- subset_samples(ps10, SampleType %in% c("HTST_milk","HTST_feed"))
+## Read in new sample information dataframe 
+sam.milk <- read.csv(file.path(path, "mapping/sam_milk_HTST0369.csv"))
+rownames(sam.milk) <- sam.milk$SampleID
+## Merge as a new phyloseq object
+ps10.tsclean <- phyloseq(otu_table(ps10.tsclean),
+                        tax_table(ps10.tsclean),
+                        sample_data(sam.milk))
+saveRDS(ps10.tsclean, file.path(path, "picrust/ps10.tsclean.rds"))
+ps10.tsclean
+
+# KO level 
+psko10.tsclean <- subset_samples(psko10, SampleType %in% c("HTST_milk","HTST_feed"))
+## Merge as a new phyloseq object
+psko10.tsclean <- phyloseq(otu_table(psko10.tsclean),
+                           tax_table(psko10.tsclean),
+                           sample_data(sam.milk))
+saveRDS(psko10.tsclean, file.path(path, "picrust/psko10.tsclean.rds"))
+psko10.tsclean
+
+# 10 # HTST feed samples that have information about TimeSinceCleaning
+ps.htst2 <- subset_samples(ps10.tsclean, SampleType %in% "HTST_milk")
+ps.htst2Y <- subset_samples(ps.htst2, PMA %in% "Y")
+TiSinCleaningDA(ps.htst2Y, 
+                path.out = file.path(path, "picrust/deseq_table_TiSinCleaning/htstY"))
+
+psko.htst2 <- subset_samples(psko10.tsclean, SampleType %in% "HTST_milk")
+psko.htst2Y <- subset_samples(psko.htst2, PMA %in% "Y")
+TiSinCleaningDA(psko.htst2Y, 
+                path.out = file.path(path, "picrust/deseq_table_TiSinCleaning/kohtstY"))
+```
+
 
