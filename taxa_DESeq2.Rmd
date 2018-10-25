@@ -632,6 +632,7 @@ saveRDS(ps.chedN, file.path(path, "cheddar/ps.chedN.rds"))
 ps.chedN
 CheeseOutcomeDAnoMean(ps.chedN, path.out = file.path(path, "cheddar/deseq_table/sigtab.chedN.csv"))
 
+
 # 2 # All Cheddar samples without Lactococcus
 # PMA treated 
 ps.chedY.noL <- subset_taxa(ps.chedY, !Genus %in% "Lactococcus")
