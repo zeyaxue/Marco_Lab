@@ -242,7 +242,7 @@ TiSinCleaningDAnoMean <- function(ps, path.out) {
 # DA function for milk type
 MilkDA <- function(ps, path.out) {
   ps <- ps %>% tax_glom(taxrank = "Genus")
-  sample_data(ps)$TimeSinceCleaning <- factor(sample_data(ps)$SampleType)
+  sample_data(ps)$SampleType <- factor(sample_data(ps)$SampleType)
   psdds <- phyloseq_to_deseq2(ps, design = ~ SampleType)
   geoMeans <- apply(counts(psdds), 1, gmMean)
   psdds <- estimateSizeFactors(psdds, geoMeans = geoMeans)
@@ -282,6 +282,75 @@ MilkDA <- function(ps, path.out) {
   if (nrow(sigtab12) > 0){
     sigtab12 <- f2(sigtab12) 
     write.csv(sigtab12, file.path(path.out, "12.csv"))
+  }
+  
+}
+
+
+# DA function for Cheese type
+ChedDA <- function(ps, path.out) {
+  ps <- ps %>% tax_glom(taxrank = "Genus")
+  sample_data(ps)$SampleType <- factor(sample_data(ps)$SampleType)
+  psdds <- phyloseq_to_deseq2(ps, design = ~ SampleType)
+  geoMeans <- apply(counts(psdds), 1, gmMean)
+  psdds <- estimateSizeFactors(psdds, geoMeans = geoMeans)
+  
+  dds <- DESeq(psdds, test = "Wald", fitType = "local") 
+  plotDispEsts(dds, ylim = c(1e-6, 1e2)) 
+  alpha <- 0.5 #  padj for indepenent filtering and expect FDR < alpha
+
+  res03 <- results(dds, contrast = c("SampleType", "Cheese_0D", "Cheese_30D"),
+                   alpha = alpha, lfcThreshold = 0, altHypothesis = "greaterAbs")
+  res09 <- results(dds, contrast = c("SampleType", "Cheese_0D", "Cheese_90D"),
+                   alpha = alpha, lfcThreshold = 0, altHypothesis = "greaterAbs")
+  res012 <- results(dds, contrast = c("SampleType", "Cheese_0D", "Cheese_120D"),
+                   alpha = alpha, lfcThreshold = 0, altHypothesis = "greaterAbs")
+  res39 <- results(dds, contrast = c("SampleType", "Cheese_30D", "Cheese_90D"),
+                   alpha = alpha, lfcThreshold = 0, altHypothesis = "greaterAbs")
+  res312 <- results(dds, contrast = c("SampleType", "Cheese_30D", "Cheese_120D"),
+                   alpha = alpha, lfcThreshold = 0, altHypothesis = "greaterAbs")
+  res912 <- results(dds, contrast = c("SampleType", "Cheese_90D", "Cheese_120D"),
+                   alpha = alpha, lfcThreshold = 0, altHypothesis = "greaterAbs")
+  
+  f <- function(res){
+    mcols(res, use.names = TRUE)
+    sigtab <- res[which(res$padj < alpha), ]
+  }
+  
+  f2 <- function(sigtab){
+    cbind(as(sigtab, "data.frame"), as(tax_table(ps)[rownames(sigtab), ], "matrix"))
+  }
+  
+  sigtab03   <- f(res03)
+  sigtab09   <- f(res09)
+  sigtab012  <- f(res012)
+  sigtab39  <- f(res39)
+  sigtab312  <- f(res312)
+  sigtab912 <- f(res912)
+  
+  if (nrow(sigtab03) > 0){
+    sigtab03  <- f2(sigtab03) 
+    write.csv(sigtab03, file.path(path.out, "03.csv"))
+  }
+  if (nrow(sigtab09) > 0){
+    sigtab09  <- f2(sigtab09) 
+    write.csv(sigtab09, file.path(path.out, "09.csv"))
+  }
+  if (nrow(sigtab012) > 0){
+    sigtab012 <- f2(sigtab012) 
+    write.csv(sigtab012, file.path(path.out, "012.csv"))
+  }
+  if (nrow(sigtab39) > 0){
+    sigtab39  <- f2(sigtab39) 
+    write.csv(sigtab39, file.path(path.out, "39.csv"))
+  }
+  if (nrow(sigtab312) > 0){
+    sigtab312 <- f2(sigtab312) 
+    write.csv(sigtab312, file.path(path.out, "312.csv"))
+  }
+  if (nrow(sigtab912) > 0){
+    sigtab912 <- f2(sigtab912) 
+    write.csv(sigtab912, file.path(path.out, "912.csv"))
   }
   
 }
@@ -545,7 +614,6 @@ ps.milk4
 
 
 ## Taxonomic DA of Cheddar 
-This is PMA treated samples
 ```{r}
 # 1 # All Cheddar samples 
 ps.ched <- subset_samples(ps100.sam, CheeseType %in% "Cheddar")
@@ -558,13 +626,28 @@ ps.chedY <- subset_samples(ps.ched, PMA %in% "Y")
 saveRDS(ps.chedY, file.path(path, "cheddar/ps.chedY.rds"))
 ps.chedY
 CheeseOutcomeDAnoMean(ps.chedY, path.out = file.path(path, "cheddar/deseq_table/sigtab.chedY.csv"))
+# PMA untreated 
+ps.chedN <- subset_samples(ps.ched, PMA %in% "N")
+saveRDS(ps.chedN, file.path(path, "cheddar/ps.chedN.rds"))
+ps.chedN
+CheeseOutcomeDAnoMean(ps.chedN, path.out = file.path(path, "cheddar/deseq_table/sigtab.chedN.csv"))
 
 # 2 # All Cheddar samples without Lactococcus
+# PMA treated 
 ps.chedY.noL <- subset_taxa(ps.chedY, !Genus %in% "Lactococcus")
 saveRDS(ps.chedY.noL, file.path(path, "cheddar/ps.chedY.noL.rds"))
 ps.chedY.noL
 CheeseOutcomeDA(ps.chedY.noL, 
                 path.out = file.path(path, "cheddar/deseq_table/sigtab.chedY.noL.csv"))
+ChedDA(ps.chedY.noL, path.out = file.path(path, "cheddar/deseq_table_chedD/chedY"))
+# PMA untreated 
+ps.chedN.noL <- subset_taxa(ps.chedN, !Genus %in% "Lactococcus")
+saveRDS(ps.chedN.noL, file.path(path, "cheddar/ps.chedN.noL.rds"))
+ps.chedN.noL
+CheeseOutcomeDA(ps.chedN.noL, 
+                path.out = file.path(path, "cheddar/deseq_table/sigtab.chedN.noL.csv"))
+ChedDA(ps.chedN.noL, path.out = file.path(path, "cheddar/deseq_table_chedD/chedN"))
+
 
 # 3 # 0-day Cheddar samples without Lactococcus
 ps.chedY.noL0 <- subset_samples(ps.chedY.noL, SampleType %in% "Cheese_0D")
