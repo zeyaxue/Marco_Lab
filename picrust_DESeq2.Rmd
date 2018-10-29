@@ -71,7 +71,7 @@ TiSinCleaningDA <- function(ps, path.out) {
   
   dds <- DESeq(psdds, test = "Wald", fitType = "local") 
   plotDispEsts(dds, ylim = c(1e-6, 1e2)) 
-  alpha <- 0.5 #  padj for indepenent filtering and expect FDR < alpha
+  alpha <- 0.1 #  padj for indepenent filtering and expect FDR < alpha
 
   res03 <- results(dds, contrast = c("TimeSinceCleaning", "0", "3"),
                    alpha = alpha, lfcThreshold = log2(1.5), 
@@ -134,70 +134,6 @@ TiSinCleaningDA <- function(ps, path.out) {
   }
 }
 
-
-TiSinCleaningDAnoMean <- function(ps, path.out) {
-  sample_data(ps)$TimeSinceCleaning <- factor(sample_data(ps)$TimeSinceCleaning)
-  
-  psdds <- phyloseq_to_deseq2(ps, design = ~ TimeSinceCleaning)
-  
-  dds <- DESeq(psdds, test = "Wald", fitType = "local") 
-  plotDispEsts(dds, ylim = c(1e-6, 1e2)) 
-  alpha <- 0.5 #  padj for indepenent filtering and expect FDR < alpha
-
-  res03 <- results(dds, contrast = c("TimeSinceCleaning", "0", "3"),
-                   alpha = alpha, lfcThreshold = log2(1.5), altHypothesis = "greaterAbs")
-  res06 <- results(dds, contrast = c("TimeSinceCleaning", "0", "6"),
-                   alpha = alpha, lfcThreshold = log2(1.5), altHypothesis = "greaterAbs")
-  res09 <- results(dds, contrast = c("TimeSinceCleaning", "0", "9"),
-                   alpha = alpha, lfcThreshold = log2(1.5), altHypothesis = "greaterAbs")
-  res36 <- results(dds, contrast = c("TimeSinceCleaning", "3", "6"),
-                   alpha = alpha, lfcThreshold = log2(1.5), altHypothesis = "greaterAbs")
-  res39 <- results(dds, contrast = c("TimeSinceCleaning", "3", "9"),
-                   alpha = alpha, lfcThreshold = log2(1.5), altHypothesis = "greaterAbs")
-  res69 <- results(dds, contrast = c("TimeSinceCleaning", "6", "9"),
-                   alpha = alpha, lfcThreshold = log2(1.5), altHypothesis = "greaterAbs")
-  
-  f <- function(res){
-    mcols(res, use.names = TRUE)
-    sigtab <- res[which(res$padj < alpha), ]
-  }
-  
-  f2 <- function(sigtab){
-    cbind(as(sigtab, "data.frame"), as(tax_table(ps)[rownames(sigtab), ], "matrix"))
-  }
-  
-  sigtab03 <- f(res03)
-  sigtab06 <- f(res06)
-  sigtab09 <- f(res09)
-  sigtab36 <- f(res36)
-  sigtab39 <- f(res39)
-  sigtab69 <- f(res69)
-  
-  if (nrow(sigtab03) > 0){
-    sigtab03 <- f2(sigtab03)
-    write.csv(sigtab03, file.path(path.out, "03.csv"))
-  }
-  if (nrow(sigtab06) > 0){
-    sigtab06 <- f2(sigtab06) 
-    write.csv(sigtab06, file.path(path.out, "06.csv"))
-  }
-  if (nrow(sigtab09) > 0){
-    sigtab09 <- f2(sigtab09) 
-    write.csv(sigtab09, file.path(path.out, "09.csv"))
-  }
-  if (nrow(sigtab36) > 0){
-   sigtab36 <- f2(sigtab36) 
-   write.csv(sigtab36, file.path(path.out, "36.csv"))
-  }
-  if (nrow(sigtab39) > 0){
-    sigtab39 <- f2(sigtab39) 
-    write.csv(sigtab39, file.path(path.out, "39.csv"))
-  }
-  if (nrow(sigtab69) > 0){
-    sigtab69 <- f2(sigtab69) 
-    write.csv(sigtab69, file.path(path.out, "69.csv"))
-  }
-}
 
 # DA function for milk type
 MilkDA <- function(ps, path.out) {
@@ -419,8 +355,6 @@ CheeseOutcomeDA(ps.4hr.htstN, path.out = file.path(path, "picrust/deseq_table/si
 
 
 ```
-
-
 
 
 ## Subset and DESeq2 analysis of KO 
@@ -660,4 +594,67 @@ TiSinCleaningDA(psko.feed2N,
 
 ```
 
+
+
+## Load in DESeq2 genenerated csv file and clean up to make figures 
+```{r}
+# Define function to load and subset pathway or KO that are common between 06,
+# 09, 36 and 39 time. It seems that 03 and 69 are two groups: early and late
+SubComm <- function(a, b, c, d, path.out){
+  t06 <- read.csv(file.path(path, "picrust/deseq_table_TiSinCleaning", a))
+  t09 <- read.csv(file.path(path, "picrust/deseq_table_TiSinCleaning", b))
+  t36 <- read.csv(file.path(path, "picrust/deseq_table_TiSinCleaning", c))
+  t39 <- read.csv(file.path(path, "picrust/deseq_table_TiSinCleaning", d))
+  
+  # filter for adj < 0.2
+  t06 <- subset(t06, padj <0.2)
+  t09 <- subset(t09, padj <0.2)
+  t36 <- subset(t36, padj <0.2)
+  t39 <- subset(t39, padj <0.2)
+  
+  # List all the common entries in both the columns
+  tc1 <- merge(t06, t09, by="X") # table common 1
+  tc2 <- merge(t36, t39, by="X") # table common 2
+  tc <- merge(t36, t39, by="X")
+  
+  write.csv(tc, file.path(path, "picrust/deseq_table_TiSinCleaning", path.out),
+            row.names = FALSE)
+}
+
+# Define function for line plot
+LinePlot <- function(ps, x, w, h, path.out){
+  melt <- psmelt(ps)
+  agg <- ddply(melt, c("TimeSinceCleaning","SampleType","PMA", "KEGG_Pathways3", "KEGG_Pathways2", "KEGG_Pathways1"),
+               summarise,
+               N = length(Abundance),
+               mean = mean(Abundance),
+               sd = sd(Abundance),
+               se = sd / sqrt(N))
+  
+  pdf(path.out, width = w, height = h)
+  print(ggplot(subset(agg, KEGG_Pathways3 %in% x), aes(x = TimeSinceCleaning, y = mean, group = PMA,color = PMA)) +
+               geom_line(size = 0.9)+
+               geom_point(size = 1)+
+               geom_errorbar(aes(ymin = mean-se, ymax = mean+se),width = 0.1, position=position_dodge(0.05))+
+               facet_wrap(~ SampleType, scales = "fixed")+
+               ylab(x) +
+               theme_bw())
+  dev.off()
+}
+
+
+# 1 # HTST feed and HTST milk at Pathway level
+SubComm(a = "htstY/06.csv", b = "htstY/09.csv", 
+        c = "htstY/36.csv", d = "htstY/39.csv",
+        path.out = "htstY/common_pathways.csv")  # manually investigate file for useful info
+comm <- read.csv(file.path(path,"picrust/deseq_table_TiSinCleaning/htstY/common_pathways_man.csv"))
+# filter the phyloseq based on the common pathways
+ps10.tsclean.comm <- subset_taxa(ps10.tsclean, KEGG_Pathways3 %in% comm$X)
+for(i in i:length(comm$X)){
+  LinePlot(ps10.tsclean.comm, x = comm$X[i], w = 4.5, h = 3.5,
+           path.out = file.path(path, "picrust/fig_TiSinCleaning", paste(comm$X[i],".pdf", sep ='')))
+}
+
+
+ ```
 
