@@ -436,7 +436,7 @@ MilkHeat <- function(ps, taxa, samType, w, h, path.out) {
   
   
   png(path.out, width = w, height = h)
-  superheat(taxa.cast.f,
+  (superheat(taxa.cast.f,
             left.label.size = 0.4, 
             bottom.label.size = 0.1,
             order.rows = rev(order(rownames(taxa.cast.f))),
@@ -445,7 +445,7 @@ MilkHeat <- function(ps, taxa, samType, w, h, path.out) {
             grid.hline = FALSE,
             title = samType,
             title.size = 6,
-            title.alignment = "center") 
+            title.alignment = "center")) %>% print()
   dev.off()
 }
 
@@ -513,16 +513,16 @@ ChouBar <- function(ps, taxa, samType, w, h, path.out){
             "#B9A499", "#EAD27A", "#B15928")
   TaxTab2_agg$Genus = factor(TaxTab2_agg$Genus, levels = taxa)
   
-  #pdf(path.out, width = w, height = h)
-  ggplot(TaxTab2_agg, aes(x = CheeseOutcome, y = Abundance, fill = Genus)) +
+  pdf(path.out, width = w, height = h)
+  (ggplot(TaxTab2_agg, aes(x = CheeseOutcome, y = Abundance, fill = Genus)) +
     facet_wrap(~SampleType, scales = "fixed") +
     geom_bar(stat = "identity") + 
     scale_fill_manual(values = mycol)+
     # Remove x axis title
     theme(axis.title.x = element_blank()) + 
     guides(fill = guide_legend(reverse = FALSE, keywidth = 1, keyheight = 1)) +
-    ylab("Relative Abundance \n") 
-  #dev.off()
+    ylab("Relative Abundance \n")) %>% print() 
+  dev.off()
 }
 
 
@@ -689,7 +689,6 @@ saveRDS(ps.htst, file.path(path, "milk/ps.htst.rds"))
 ps.htst
 ps.htstY <- subset_samples(ps.htst, PMA %in% "Y")
 saveRDS(ps.htstY, file.path(path, "milk/ps.htstY.rds"))
-ps.htstY
 CheeseOutcomeDAnoMean(ps.htstY, 
                 path.out = file.path(path, "milk/deseq_table/sigtab.htstY.csv"))
 ChouHeat(ps.htstY, samType = "PMA treated HTST milk", w = 8.5, h = 11,
@@ -698,6 +697,11 @@ TiSinCleaningDA(ps.htstY,
                 path.out = file.path(path, "milk/deseq_table_TiSinCleaning/htstY"))
 TiSiHeat(ps.htstY, samType = "PMA treated HTST milk", w = 8.5, h = 11,
          path.out = file.path(path, "milk/fig_TiSinCleaning/htstY.pdf"))
+# PMA untreated
+ps.htstN <- subset_samples(ps.htst, PMA %in% "N")
+saveRDS(ps.htstN, file.path(path, "milk/ps.htstN.rds"))
+CheeseOutcomeDA(ps.htstN, 
+                path.out = file.path(path, "milk/deseq_table/sigtab.htstN.csv"))
 
 # 13 # HTST feed 
 ps.feed <- subset_samples(ps.milk, SampleType %in% "HTST_feed")
@@ -706,6 +710,10 @@ CheeseOutcomeDAnoMean(ps.feedY,
                 path.out = file.path(path, "milk/deseq_table/sigtab.feedY.csv"))
 TiSinCleaningDA(ps.feedY, 
                 path.out = file.path(path, "milk/deseq_table_TiSinCleaning/feedY"))
+# PMA untreated
+ps.feedN <- subset_samples(ps.feed, PMA %in% "N")
+CheeseOutcomeDAnoMean(ps.feedN, 
+                path.out = file.path(path, "milk/deseq_table/sigtab.feedN.csv"))
 
 
 # 8 # HTST milk that are paired with cheese (4hr timeline)
@@ -792,6 +800,7 @@ ps.feedqY <- subset_samples(ps.feedq, PMA %in% "Y")
 # 10 # HTST milk around the 4hr timeline that has been adjusted with qPCR values
 ps.milkq4 <- phyloseq(otu_table(ps.milkq), tax_table(ps.milkq),sample_data(samdf.4hr), phy_tree(ps.milkq))
 ps.milkq4Y <- subset_samples(ps.milkq4, PMA %in% "Y")
+ps.milkq4N <- subset_samples(ps.milkq4, PMA %in% "N")
 ps.htstq4Y <- subset_samples(ps.milkq4Y, SampleType %in% "HTST_milk")
 # Has error -->  CheeseOutcomeDAnoMean(ps.htstq4Y, path.out = file.path(path, "milk/deseq_table/sigtab.htstq4Y.csv"))
 ChouHeat(ps.htstq4Y, comm18,
@@ -805,6 +814,15 @@ ChouHeat(ps.feedq4Y, comm18,
          samType = "PMA treated HTST feed", w = 450, h = 700,
          path.out = file.path(path, "milk/fig/feedq4Y.png"))
 
+# 14 # Both HTST feed and HTST milk around the 4hr timeline that has been adjusted with qPCR
+ChouBar(ps.milkq4Y, 
+        taxa = comm14,
+        samType = "PMA treated HTST milk", w = 6, h = 5,
+        path.out = file.path(path, "milk/fig/milkq4Y.pdf"))
+ChouBar(ps.milkq4N, 
+        taxa = comm14,
+        samType = "PMA untreated HTST milk", w = 6, h = 5,
+        path.out = file.path(path, "milk/fig/milkq4N.pdf"))
 
 ```
 
@@ -816,6 +834,9 @@ ps.allmilkY <- subset_samples(ps.allmilk, PMA %in% "Y")
 MilkDA(ps.allmilkY, 
        path.out = file.path(path, "milk/deseq_table_SampleType/milkY"))
 
+ps.allmilkN <- subset_samples(ps.allmilk, PMA %in% "N")
+MilkDA(ps.allmilkN, 
+       path.out = file.path(path, "milk/deseq_table_SampleType/milkN"))
 ```
 
 
@@ -839,6 +860,9 @@ ChouHeat(ps.chedY.noL120, ched14,
 MilkHeat(ps.allmilkY, comm14, 
          samType = "PMA treated milk", w = 450, h = 700,
          path.out = file.path(path, "milk/fig_SampleType/milkY.png"))
+MilkHeat(ps.allmilkN, comm14, 
+         samType = "PMA untreated milk", w = 450, h = 700,
+         path.out = file.path(path, "milk/fig_SampleType/milkN.png"))
 
 
 ps.milkY <- subset_samples(ps.milk, PMA %in% "Y")
@@ -857,15 +881,6 @@ TiSinBar(ps.milkqY,
         taxa = comm14,
         samType = "PMA treated HTST milk", w = 6, h = 5,
         path.out = file.path(path, "milk/fig_TiSinCleaning/htstqY2.pdf"))
-
-
-
-ps.milkq4 <- phyloseq(otu_table(ps.milkq), tax_table(ps.milkq),sample_data(samdf.4hr), phy_tree(ps.milkq))
-ps.milkq4Y <- subset_samples(ps.milkq4, PMA %in% "Y")
-ChouBar(ps.milkq4Y, 
-        taxa = comm14,
-        samType = "PMA treated HTST milk", w = 6, h = 5,
-        path.out = file.path(path, "milk/fig/milkq4Y.pdf"))
 
 ```
 
