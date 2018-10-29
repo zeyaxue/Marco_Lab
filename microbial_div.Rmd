@@ -1,0 +1,54 @@
+---
+title: "microbial_div"
+author: "Zeya Zhengyao Xue"
+date: "October 26, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+This file contains subsetted analysis and plots from the "Milk-phyloseq-analysis.Rmd"
+file (for better reproducibility). Need to load the Rdata from that Rmd file
+
+
+## Define function for plotting and stats
+```{r}
+
+```
+
+
+## qPCR cell load for
+```{r}
+logHTSTfig <- function(x, samType){
+  x$facet <- "Log10 16s rRNA gene copies/ml"
+  
+  ggplot(x, aes(x=SampleType, y=LogCellsML, fill=CheeseOutcome.y))+ 
+  geom_boxplot() +
+  scale_fill_manual(values=c("no_slits"="#a6cee3", "slits"="#1f78b4")) +
+  theme_bw()+
+  facet_wrap(~ facet)+
+  xlab(samType)
+}
+logANOVA <- function(x){
+  y1 <- aov(LogCellsML ~ CheeseOutcome.y, 
+           data = subset(x, SampleType %in% "HTST_feed")) %>% summary()
+  y2 <- aov(LogCellsML ~ CheeseOutcome.y, 
+           data = subset(x, SampleType %in% "HTST_milk")) %>% summary()
+  y <- rbind(y1[[1]], y2[[1]])
+  y
+}
+
+# PMA treated 
+# 390*250 PNG
+# save path, milk/alpha/log4.3Y
+logHTSTfig(qPCR4.3Ym, samType = "PMA treated samples")
+logANOVA(qPCR4.3Ym)
+# PMA untreated
+logHTSTfig(qPCR4.3Nm, samType = "PMA untreated samples")
+logANOVA(qPCR4.3Nm)
+```
+```
+
+
