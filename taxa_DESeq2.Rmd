@@ -550,16 +550,16 @@ TiSinBar <- function(ps, taxa, samType, w, h, path.out){
             "#B9A499", "#EAD27A", "#B15928")
   TaxTab2_agg$Genus = factor(TaxTab2_agg$Genus, levels = taxa)
   
-  #pdf(path.out, width = w, height = h)
-  ggplot(TaxTab2_agg, aes(x = TimeSinceCleaning, y = Abundance, fill = Genus)) +
-    facet_wrap(~SampleType, scales = "fixed") +
-    geom_bar(stat = "identity") + 
-    scale_fill_manual(values = mycol)+
-    # Remove x axis title
-    theme(axis.title.x = element_blank()) + 
-    guides(fill = guide_legend(reverse = FALSE, keywidth = 1, keyheight = 1)) +
-    ylab("Relative Abundance \n") 
-  #dev.off()
+  pdf(path.out, width = w, height = h)
+  print(ggplot(TaxTab2_agg, aes(x = TimeSinceCleaning, y = Abundance, fill = Genus)) +
+                facet_wrap(~SampleType, scales = "fixed") +
+                geom_bar(stat = "identity") + 
+                scale_fill_manual(values = mycol)+
+                # Remove x axis title
+                theme(text = element_text(size = 15)) + 
+                guides(fill = guide_legend(reverse = FALSE, keywidth = 1, keyheight = 1)) +
+                ylab("Log10 16S rRNA gene copy/ml"))
+  dev.off()
 }
 ```
 
@@ -841,7 +841,68 @@ MilkDA(ps.allmilkN,
 
 
 
-## Plotting and saving as pdf
+
+
+
+
+
+
+
+
+
+## Line figures for each taxa 
+```{r}
+# Define function for line plot
+LinePlot <- function(ps, x, w, h, path.out){
+  melt <- psmelt(ps) 
+  agg <- ddply(melt, c("TimeSinceCleaning","SampleType","PMA", "Genus"),
+               summarise,
+               N = length(Abundance),
+               mean = mean(Abundance),
+               sd = sd(Abundance),
+               se = sd / sqrt(N))
+  
+  pdf(path.out, width = w, height = h)
+  print(ggplot(subset(agg, Genus %in% x), aes(x = TimeSinceCleaning, y = mean, group = PMA,color = PMA)) +
+               geom_line(size = 0.9)+
+               geom_point(size = 1)+
+               geom_errorbar(aes(ymin = mean-se, ymax = mean+se),width = 0.1, position=position_dodge(0.05))+
+               facet_wrap(~ SampleType, scales = "fixed")+
+               ylab(x) +
+               theme(text = element_text(size = 15)))
+  dev.off()
+}
+
+# loop for all specific taxa
+for(i in 1:length(tax_table(ps.milkq)[,6])){
+  LinePlot(ps.milkq, x = tax_table(ps.milkq)[,6][i], w = 4.5, h = 3.5, 
+           path.out = file.path(path, "milk/fig_TiSinCleaning", paste(tax_table(ps.milkq)[,6][i],".pdf", sep ='')))
+}
+
+
+# plot total load
+qPCR.agg <- ddply(qPCR, c("TimeSinceCleaning","Description","PMA"),
+                  summarise,
+                  N = length(LogCellsML),
+                  mean = mean(LogCellsML),
+                  sd = sd(LogCellsML),
+                  se = sd / sqrt(N))
+# subset to include only timepoints that have N>1
+qPCR.agg <- qPCR.agg[qPCR.agg$N != '1',]
+
+pdf(file.path(path, "milk/fig_TiSinCleaning/total.pdf"), w = 4.5, h = 3.5)
+ggplot(qPCR.agg, aes(x = TimeSinceCleaning, y = mean, group = PMA,color = PMA)) +
+        geom_line(size = 0.9)+
+        geom_point(size = 1)+
+        geom_errorbar(aes(ymin = mean-se, ymax = mean+se),width = 0.1, position=position_dodge(0.05))+
+        facet_wrap(~ Description, scales = "fixed")+
+        ylab("Log10 16S rRNA gene copy/ml") +
+        theme(text = element_text(size = 15))
+dev.off()
+```
+
+
+## Some additional Plotting and saving as pdf
 ```{r}
 ChouHeat(ps.chedY.noL0, ched14, 
          samType = "PMA treated D0 Cheddar", w = 450, h = 700,
@@ -881,6 +942,11 @@ TiSinBar(ps.milkqY,
         taxa = comm14,
         samType = "PMA treated HTST milk", w = 6, h = 5,
         path.out = file.path(path, "milk/fig_TiSinCleaning/htstqY2.pdf"))
+ps.milkqN <- subset_samples(ps.milkq, PMA %in% "N")
+TiSinBar(ps.milkqN, 
+         taxa = comm14,
+         samType = "PMA untreated HTST milk", w = 6, h = 5,
+         path.out = file.path(path, "milk/fig_TiSinCleaning/htstqN2.pdf"))
 
 ```
 
