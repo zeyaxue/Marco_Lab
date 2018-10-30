@@ -638,7 +638,7 @@ LinePlot <- function(ps, x, w, h, path.out){
                geom_errorbar(aes(ymin = mean-se, ymax = mean+se),width = 0.1, position=position_dodge(0.05))+
                facet_wrap(~ SampleType, scales = "fixed")+
                ylab(x) +
-               theme_bw())
+               theme(text = element_text(size = 15)))
   dev.off()
 }
 
@@ -650,11 +650,11 @@ SubComm(a = "htstY/06.csv", b = "htstY/09.csv",
 comm <- read.csv(file.path(path,"picrust/deseq_table_TiSinCleaning/htstY/common_pathways_man.csv"))
 # filter the phyloseq based on the common pathways
 ps10.tsclean.comm <- subset_taxa(ps10.tsclean, KEGG_Pathways3 %in% comm$X)
-for(i in i:length(comm$X)){
+for(i in 1:length(comm$X)){
   LinePlot(ps10.tsclean.comm, x = comm$X[i], w = 4.5, h = 3.5,
            path.out = file.path(path, "picrust/fig_TiSinCleaning", paste(comm$X[i],".pdf", sep ='')))
 }
 
 
- ```
+```
 
