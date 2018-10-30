@@ -596,7 +596,7 @@ TiSinCleaningDA(psko.feed2N,
 
 
 
-## Load in DESeq2 genenerated csv file and clean up to make figures 
+## Load in DESeq2 genenerated csv file and clean up to make line figures 
 ```{r}
 # Define function to load and subset pathway or KO that are common between 06,
 # 09, 36 and 39 time. It seems that 03 and 69 are two groups: early and late
