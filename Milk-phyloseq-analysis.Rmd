@@ -9,7 +9,7 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## Load needed packages
+## Setting up
 ```{r}
 library(phyloseq)
 library(ggplot2);packageVersion("ggplot2")
@@ -20,6 +20,10 @@ library(plyr)
 library(dplyr)
 library(RColorBrewer)
 library(vegan)
+
+
+# Define project path
+path <- "G:/My Drive/UC_Davis/Marco_lab/milk_microbiota/Hilmar_weekly_samples/QIIME2/"
 ```
 
 ## Subset to contain milk samples
@@ -1200,6 +1204,33 @@ NMDS.wuf.milkNp <- plot_grid(fig_list[[1]] + theme(legend.position = "none"),
 NMDS.wuf.milkNp
 ```
 
+### 1.2 MilkType with all milk
+```{r}
+sample_data(ps.milkY)$SampleType <- factor(sample_data(ps.milkY)$SampleType, levels = c("Raw_milk","HTST_feed","HTST_milk"))
+sample_data(ps.milkN)$SampleType <- factor(sample_data(ps.milkN)$SampleType, levels = c("Raw_milk","HTST_feed","HTST_milk"))
+
+## PCoA 
+ps.milk <- readRDS("decontam/phyloseq/milk/ps.milk.rds")
+PCoA.wuf.milk <- ordinate(ps.milk, method = "PCoA", distance = "wunifrac")
+sample_data(ps.milk)$SampleType <- factor(sample_data(ps.milk)$SampleType, levels = c("Raw_milk","HTST_feed","HTST_milk"))
+sample_data(ps.milk)$PMA <- factor(sample_data(ps.milk)$PMA, levels = c("N","Y"))
+
+svg(file.path(path,"milk/PCoA_allmilk.svg"), w = 450, h = 300)
+plot_ordination(ps.milk, PCoA.wuf.milk,color="SampleType",shape = "PMA") + 
+  geom_point(size=3)+ 
+  scale_color_brewer(palette="Set2")+
+  ggtitle("")+
+  ylab("PCoA 2")+ 
+  xlab("PCoA 1")+
+  theme_bw()
+dev.off()
+
+# Adonis testing
+metadata <- as(sample_data(ps.milk), "data.frame")
+# milk type
+adonis2(phyloseq::distance(ps.milk, "wunifrac") ~ SampleType, data = metadata)
+```
+
 ### 1.3 CheeseOutcome with 4hr (1 set) HTST feed and pasteurized milk 
 ```{r fig.height=3, fig.width=10}
 # Define some useful functions to use 
@@ -1508,8 +1539,6 @@ ggplot(qPCR4.3Nm, aes(x=SampleType, y=LogCellsML, fill=CheeseOutcome.y))+
   ylab("Log 16S rRNA gene copy/mL")+
   xlab("PMA untreated samples by milk type")
 ```
-
-
 
 ## Import the qPCR results for Turicibacter counts in cheese and milk
 ```{r fig.height=3, fig.width=4.3}
