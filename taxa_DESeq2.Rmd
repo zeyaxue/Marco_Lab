@@ -449,6 +449,44 @@ MilkHeat <- function(ps, taxa, samType, w, h, path.out) {
   dev.off()
 }
 
+# Milk heat plot 2 with all the taxa and taxa abudance clustering
+MilkHeat2 <- function(ps, samType, w, h, path.out) {
+  my_palette <- colorRampPalette(c("red", "yellow", "green"))(n = 299)
+  # defines the color breaks manually for a "skewed" color transition
+  col_breaks = c(seq(-1,0,length=100),      # for red
+                 seq(0.01,0.8,length=100),  # for yellow
+                 seq(0.81,1,length=100))    # for green
+  
+  ps <- ps %>% transform_sample_counts(function(x) x/sum(x) )  
+  ps <- ps %>% tax_glom(taxrank = "Genus")
+  
+  taxa.df <- psmelt(ps)
+  taxa.agg <- aggregate(Abundance ~ Genus + SampleType,
+                        data = taxa.df,
+                        mean)
+  taxa.cast <- dcast(taxa.agg, Genus ~ SampleType, mean, value.var = "Abundance")
+  
+  # make as numeric matrix 
+  row.names(taxa.cast) <- taxa.cast$Genus
+  taxa.cast <- taxa.cast[,-1]
+  
+  pdf(path.out, width = w, height = h)
+  superheat(taxa.cast,
+            left.label.size = 0.4, 
+            bottom.label.size = 0.1,
+            grid.hline = FALSE,
+            title = samType,
+            title.size = 6,
+            scale = TRUE,
+            row.dendrogram = TRUE,
+            title.alignment = "center") %>% print()
+  dev.off()
+  
+  # extract the clusters
+  map <- superheat(taxa.cast, n.clusters.rows = 10)
+  write.csv(map$membership.rows, file.path(paste(path.out,".csv", sep ='')))
+}
+
 # Heat plot based on TimeSinceCleaning. This function will plot only the top 30 taxa
 TiSiHeat <- function(ps, samType, w, h, path.out) {
   my_palette <- colorRampPalette(c("red", "yellow", "green"))(n = 299)
@@ -924,6 +962,12 @@ MilkHeat(ps.allmilkY, comm14,
 MilkHeat(ps.allmilkN, comm14, 
          samType = "PMA untreated milk", w = 450, h = 700,
          path.out = file.path(path, "milk/fig_SampleType/milkN.png"))
+MilkHeat2(ps.allmilkY, 
+          samType = "PMA treated milk", w = 15, h = 20,
+          path.out = file.path(path, "milk/fig_SampleType/milkY2.pdf"))
+MilkHeat2(ps.allmilkN, 
+          samType = "PMA untreated milk", w = 15, h = 20,
+          path.out = file.path(path, "milk/fig_SampleType/milkN2.pdf"))
 
 
 ps.milkY <- subset_samples(ps.milk, PMA %in% "Y")
