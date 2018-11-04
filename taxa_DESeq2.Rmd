@@ -449,44 +449,6 @@ MilkHeat <- function(ps, taxa, samType, w, h, path.out) {
   dev.off()
 }
 
-# Milk heat plot 2 with all the taxa and taxa abudance clustering
-MilkHeat2 <- function(ps, samType, w, h, path.out) {
-  my_palette <- colorRampPalette(c("red", "yellow", "green"))(n = 299)
-  # defines the color breaks manually for a "skewed" color transition
-  col_breaks = c(seq(-1,0,length=100),      # for red
-                 seq(0.01,0.8,length=100),  # for yellow
-                 seq(0.81,1,length=100))    # for green
-  
-  ps <- ps %>% transform_sample_counts(function(x) x/sum(x) )  
-  ps <- ps %>% tax_glom(taxrank = "Genus")
-  
-  taxa.df <- psmelt(ps)
-  taxa.agg <- aggregate(Abundance ~ Genus + SampleType,
-                        data = taxa.df,
-                        mean)
-  taxa.cast <- dcast(taxa.agg, Genus ~ SampleType, mean, value.var = "Abundance")
-  
-  # make as numeric matrix 
-  row.names(taxa.cast) <- taxa.cast$Genus
-  taxa.cast <- taxa.cast[,-1]
-  
-  pdf(path.out, width = w, height = h)
-  superheat(taxa.cast,
-            left.label.size = 0.4, 
-            bottom.label.size = 0.1,
-            grid.hline = FALSE,
-            title = samType,
-            title.size = 6,
-            scale = TRUE,
-            row.dendrogram = TRUE,
-            title.alignment = "center") %>% print()
-  dev.off()
-  
-  # extract the clusters
-  map <- superheat(taxa.cast, n.clusters.rows = 10)
-  write.csv(map$membership.rows, file.path(paste(path.out,".csv", sep ='')))
-}
-
 # Heat plot based on TimeSinceCleaning. This function will plot only the top 30 taxa
 TiSiHeat <- function(ps, samType, w, h, path.out) {
   my_palette <- colorRampPalette(c("red", "yellow", "green"))(n = 299)
@@ -524,6 +486,49 @@ TiSiHeat <- function(ps, samType, w, h, path.out) {
             title.size = 6,
             title.alignment = "center")
   dev.off()
+}
+
+# Time since cleaning heat plot 2 with all the taxa and taxa abudance clustering
+TiSiHeat2 <- function(ps, samType, w, h, path.out) {
+  my_palette <- colorRampPalette(c("red", "yellow", "green"))(n = 299)
+  # defines the color breaks manually for a "skewed" color transition
+  col_breaks = c(seq(-1,0,length=100),      # for red
+                 seq(0.01,0.8,length=100),  # for yellow
+                 seq(0.81,1,length=100))    # for green
+  
+  #ps <- ps %>% transform_sample_counts(function(x) x/sum(x) )  #get abundance in %
+  ps <- ps %>% tax_glom(taxrank = "Genus")
+  taxa.df <- psmelt(ps)
+  taxa.agg <- aggregate(Abundance ~ Genus + TimeSinceCleaning,
+                        data = taxa.df,
+                        mean)
+  taxa.cast <- dcast(taxa.agg, Genus ~ TimeSinceCleaning, mean, value.var = "Abundance")
+  # need to change results from factor to numeric because of R
+  row.names(taxa.cast) <- taxa.cast$Genus
+  taxa.cast <- taxa.cast[, -1]
+  indx <- sapply(taxa.cast, is.factor)
+  taxa.cast[indx] <- lapply(taxa.cast[indx], function(x) as.numeric(as.character(x))) 
+  taxa.cast30 <- cbind(taxa.cast, total = rowSums(taxa.cast)) #  need numeric values
+  taxa.cast30$taxa <- rownames(taxa.cast30)
+  taxa.cast30 <- head(arrange(taxa.cast30,desc(total)), n = 30)
+  row.names(taxa.cast30) <- taxa.cast30$taxa
+  taxa.cast30 <- taxa.cast30[, -c(5,6)]
+  
+  pdf(path.out, width = w, height = h)
+  superheat(taxa.cast,
+            left.label.size = 0.4, 
+            bottom.label.size = 0.1,
+            grid.hline = FALSE,
+            title = samType,
+            title.size = 6,
+            scale = TRUE,
+            row.dendrogram = TRUE,
+            title.alignment = "center") %>% print()
+  dev.off()
+  
+  # extract the clusters
+  map <- superheat(taxa.cast, n.clusters.rows = 10)
+  write.csv(map$membership.rows, file.path(paste(path.out,".csv", sep ='')))
 }
 
 
@@ -735,11 +740,15 @@ TiSinCleaningDA(ps.htstY,
                 path.out = file.path(path, "milk/deseq_table_TiSinCleaning/htstY"))
 TiSiHeat(ps.htstY, samType = "PMA treated HTST milk", w = 8.5, h = 11,
          path.out = file.path(path, "milk/fig_TiSinCleaning/htstY.pdf"))
+TiSiHeat2(ps.htstY, samType = "PMA treated HTST milk", w = 8.5, h = 20,
+         path.out = file.path(path, "milk/fig_TiSinCleaning/htstY2.pdf"))
 # PMA untreated
 ps.htstN <- subset_samples(ps.htst, PMA %in% "N")
 saveRDS(ps.htstN, file.path(path, "milk/ps.htstN.rds"))
 CheeseOutcomeDA(ps.htstN, 
                 path.out = file.path(path, "milk/deseq_table/sigtab.htstN.csv"))
+TiSiHeat2(ps.htstN, samType = "PMA untreated HTST milk", w = 8.5, h = 20,
+          path.out = file.path(path, "milk/fig_TiSinCleaning/htstN2.pdf"))
 
 # 13 # HTST feed 
 ps.feed <- subset_samples(ps.milk, SampleType %in% "HTST_feed")
@@ -816,10 +825,10 @@ ps.milkq
 # 9 # HTST milk that has been adjusted with qPCR values
 ps.htstq <- subset_samples(ps.milkq, SampleType %in% "HTST_milk")
 saveRDS(ps.htstq, file.path(path, "milk/ps.htstq.rds"))
-ps.htstq
 ps.htstqY <- subset_samples(ps.htstq, PMA %in% "Y")
 saveRDS(ps.htstqY, file.path(path, "milk/ps.htstqY.rds"))
-ps.htstqY
+ps.htstqN <- subset_samples(ps.htstq, PMA %in% "N")
+saveRDS(ps.htstqN, file.path(path, "milk/ps.htstqN.rds"))
 CheeseOutcomeDA(ps.htstqY, 
                 path.out = file.path(path, "milk/deseq_table/sigtab.htstqY.csv"))
 ChouBar(ps.htstqY, 
@@ -911,12 +920,26 @@ LinePlot <- function(ps, x, w, h, path.out){
   dev.off()
 }
 
-# loop for all specific taxa
-for(i in 1:length(tax_table(ps.milkq)[,6])){
-  LinePlot(ps.milkq, x = tax_table(ps.milkq)[,6][i], w = 4.5, h = 3.5, 
-           path.out = file.path(path, "milk/fig_TiSinCleaning", paste(tax_table(ps.milkq)[,6][i],".pdf", sep ='')))
+# Define function for line plot 2 that only plots PMA treated only
+LinePlot2 <- function(ps, x, w, h, path.out){
+  melt <- psmelt(ps) 
+  agg <- ddply(melt, c("TimeSinceCleaning","SampleType","PMA", "Genus"),
+               summarise,
+               N = length(Abundance),
+               mean = mean(Abundance),
+               sd = sd(Abundance),
+               se = sd / sqrt(N))
+  
+  pdf(path.out, width = w, height = h)
+  print(ggplot(subset(agg, Genus %in% x), aes(x = TimeSinceCleaning, y = mean, color = SampleType)) +
+              geom_line(size = 0.9)+
+              geom_point(size = 1)+
+              geom_errorbar(aes(ymin = mean-se, ymax = mean+se),width = 0.1, position=position_dodge(0.05))+
+              ylab(x) +
+              theme_bw() +
+              theme(text = element_text(size = 15)))
+  dev.off()
 }
-
 
 # plot total load
 qPCR.agg <- ddply(qPCR, c("TimeSinceCleaning","Description","PMA"),
@@ -930,13 +953,135 @@ qPCR.agg <- qPCR.agg[qPCR.agg$N != '1',]
 
 pdf(file.path(path, "milk/fig_TiSinCleaning/total.pdf"), w = 4.5, h = 3.5)
 ggplot(qPCR.agg, aes(x = TimeSinceCleaning, y = mean, group = PMA,color = PMA)) +
-        geom_line(size = 0.9)+
-        geom_point(size = 1)+
-        geom_errorbar(aes(ymin = mean-se, ymax = mean+se),width = 0.1, position=position_dodge(0.05))+
-        facet_wrap(~ Description, scales = "fixed")+
-        ylab("Log10 16S rRNA gene copy/ml") +
-        theme(text = element_text(size = 15))
+  geom_line(size = 0.9)+
+  geom_point(size = 1)+
+  geom_errorbar(aes(ymin = mean-se, ymax = mean+se),width = 0.1, position=position_dodge(0.05))+
+  facet_wrap(~ Description, scales = "fixed")+
+  ylab("Log10 16S rRNA gene copy/ml") +
+  theme(text = element_text(size = 15))
 dev.off()
+# PMA treated
+pdf(file.path(path, "milk/fig_TiSinCleaning/Y/total.pdf"), w = 4.5, h = 3.5)
+ggplot(subset(qPCR.agg, PMA == "Y"), aes(x = TimeSinceCleaning, y = mean, color = Description)) +
+  geom_line(size = 0.9)+
+  geom_point(size = 1)+
+  geom_errorbar(aes(ymin = mean-se, ymax = mean+se),width = 0.1, position=position_dodge(0.05))+
+  ylab("Log10 16S rRNA gene copy/ml") +
+  theme_bw() +
+  theme(text = element_text(size = 15)) 
+dev.off()
+# PMA UNtreated
+pdf(file.path(path, "milk/fig_TiSinCleaning/N/total.pdf"), w = 4.5, h = 3.5)
+ggplot(subset(qPCR.agg, PMA == "N"), aes(x = TimeSinceCleaning, y = mean, color = Description)) +
+  geom_line(size = 0.9)+
+  geom_point(size = 1)+
+  geom_errorbar(aes(ymin = mean-se, ymax = mean+se),width = 0.1, position=position_dodge(0.05))+
+  ylab("Log10 16S rRNA gene copy/ml") +
+  theme_bw() +
+  theme(text = element_text(size = 15)) 
+dev.off()
+
+
+
+# loop for all specific taxa
+for(i in 1:length(tax_table(ps.milkq)[,6])){
+  LinePlot(ps.milkq, x = tax_table(ps.milkq)[,6][i], w = 4.5, h = 3.5, 
+           path.out = file.path(path, "milk/fig_TiSinCleaning", paste(tax_table(ps.milkq)[,6][i],".pdf", sep ='')))
+}
+# Loop for all sepcific taxa ## PMA treated
+for(i in 1:length(tax_table(ps.milkqY)[,6])){
+  LinePlot2(ps.milkqY, x = tax_table(ps.milkqY)[,6][i], w = 4.5, h = 3.5, 
+           path.out = file.path(path, "milk/fig_TiSinCleaning/Y", paste(tax_table(ps.milkqY)[,6][i],".pdf", sep ='')))
+}
+# Loop for all sepcific taxa ## PMA UNtreated
+for(i in 1:length(tax_table(ps.milkqN)[,6])){
+  LinePlot2(ps.milkqN, x = tax_table(ps.milkqN)[,6][i], w = 4.5, h = 3.5, 
+            path.out = file.path(path, "milk/fig_TiSinCleaning/N", paste(tax_table(ps.milkqY)[,6][i],".pdf", sep ='')))
+}
+# Loop for all sepcific taxa in HTST milk ## PMA treated
+for(i in 1:length(tax_table(ps.htstqY)[,6])){
+  LinePlot2(ps.htstqY, x = tax_table(ps.htstqY)[,6][i], w = 4.5, h = 3.5, 
+            path.out = file.path(path, "milk/fig_TiSinCleaning/htstqY", paste(tax_table(ps.htstqY)[,6][i],".pdf", sep ='')))
+}
+# percent looks the same as the one adjusted with qPCR
+#ps.htstqY.per <- ps.htstqY %>% transform_sample_counts(function(x) x/sum(x) )
+#for(i in 1:length(tax_table(ps.htstqY.per)[,6])){
+#  LinePlot2(ps.htstqY.per, x = tax_table(ps.htstqY.per)[,6][i], w = 4.5, h = 3.5, 
+#            path.out = file.path(path, "milk/fig_TiSinCleaning/htstY", paste(tax_table(ps.htstqY.per)[,6][i],".pdf", sep ='')))
+#}
+# Loop for all sepcific taxa in HTST milk ## PMA UNtreated
+for(i in 1:length(tax_table(ps.htstqN)[,6])){
+  LinePlot2(ps.htstqN, x = tax_table(ps.htstqN)[,6][i], w = 4.5, h = 3.5, 
+            path.out = file.path(path, "milk/fig_TiSinCleaning/htstqN", paste(tax_table(ps.htstqN)[,6][i],".pdf", sep ='')))
+}
+
+# Aggregate some plots on to 1 figure
+LinePlot3 <- function(ps, x, w, h, path.out){
+  melt <- psmelt(ps) 
+  agg <- ddply(melt, c("TimeSinceCleaning","SampleType","PMA", "Genus"),
+               summarise,
+               N = length(Abundance),
+               mean = mean(Abundance),
+               sd = sd(Abundance),
+               se = sd / sqrt(N))
+  
+  pdf(path.out, width = w, height = h)
+  print(ggplot(subset(agg, Genus %in% x), aes(x = TimeSinceCleaning, y = mean, color = Genus)) +
+          geom_line(size = 0.9)+
+          geom_point(size = 1)+
+          geom_errorbar(aes(ymin = mean-se, ymax = mean+se),width = 0.1, position=position_dodge(0.05))+
+          ylab("Log10 16S rRNA gene copy/ml") +
+          theme_bw() +
+          theme(text = element_text(size = 15)))
+  dev.off()
+}
+
+# taxa that are resistent to cleaning 
+res.hi <- c("Staphylococcus", "Turicibacter")  #  high abundance taxa, > 0.5
+res.med <- c("Acinetobacter", "Bacillus", "Lactococcus") #  median abundance 0.1-0.5
+res.lo <- c("Epulopiscium", "Lactobacillus", "Macrococcus", "Mycoplasma") #  0.02- 0.1
+res.xs <- c("Bacteroides", "Bifidobacterium", "Brevibacillus",
+            "Enterococcus", "Escherichia")   #  < 0.02
+
+# HTST milk PMA treated 
+LinePlot3(ps.htstqY, x = res.hi, w = 4.5, h = 3.5, 
+          path.out = file.path(path, "milk/fig_TiSinCleaning/htstqY/hi_taxa.pdf"))
+LinePlot3(ps.htstqY, x = res.med, w = 4.5, h = 3.5, 
+          path.out = file.path(path, "milk/fig_TiSinCleaning/htstqY/med_taxa.pdf"))
+LinePlot3(ps.htstqY, x = res.lo, w = 4.5, h = 3.5, 
+          path.out = file.path(path, "milk/fig_TiSinCleaning/htstqY/lo_taxa.pdf"))
+LinePlot3(ps.htstqY, x = res.xs, w = 4.5, h = 3.5, 
+          path.out = file.path(path, "milk/fig_TiSinCleaning/htstqY/xs_taxa.pdf"))
+```
+
+## ANOVA line figures for each taxa 
+```{r}
+TiSiCleanANOVA <- function(ps, x, path.out){
+  agg <- psmelt(ps)
+  
+  fit <- aov(Abundance ~ TimeSinceCleaning, data = subset(agg, Genus %in% x))
+  y <- summary(fit)[[1]]
+  # if overall value < 0.05, move on with post hoc test
+  if (y$`Pr(>F)`[1] == "NaN"){  # if might be NaN value if taxa abudance is 0
+    print(paste(x, "abundance is 0", sep = ' '))
+  } else if (y$`Pr(>F)`[1] < 0.08){
+    attach(subset(agg, Genus %in% x))
+    z <- pairwise.t.test(Abundance, TimeSinceCleaning, p.adjust.method = "none")[[3]]
+    detach()
+    write.csv(z, path.out)
+  }
+}
+
+# Loop ANOVA test for all taxa in HTST milk ## PMA treated
+for(i in 1:length(tax_table(ps.htstqY)[,6])){
+  TiSiCleanANOVA(ps.htstqY, x = tax_table(ps.htstqY)[,6][i],
+                 path.out = file.path(path, "milk/fig_TiSinCleaning/htstqY/ANOVA", paste(tax_table(ps.htstqY)[,6][i],".csv", sep ='')))
+}
+# Loop ANOVA test for all taxa in HTST milk ## PMA UNtreated
+for(i in 1:length(tax_table(ps.htstqN)[,6])){
+  TiSiCleanANOVA(ps.htstqN, x = tax_table(ps.htstqN)[,6][i],
+                 path.out = file.path(path, "milk/fig_TiSinCleaning/htstqN/ANOVA", paste(tax_table(ps.htstqN)[,6][i],".csv", sep ='')))
+}
 ```
 
 
