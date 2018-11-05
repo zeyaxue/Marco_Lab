@@ -1036,11 +1036,11 @@ LinePlot3 <- function(ps, x, w, h, path.out){
   dev.off()
 }
 
-# taxa that are resistent to cleaning 
+# taxa that are resistent to cleaning and significant 
 res.hi <- c("Staphylococcus", "Turicibacter")  #  high abundance taxa, > 0.5
 res.med <- c("Acinetobacter", "Bacillus", "Lactococcus") #  median abundance 0.1-0.5
 res.lo <- c("Epulopiscium", "Lactobacillus", "Macrococcus", "Mycoplasma") #  0.02- 0.1
-res.xs <- c("Bacteroides", "Bifidobacterium", "Brevibacillus",
+res.xs <- c("Bacteroides", "Bifidobacterium", "Brevibacillus", "Enhydrobacter", 
             "Enterococcus", "Escherichia")   #  < 0.02
 
 # HTST milk PMA treated 
@@ -1082,6 +1082,32 @@ for(i in 1:length(tax_table(ps.htstqN)[,6])){
   TiSiCleanANOVA(ps.htstqN, x = tax_table(ps.htstqN)[,6][i],
                  path.out = file.path(path, "milk/fig_TiSinCleaning/htstqN/ANOVA", paste(tax_table(ps.htstqN)[,6][i],".csv", sep ='')))
 }
+# Loop ANOVA test for all taxa in HTST feed ## PMA treated
+for(i in 1:length(tax_table(ps.feedqY)[,6])){
+  TiSiCleanANOVA(ps.feedqY, x = tax_table(ps.feedqY)[,6][i],
+                 path.out = file.path(path, "milk/fig_TiSinCleaning/feedqY/ANOVA", paste(tax_table(ps.feedqY)[,6][i],".csv", sep ='')))
+}
+
+# ANOVA function for qPCR files
+qPCRanova <- function(x, path.out){
+  x <- x[x$TimeSinceCleaning %in% c("0","3","6","9"),]
+  
+  aov(LogCellsML ~ TimeSinceCleaning, data = x) %>% summary()
+
+  attach(x)
+  z <- pairwise.t.test(LogCellsML, TimeSinceCleaning, p.adjust.method = "none")[[3]]
+  detach()
+  
+  write.csv(z, path.out)
+}
+
+# ANOVA for total cell count in HTST milk ## PMA treated
+qPCRY <- subset(qPCR, PMA == "Y")
+qPCR.htstY <- subset(qPCRY, Description == "HTST milk")
+qPCRanova(qPCR.htstY, path.out = file.path(path, "milk/fig_TiSinCleaning/htstqY/ANOVA/total.csv"))
+# ANOVA for total cell count in HTST feed ## PMA treated
+qPCR.feedY <- subset(qPCRY, Description == "HTST feed")
+qPCRanova(qPCR.feedY, path.out = file.path(path, "milk/fig_TiSinCleaning/feedqY/ANOVA/total.csv"))
 ```
 
 
