@@ -544,9 +544,9 @@ ChouBar <- function(ps, taxa, samType, w, h, path.out){
   # change the taxa that are not within the 13 common taxa to "Other" 
   TaxTab2 <- psmelt(ps)
   # merge/average per SampleType and CheeseOutcome
-  TaxTab2_agg <- aggregate(Abundance ~ SampleType + CheeseOutcome + Genus,
-                           data = TaxTab2,
-                           mean)
+  TaxTab2_agg <- ddply(TaxTab2, c("SampleType", "CheeseOutcome", "Genus"),
+                       summarise,
+                       mean = mean(Abundance))
   TaxTab2_agg$Genus <- as.character(TaxTab2_agg$Genus)
   TaxTab2_agg[TaxTab2_agg$Genus %in% taxa.filt,]$Genus <- "Other"
 
@@ -557,14 +557,14 @@ ChouBar <- function(ps, taxa, samType, w, h, path.out){
   TaxTab2_agg$Genus = factor(TaxTab2_agg$Genus, levels = taxa)
   
   pdf(path.out, width = w, height = h)
-  (ggplot(TaxTab2_agg, aes(x = CheeseOutcome, y = Abundance, fill = Genus)) +
+  (ggplot(TaxTab2_agg, aes(x = CheeseOutcome, y = mean, fill = Genus)) +
     facet_wrap(~SampleType, scales = "fixed") +
     geom_bar(stat = "identity") + 
     scale_fill_manual(values = mycol)+
     # Remove x axis title
-    theme(axis.title.x = element_blank()) + 
+    theme(axis.title.x = element_blank(), text = element_text(size = 16)) + 
     guides(fill = guide_legend(reverse = FALSE, keywidth = 1, keyheight = 1)) +
-    ylab("Relative Abundance \n")) %>% print() 
+    ylab("Log 16S rRNA gene copy/ml")) %>% print() 
   dev.off()
 }
 
