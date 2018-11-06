@@ -596,7 +596,7 @@ TiSinCleaningDA(psko.feed2N,
 
 
 
-## Load in DESeq2 genenerated csv file and clean up to make figures 
+## Load in DESeq2 genenerated csv file and clean up to make line figures 
 ```{r}
 # Define function to load and subset pathway or KO that are common between 06,
 # 09, 36 and 39 time. It seems that 03 and 69 are two groups: early and late
@@ -643,6 +643,28 @@ LinePlot <- function(ps, x, w, h, path.out){
 }
 
 
+# Define function for line plot 2 that only plots PMA treated only
+LinePlot2 <- function(ps, x, w, h, path.out){
+  melt <- psmelt(ps) 
+  agg <- ddply(melt, c("TimeSinceCleaning","SampleType","PMA", "KEGG_Pathways3", "KEGG_Pathways2", "KEGG_Pathways1"),
+               summarise,
+               N = length(Abundance),
+               mean = mean(Abundance),
+               sd = sd(Abundance),
+               se = sd / sqrt(N))
+  
+  pdf(path.out, width = w, height = h)
+  print(ggplot(subset(agg, KEGG_Pathways3 %in% x), aes(x = TimeSinceCleaning, y = mean, color = SampleType)) +
+          geom_line(size = 0.9)+
+          geom_point(size = 1)+
+          geom_errorbar(aes(ymin = mean-se, ymax = mean+se),width = 0.1, position=position_dodge(0.05))+
+          ylab(x) +
+          theme_bw() +
+          theme(text = element_text(size = 15)))
+  dev.off()
+}
+
+
 # 1 # HTST feed and HTST milk at Pathway level
 SubComm(a = "htstY/06.csv", b = "htstY/09.csv", 
         c = "htstY/36.csv", d = "htstY/39.csv",
@@ -650,11 +672,24 @@ SubComm(a = "htstY/06.csv", b = "htstY/09.csv",
 comm <- read.csv(file.path(path,"picrust/deseq_table_TiSinCleaning/htstY/common_pathways_man.csv"))
 # filter the phyloseq based on the common pathways
 ps10.tsclean.comm <- subset_taxa(ps10.tsclean, KEGG_Pathways3 %in% comm$X)
+ps10.tsclean.commY <- subset_samples(ps10.tsclean.comm, PMA == "Y")
+ps10.tsclean.commN <- subset_samples(ps10.tsclean.comm, PMA == "N")
+
+# loop to generate line figure for all the common pathways 
 for(i in 1:length(comm$X)){
   LinePlot(ps10.tsclean.comm, x = comm$X[i], w = 4.5, h = 3.5,
            path.out = file.path(path, "picrust/fig_TiSinCleaning", paste(comm$X[i],".pdf", sep ='')))
 }
 
-
+# Loop for all common pathways in HTST feed and milk ## PMA treated
+for(i in 1:length(comm$X)){
+  LinePlot2(ps10.tsclean.commY, x = comm$X[i], w = 4.5, h = 3.5, 
+            path.out = file.path(path, "picrust/fig_TiSinCleaning/Y", paste(comm$X[i], ".pdf", sep ='')))
+}
+# Loop for all common pathways in HTST feed and milk ## PMA UNtreated
+for(i in 1:length(comm$X)){
+  LinePlot2(ps10.tsclean.commN, x = comm$X[i], w = 4.5, h = 3.5, 
+            path.out = file.path(path, "picrust/fig_TiSinCleaning/N", paste(comm$X[i], ".pdf", sep ='')))
+}
 ```
 

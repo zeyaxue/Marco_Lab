@@ -1382,7 +1382,8 @@ fig_list <- lapply(dat_list, function(x){
     facet_wrap(~SampleType, scales = "fixed")+
     ylab("NMDS 2")+ 
     xlab("NMDS 1")+
-    theme_bw()
+    theme_bw() +
+    theme(text = element_text(size = 15)) 
 })
 #make the figure
 legend <- get_legend(fig_list[[1]])
