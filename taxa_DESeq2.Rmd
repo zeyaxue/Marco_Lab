@@ -558,9 +558,10 @@ ChouBar <- function(ps, taxa, samType, w, h, path.out){
   
   pdf(path.out, width = w, height = h)
   (ggplot(TaxTab2_agg, aes(x = CheeseOutcome, y = mean, fill = Genus)) +
-    facet_wrap(~SampleType, scales = "fixed") +
+    facet_wrap(~ SampleType) +
     geom_bar(stat = "identity") + 
     scale_fill_manual(values = mycol)+
+    theme_bw() +
     # Remove x axis title
     theme(axis.title.x = element_blank(), text = element_text(size = 16)) + 
     guides(fill = guide_legend(reverse = FALSE, keywidth = 1, keyheight = 1)) +
