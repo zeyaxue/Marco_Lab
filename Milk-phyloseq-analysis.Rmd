@@ -90,14 +90,25 @@ After cleaning and organizing the data, we can make some plots for visualization
 
 ### Plot to contain both PMA treated and untreated 
 ```{r}
-ggplot(alpha.milk, aes(x=SampleType, y=value, fill=PMA))+ 
+AlphaMilkType <- function(x, w, h, path.out){
+  x <- subset(x, measure %in% c("Observed", "Shannon"))
+  
+  pdf(path.out, w, h)
+  (ggplot(x, aes(x=SampleType, y=value))+ 
   geom_boxplot() +
-  scale_fill_brewer(palette = "Purples")+
   facet_wrap(facets = ~ measure, scales = "free_y") + #strip.position="right"
-  theme_bw()+
+  theme_bw(base_size = 15)+
   theme(axis.text.x = element_text(angle = 45, hjust = 1))+
-  ylab("Alpha diversity value")+
-  xlab("")
+  xlab("")) %>% print()
+  dev.off()
+}
+
+AlphaMilkType(alpha.milk, w = 7, h = 3.7, 
+              path.out = file.path(path,"milk/alpha/milktype.pdf"))
+AlphaMilkType(subset(alpha.milk, PMA == "Y"), w = 6.5, h = 3.8,
+              path.out = file.path(path,"milk/alpha/milktypeY.pdf"))
+AlphaMilkType(subset(alpha.milk, PMA == "N"), w = 6.5, h = 3.8,
+              path.out = file.path(path,"milk/alpha/milktypeN.pdf"))
 ```
 
 
@@ -524,12 +535,12 @@ sample_data(ps.milkY)$SampleType <- factor(sample_data(ps.milkY)$SampleType, lev
 sample_data(ps.milkN)$SampleType <- factor(sample_data(ps.milkN)$SampleType, levels = c("Raw_milk","HTST_feed","HTST_milk"))
 
 ## PCoA 
-ps.milk <- readRDS("decontam/phyloseq/milk/ps.milk.rds")
+ps.milk <- readRDS(file.path(path,"decontam/phyloseq/milk/ps.milk.rds"))
 PCoA.wuf.milk <- ordinate(ps.milk, method = "PCoA", distance = "wunifrac")
 sample_data(ps.milk)$SampleType <- factor(sample_data(ps.milk)$SampleType, levels = c("Raw_milk","HTST_feed","HTST_milk"))
 sample_data(ps.milk)$PMA <- factor(sample_data(ps.milk)$PMA, levels = c("N","Y"))
 
-svg(file.path(path,"milk/PCoA_allmilk.svg"), w = 450, h = 300)
+pdf(file.path(path,"milk/PCoA_allmilk.pdf"), w = 5.3, h = 3.7)
 plot_ordination(ps.milk, PCoA.wuf.milk,color="SampleType",shape = "PMA") + 
   geom_point(size=3)+ 
   scale_color_brewer(palette="Set2")+
@@ -548,12 +559,25 @@ adonis2(phyloseq::distance(ps.milk, "wunifrac") ~ SampleType, data = metadata)
 wuf.dist <- read.csv(file.path(path, "decontam/phyloseq/milk/PMA_MilkType_Distances_noPMA_andPMA.csv"))
 wuf.dist$MilkType = factor(wuf.dist$MilkType,levels=c("Raw_milk","HTST_feed","HTST_milk"))
 
+pdf(file.path(path, "milk/fig_SampleType/wufY.pdf"), w = 3.6, h = 3.8)
+wuf.dist$facet <- "Weighted Unifrac"
 ggplot(subset(wuf.dist, PMA == "Y"), aes(x=MilkType, y=weighted_distance))+
   geom_boxplot(position = position_dodge(0.77))+
-  #facet_wrap(~ PMA) +
-  labs(y = "Weighted Unifrac")+
-  theme_bw(base_size = 18) +
+  facet_wrap(~ facet) +
+  xlab("")+
+  theme_bw(base_size = 15) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
+dev.off()
+
+pdf(file.path(path, "milk/fig_SampleType/wufN.pdf"), w = 3.6, h = 3.8)
+ggplot(subset(wuf.dist, PMA == "N"), aes(x=MilkType, y=weighted_distance))+
+  geom_boxplot(position = position_dodge(0.77))+
+  facet_wrap(~ facet) +
+  xlab("")+
+  theme_bw(base_size = 15) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+dev.off()
+
 # ANOVA
 fit <- aov(weighted_distance ~ MilkType, data = subset(wuf.dist, PMA == "Y"))
 summary(fit)
