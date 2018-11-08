@@ -1537,12 +1537,12 @@ qPCR4.3Nm <- melt(qPCR4.3N, id.vars = c("Week.y","CheeseOutcome.y","SampleType",
 ```{r fig.height=3, fig.width=4.3}
 # PMA treated 
 # 390*250 PNG
-qPCR4.3Ym$facet <- "Log10 16s rRNA gene copies/ml"
+qPCR4.3Ym$facet <- "Log cells/ml"
 ggplot(qPCR4.3Ym, aes(x=SampleType, y=LogCellsML, fill=CheeseOutcome.y))+ 
   geom_boxplot() +
   scale_fill_manual(values=c("no_slits"="#a6cee3", "slits"="#1f78b4")) +
   theme_bw(base_size = 15)+
-  #facet_wrap(~ facet)+
+  facet_wrap(~ facet)+
   ylab("Log cells/ml")
 aov(LogCellsML ~ CheeseOutcome.y, 
     data = subset(qPCR4.3Ym, SampleType %in% "HTST_feed")) %>% summary()
@@ -1554,7 +1554,7 @@ ggplot(qPCR4.3Nm, aes(x=SampleType, y=LogCellsML, fill=CheeseOutcome.y))+
   geom_boxplot() +
   scale_fill_manual(values=c("no_slits"="#a6cee3", "slits"="#1f78b4")) +
   theme_bw()+
-  ylab("Log 16S rRNA gene copy/mL")+
+  ylab("Log cells/ml")+
   xlab("PMA untreated samples by milk type")
 ```
 
