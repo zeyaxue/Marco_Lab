@@ -67,7 +67,7 @@ CheeseOutcomeDA <- function(ps, path.out) {
   
   dds <- DESeq(psdds, test = "Wald", fitType = "local") 
   plotDispEsts(dds, ylim = c(1e-6, 1e2)) 
-  alpha <- 0.5 #  padj for indepenent filtering and expect FDR < alpha
+  alpha <- 0.1 #  padj for indepenent filtering and expect FDR < alpha
   res <- results(dds, alpha = alpha, 
                  lfcThreshold = 0, 
                  altHypothesis = "greaterAbs")
@@ -76,7 +76,7 @@ CheeseOutcomeDA <- function(ps, path.out) {
   hist(res$pvalue, breaks=20, col="grey" ) # diagnostic plot
   sigtab = res[which(res$padj < alpha), ] 
   if (nrow(sigtab) == 0) {
-    print("There are no significant features whose padj < 0.5 and |lfc| > 0")
+    print("There are no significant features whose padj < 0.1 and |lfc| > 0")
   } else {
     sigtab <- cbind(as(sigtab, "data.frame"), as(tax_table(ps)[rownames(sigtab), ], "matrix"))
     write.csv(sigtab, file.path(path.out))
@@ -564,7 +564,7 @@ ChouBar <- function(ps, taxa, samType, w, h, path.out){
     # Remove x axis title
     theme(axis.title.x = element_blank(), text = element_text(size = 16)) + 
     guides(fill = guide_legend(reverse = FALSE, keywidth = 1, keyheight = 1)) +
-    ylab("Log 16S rRNA gene copy/ml")) %>% print() 
+    ylab("Log cells/ml")) %>% print() 
   dev.off()
 }
 
@@ -599,9 +599,10 @@ TiSinBar <- function(ps, taxa, samType, w, h, path.out){
                 geom_bar(stat = "identity") + 
                 scale_fill_manual(values = mycol)+
                 # Remove x axis title
+                theme_bw()+
                 theme(text = element_text(size = 15)) + 
                 guides(fill = guide_legend(reverse = FALSE, keywidth = 1, keyheight = 1)) +
-                ylab("Log10 16S rRNA gene copy/ml"))
+                ylab("Log cells/ml")) 
   dev.off()
 }
 ```
@@ -648,7 +649,7 @@ saveRDS(ps.milk, file.path(path, "milk/ps.milk.rds"))
 ps.milk
 
 # Feed and HTST milk that are paired with cheddar (based on the 4hr timeline)
-samdf.4hr <- read.csv(file.path(path, "mapping/Run1-5_samdf-mc2_4hrTL.csv"))
+samdf.4hr <- read.csv(file.path(path, "mapping/Run1-5_samdf-mc2_4hrTL-NoExtremeMilk.csv"))
 rownames(samdf.4hr) <- samdf.4hr$SampleID
 ps.milk4 <- phyloseq(otu_table(otu, taxa_are_rows = FALSE), tax_table(tax),sample_data(samdf.4hr), phy_tree(tree))
 saveRDS(ps.milk4, file.path(path, "milk/ps.milk4.rds"))
@@ -732,7 +733,7 @@ saveRDS(ps.htst, file.path(path, "milk/ps.htst.rds"))
 ps.htst
 ps.htstY <- subset_samples(ps.htst, PMA %in% "Y")
 saveRDS(ps.htstY, file.path(path, "milk/ps.htstY.rds"))
-CheeseOutcomeDAnoMean(ps.htstY, 
+CheeseOutcomeDA(ps.htstY, 
                 path.out = file.path(path, "milk/deseq_table/sigtab.htstY.csv"))
 ChouHeat(ps.htstY, samType = "PMA treated HTST milk", w = 8.5, h = 11,
          path.out = file.path(path, "milk/fig/htstY.pdf"))
@@ -770,7 +771,7 @@ ps.htst4
 ps.htst4Y <- subset_samples(ps.htst4, PMA %in% "Y")
 saveRDS(ps.htstY, file.path(path, "milk/ps.htstY.rds"))
 ps.htst4Y
-CheeseOutcomeDAnoMean(ps.htst4Y, 
+CheeseOutcomeDA(ps.htst4Y, 
                 path.out = file.path(path, "milk/deseq_table/sigtab.htst4Y.csv"))
 ChouHeat(ps.htst4Y, comm14,
          samType = "PMA treated paired HTST milk", w = 450, h = 700,
@@ -784,7 +785,7 @@ ps.feed4
 ps.feed4Y <- subset_samples(ps.feed4, PMA %in% "Y")
 saveRDS(ps.feed4Y, file.path(path, "milk/ps.feed4Y.rds"))
 ps.feed4Y
-CheeseOutcomeDAnoMean(ps.feed4Y, 
+CheeseOutcomeDA(ps.feed4Y, 
                 path.out = file.path(path, "milk/deseq_table/sigtab.feed4Y.csv"))
 ChouHeat(ps.feed4Y, comm14,
          samType = "PMA treated paired HTST feed", w = 450, h = 700,
@@ -957,7 +958,7 @@ ggplot(qPCR.agg, aes(x = TimeSinceCleaning, y = mean, group = PMA,color = PMA)) 
   geom_point(size = 1)+
   geom_errorbar(aes(ymin = mean-se, ymax = mean+se),width = 0.1, position=position_dodge(0.05))+
   facet_wrap(~ Description, scales = "fixed")+
-  ylab("Log10 16S rRNA gene copy/ml") +
+  ylab("Log cells/ml") +
   theme(text = element_text(size = 15))
 dev.off()
 # PMA treated
@@ -966,7 +967,7 @@ ggplot(subset(qPCR.agg, PMA == "Y"), aes(x = TimeSinceCleaning, y = mean, color 
   geom_line(size = 0.9)+
   geom_point(size = 1)+
   geom_errorbar(aes(ymin = mean-se, ymax = mean+se),width = 0.1, position=position_dodge(0.05))+
-  ylab("Log10 16S rRNA gene copy/ml") +
+  ylab("Log cells/ml") +
   theme_bw() +
   theme(text = element_text(size = 15)) 
 dev.off()
@@ -976,7 +977,7 @@ ggplot(subset(qPCR.agg, PMA == "N"), aes(x = TimeSinceCleaning, y = mean, color 
   geom_line(size = 0.9)+
   geom_point(size = 1)+
   geom_errorbar(aes(ymin = mean-se, ymax = mean+se),width = 0.1, position=position_dodge(0.05))+
-  ylab("Log10 16S rRNA gene copy/ml") +
+  ylab("Log cells/ml") +
   theme_bw() +
   theme(text = element_text(size = 15)) 
 dev.off()
@@ -1030,7 +1031,7 @@ LinePlot3 <- function(ps, x, w, h, path.out){
           geom_line(size = 0.9)+
           geom_point(size = 1)+
           geom_errorbar(aes(ymin = mean-se, ymax = mean+se),width = 0.1, position=position_dodge(0.05))+
-          ylab("Log10 16S rRNA gene copy/ml") +
+          ylab("Log cells/ml") +
           theme_bw() +
           theme(text = element_text(size = 15)))
   dev.off()
