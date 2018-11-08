@@ -105,10 +105,18 @@ AlphaMilkType <- function(x, w, h, path.out){
 
 AlphaMilkType(alpha.milk, w = 7, h = 3.7, 
               path.out = file.path(path,"milk/alpha/milktype.pdf"))
-AlphaMilkType(subset(alpha.milk, PMA == "Y"), w = 6.5, h = 3.8,
+AlphaMilkType(alpha.milkY1m, w = 6.5, h = 3.8,
               path.out = file.path(path,"milk/alpha/milktypeY.pdf"))
-AlphaMilkType(subset(alpha.milk, PMA == "N"), w = 6.5, h = 3.8,
+AlphaMilkType(alpha.milkN1m, w = 6.5, h = 3.8,
               path.out = file.path(path,"milk/alpha/milktypeN.pdf"))
+
+attach(subset(alpha.milkY1m, measure == "Observed"))
+pairwise.t.test(value, SampleType, p.adjust.method = "none")[[3]]
+detach()
+
+attach(subset(alpha.milk, PMA == "Y"))
+pairwise.t.test(LogCellsML, TimeSinceCleaning, p.adjust.method = "none")[[3]]
+detach()
 ```
 
 
@@ -741,10 +749,12 @@ fig_list <- lapply(dat_list, function(x){
     theme(text = element_text(size = 15)) 
 })
 #make the figure
-legend <- get_legend(fig_list[[1]])
+#legend <- get_legend(fig_list[[1]])
+pdf()
 plot_grid(fig_list[[1]] + theme(legend.position = "none"),
           fig_list[[2]] + theme(legend.position = "none"),
-          legend, nrow = 1, align="hv",  labels= c("A","B"))
+          nrow = 1, align="hv",  labels= c("A","B"))
+
 # Adonis test
 AdonisWuf(subset_samples(ps.milk4.3Y, SampleType %in% "HTST_feed"))
 AdonisWuf(subset_samples(ps.milk4.3Y, SampleType %in% "HTST_milk"))
