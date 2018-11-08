@@ -170,20 +170,20 @@ alphaHTSTfig <- function(x, samType, w, h, path.out){
   x <- subset(x, SampleType %in% c("HTST_feed", "HTST_milk"))
   x <- subset(x, measure %in% c("Shannon", "Simpson")) 
          
-  #png(path.out, width = w, height = h)
-  ggplot(x, aes(x = SampleType, y = value, fill = CheeseOutcome))+ 
+  pdf(path.out, width = w, height = h)
+  (ggplot(x, aes(x = SampleType, y = value, fill = CheeseOutcome))+ 
   geom_boxplot() +
   scale_fill_manual(values = c("no_slits" = "#a6cee3", "slits" = "#1f78b4")) +
   facet_wrap(facets = ~ measure, scales = "free_y") +
   theme_bw(base_size = 15)+
-  xlab(samType)
-  #dev.off()
+  xlab(samType)) %>% print()
+  dev.off()
 }
 
 # Generate figures for only HTST feed and HTST milk 
 alphaHTSTfig(alpha.milkY1m, 
-             samType = "PMA treated samples", w = 600, h = 250,
-             path.out = file.path(path, "milk/alpha/alphaY.png"))
+             samType = "PMA treated samples", w = 7.5, h = 2.5,
+             path.out = file.path(path, "milk/alpha/alphaY.pdf"))
 alphaHTSTfig(alpha.milkN1m, 
              samType = "PMA untreated samples", w = 600, h = 250,
              path.out = file.path(path, "milk/alpha/alphaN.png"))
@@ -1536,26 +1536,30 @@ qPCR4.3Nm <- melt(qPCR4.3N, id.vars = c("Week.y","CheeseOutcome.y","SampleType",
 
 ```{r fig.height=3, fig.width=4.3}
 # PMA treated 
-# 390*250 PNG
 qPCR4.3Ym$facet <- "Log cells/ml"
+pdf(file.path(path,"milk/alpha/log4.3Y.pdf"), w = 5, h = 2.5)
 ggplot(qPCR4.3Ym, aes(x=SampleType, y=LogCellsML, fill=CheeseOutcome.y))+ 
   geom_boxplot() +
   scale_fill_manual(values=c("no_slits"="#a6cee3", "slits"="#1f78b4")) +
   theme_bw(base_size = 15)+
   facet_wrap(~ facet)+
   ylab("Log cells/ml")
+dev.off()
 aov(LogCellsML ~ CheeseOutcome.y, 
     data = subset(qPCR4.3Ym, SampleType %in% "HTST_feed")) %>% summary()
 aov(LogCellsML ~ CheeseOutcome.y, 
     data = subset(qPCR4.3Ym, SampleType %in% "HTST_milk")) %>% summary()
 
 # PMA untreated
+qPCR4.3Nm$facet <- "Log cells/ml"
+pdf(file.path(path,"milk/alpha/log4.3N.pdf"), w = 5, h = 2.5)
 ggplot(qPCR4.3Nm, aes(x=SampleType, y=LogCellsML, fill=CheeseOutcome.y))+ 
   geom_boxplot() +
   scale_fill_manual(values=c("no_slits"="#a6cee3", "slits"="#1f78b4")) +
-  theme_bw()+
-  ylab("Log cells/ml")+
-  xlab("PMA untreated samples by milk type")
+  theme_bw(base_size = 15)+
+  facet_wrap(~ facet)+
+  ylab("Log cells/ml")
+dev.off()
 ```
 
 ## Import the qPCR results for Turicibacter counts in cheese and milk
