@@ -817,8 +817,8 @@ Now that I have the phyloseq containing milk samples (1 set) that were collected
 ```{r}
 # Define ANOVA for alpha diversity testing
 AlphaANOVA <- function(x){
-    fit.sha <- aov(value ~ CheeseOutcome, data = subset(x, measure %in% "Shannon"))
-    fit.sim <- aov(value ~ CheeseOutcome, data = subset(x, measure %in% "Simpson"))
+    fit.sha <- aov(value ~ CheeseOutcome, data = subset(x, measure %in% "Observed"))
+    fit.sim <- aov(value ~ CheeseOutcome, data = subset(x, measure %in% "Shannon"))
     y <- summary(fit.sha)[[1]]
     y <- rbind(y, summary(fit.sim)[[1]])
     y
