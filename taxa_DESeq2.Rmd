@@ -433,15 +433,15 @@ MilkHeat <- function(ps, taxa, samType, w, h, path.out) {
   # make as numeric matrix 
   row.names(taxa.cast.f) <- taxa.cast.f$Genus
   taxa.cast.f <- taxa.cast.f[,-1]
-  
+
   
   png(path.out, width = w, height = h)
   (superheat(taxa.cast.f,
             left.label.size = 0.4, 
             bottom.label.size = 0.1,
             order.rows = rev(order(rownames(taxa.cast.f))),
-            #order.cols = c("1",2,3), # follow raw --> feed --> htst milk
-            col.dendrogram = TRUE,
+            order.cols = c("1",2,3), # follow raw --> feed --> htst milk
+            #col.dendrogram = TRUE,
             grid.hline = FALSE,
             title = samType,
             title.size = 6,
@@ -1133,12 +1133,7 @@ MilkHeat(ps.allmilkY, comm14,
 MilkHeat(ps.allmilkN, comm14, 
          samType = "PMA untreated milk", w = 450, h = 700,
          path.out = file.path(path, "milk/fig_SampleType/milkN.png"))
-MilkHeat2(ps.allmilkY, 
-          samType = "PMA treated milk", w = 15, h = 20,
-          path.out = file.path(path, "milk/fig_SampleType/milkY2.pdf"))
-MilkHeat2(ps.allmilkN, 
-          samType = "PMA untreated milk", w = 15, h = 20,
-          path.out = file.path(path, "milk/fig_SampleType/milkN2.pdf"))
+
 
 
 ps.milkY <- subset_samples(ps.milk, PMA %in% "Y")
