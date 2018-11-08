@@ -1222,13 +1222,30 @@ plot_ordination(ps.milk, PCoA.wuf.milk,color="SampleType",shape = "PMA") +
   ggtitle("")+
   ylab("PCoA 2")+ 
   xlab("PCoA 1")+
-  theme_bw()
+  theme_bw(base_size = 15)
 dev.off()
 
 # Adonis testing
 metadata <- as(sample_data(ps.milk), "data.frame")
 # milk type
 adonis2(phyloseq::distance(ps.milk, "wunifrac") ~ SampleType, data = metadata)
+
+# Make boxplots for weighted unifrac
+wuf.dist <- read.csv(file.path(path, "decontam/phyloseq/milk/PMA_MilkType_Distances_noPMA_andPMA.csv"))
+wuf.dist$MilkType = factor(wuf.dist$MilkType,levels=c("Raw_milk","HTST_feed","HTST_milk"))
+
+ggplot(subset(wuf.dist, PMA == "Y"), aes(x=MilkType, y=weighted_distance))+
+  geom_boxplot(position = position_dodge(0.77))+
+  #facet_wrap(~ PMA) +
+  labs(y = "Weighted Unifrac")+
+  theme_bw(base_size = 18) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+# ANOVA
+fit <- aov(weighted_distance ~ MilkType, data = subset(wuf.dist, PMA == "Y"))
+summary(fit)
+# post hoc
+attach(subset(wuf.dist, PMA == "Y"))
+pairwise.t.test(weighted_distance, MilkType, p.adjust.method = "none")[[3]]
 ```
 
 ### 1.3 CheeseOutcome with 4hr (1 set) HTST feed and pasteurized milk 
