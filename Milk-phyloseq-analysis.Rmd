@@ -174,8 +174,8 @@ alphaHTSTfig <- function(x, samType, w, h, path.out){
   ggplot(x, aes(x = SampleType, y = value, fill = CheeseOutcome))+ 
   geom_boxplot() +
   scale_fill_manual(values = c("no_slits" = "#a6cee3", "slits" = "#1f78b4")) +
-  facet_wrap(facets = ~ measure, scales = "free_y") + #strip.position="right"
-  theme_bw()+
+  facet_wrap(facets = ~ measure, scales = "free_y") +
+  theme_bw(base_size = 15)+
   xlab(samType)
   #dev.off()
 }
@@ -355,7 +355,7 @@ ggplot(qPCRY_agg2, aes(x=Collection.time, y=mean, group=CheeseOutcome,color=Chee
   scale_color_manual(values=c("no_slits" = "#a6cee3", "slits" = "#1f78b4"))+
   facet_wrap(~Description, scales = "fixed")+
   theme(axis.text.x = element_text(angle = 45, hjust = 1))+
-  ylab("Log 16S rRNA gene copy/mL")+
+  ylab("Log cells/mL")+
   ggtitle("PMA treated samples")
 ## Bacillus 
 ggplot(data=taxa.milkY5_agg[taxa.milkY5_agg$Genus == "Bacillus",] , 
@@ -366,7 +366,7 @@ ggplot(data=taxa.milkY5_agg[taxa.milkY5_agg$Genus == "Bacillus",] ,
   scale_color_manual(values=c("no_slits" = "#a6cee3", "slits" = "#1f78b4"))+
   facet_wrap(~SampleType, scales = "fixed")+
   theme(axis.text.x = element_text(angle = 45, hjust = 1))+
-  ylab("Log 16S rRNA gene copy/mL")+
+  ylab("Log cells/mL")+
   ggtitle("PMA treated samples")
 ## Brevibacillus
 ggplot(data=taxa.milkY5_agg[taxa.milkY5_agg$Genus == "Brevibacillus",] , 
@@ -377,7 +377,7 @@ ggplot(data=taxa.milkY5_agg[taxa.milkY5_agg$Genus == "Brevibacillus",] ,
   scale_color_manual(values=c("no_slits" = "#a6cee3", "slits" = "#1f78b4"))+
   facet_wrap(~SampleType, scales = "fixed")+
   theme(axis.text.x = element_text(angle = 45, hjust = 1))+
-  ylab("Log 16S rRNA gene copy/mL")+
+  ylab("Log cells/mL")+
   ggtitle("PMA treated samples")
 ## Corynebacterium
 ggplot(data=taxa.milkY5_agg[taxa.milkY5_agg$Genus == "Corynebacterium",] , 
@@ -1541,9 +1541,9 @@ qPCR4.3Ym$facet <- "Log10 16s rRNA gene copies/ml"
 ggplot(qPCR4.3Ym, aes(x=SampleType, y=LogCellsML, fill=CheeseOutcome.y))+ 
   geom_boxplot() +
   scale_fill_manual(values=c("no_slits"="#a6cee3", "slits"="#1f78b4")) +
-  theme_bw()+
-  facet_wrap(~ facet)+
-  xlab("PMA treated samples")
+  theme_bw(base_size = 15)+
+  #facet_wrap(~ facet)+
+  ylab("Log cells/ml")
 aov(LogCellsML ~ CheeseOutcome.y, 
     data = subset(qPCR4.3Ym, SampleType %in% "HTST_feed")) %>% summary()
 aov(LogCellsML ~ CheeseOutcome.y, 
