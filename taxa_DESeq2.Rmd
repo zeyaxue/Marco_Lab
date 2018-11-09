@@ -437,10 +437,10 @@ MilkHeat <- function(ps, taxa, samType, w, h, path.out) {
   
   png(path.out, width = w, height = h)
   (superheat(taxa.cast.f,
-            left.label.size = 0.2, 
+            left.label.size = 0.7, 
             bottom.label.size = 0.1,
             order.rows = rev(order(rownames(taxa.cast.f))),
-            order.cols = c("1",2,3), # follow raw --> feed --> htst milk
+            order.cols = c(3,1,2), # follow raw --> feed --> htst milk
             #col.dendrogram = TRUE,
             grid.hline = FALSE,
             title = samType,
@@ -1133,7 +1133,7 @@ MilkHeat(ps.allmilkY, comm14,
          samType = "PMA treated milk", w = 450, h = 600,
          path.out = file.path(path, "milk/fig_SampleType/milkY.png"))
 MilkHeat(ps.allmilkN, comm14, 
-         samType = "PMA untreated milk", w = 450, h = 700,
+         samType = "PMA untreated milk", w = 450, h = 600,
          path.out = file.path(path, "milk/fig_SampleType/milkN.png"))
 
 
