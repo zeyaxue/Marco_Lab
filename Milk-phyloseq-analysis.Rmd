@@ -187,7 +187,7 @@ alpha.coN1
 # Function to plot Shannon and Simpson diversity for HTST_feed and HTST_milk
 alphaHTSTfig <- function(x, samType, w, h, path.out){
   x <- subset(x, SampleType %in% c("HTST_feed", "HTST_milk"))
-  x <- subset(x, measure %in% c("Shannon", "Simpson")) 
+  x <- subset(x, measure %in% c("Shannon", "Observed")) 
          
   pdf(path.out, width = w, height = h)
   (ggplot(x, aes(x = SampleType, y = value, fill = CheeseOutcome))+ 
@@ -201,11 +201,11 @@ alphaHTSTfig <- function(x, samType, w, h, path.out){
 
 # Generate figures for only HTST feed and HTST milk 
 alphaHTSTfig(alpha.milkY1m, 
-             samType = "PMA treated samples", w = 7.5, h = 2.5,
+             samType = "PMA treated samples", w = 8.5, h = 3.3,
              path.out = file.path(path, "milk/alpha/alphaY.pdf"))
 alphaHTSTfig(alpha.milkN1m, 
-             samType = "PMA untreated samples", w = 600, h = 250,
-             path.out = file.path(path, "milk/alpha/alphaN.png"))
+             samType = "PMA untreated samples", w = 8.5, h = 3.3,
+             path.out = file.path(path, "milk/alpha/alphaN.pdf"))
 # ANOVA test on the diversity
 AlphaANOVA(subset(alpha.milkY1m, SampleType %in% "HTST_feed"))
 AlphaANOVA(subset(alpha.milkY1m, SampleType %in% "HTST_milk"))
@@ -750,11 +750,11 @@ fig_list <- lapply(dat_list, function(x){
 })
 #make the figure
 #legend <- get_legend(fig_list[[1]])
-pdf()
+pdf(file.path(path,"milk/fig/wuf_NMDSY.pdf"), w = 7.1, h = 3.2)
 plot_grid(fig_list[[1]] + theme(legend.position = "none"),
           fig_list[[2]] + theme(legend.position = "none"),
           nrow = 1, align="hv",  labels= c("A","B"))
-
+dev.off()
 # Adonis test
 AdonisWuf(subset_samples(ps.milk4.3Y, SampleType %in% "HTST_feed"))
 AdonisWuf(subset_samples(ps.milk4.3Y, SampleType %in% "HTST_milk"))
@@ -795,13 +795,16 @@ fig_list <- lapply(dat_list, function(x){
     facet_wrap(~SampleType, scales = "fixed")+
     ylab("NMDS 2")+ 
     xlab("NMDS 1")+
-    theme_bw()
+    theme_bw() +
+    theme(text = element_text(size = 15)) 
 })
 #make the figure
-legend <- get_legend(fig_list[[1]])
+#legend <- get_legend(fig_list[[1]])
+pdf(file.path(path,"milk/fig/wuf_NMDSN.pdf"), w = 7.1, h = 3.2)
 plot_grid(fig_list[[1]] + theme(legend.position = "none"),
           fig_list[[2]] + theme(legend.position = "none"),
-          legend, nrow = 1, align="hv",  labels= c("A","B"))
+          nrow = 1, align="hv",  labels= c("A","B"))
+dev.off()
 # Adonis
 AdonisWuf(subset_samples(ps.milk4.3N, SampleType %in% "HTST_feed"))
 AdonisWuf(subset_samples(ps.milk4.3N, SampleType %in% "HTST_milk"))
@@ -814,8 +817,8 @@ Now that I have the phyloseq containing milk samples (1 set) that were collected
 ```{r}
 # Define ANOVA for alpha diversity testing
 AlphaANOVA <- function(x){
-    fit.sha <- aov(value ~ CheeseOutcome, data = subset(x, measure %in% "Shannon"))
-    fit.sim <- aov(value ~ CheeseOutcome, data = subset(x, measure %in% "Simpson"))
+    fit.sha <- aov(value ~ CheeseOutcome, data = subset(x, measure %in% "Observed"))
+    fit.sim <- aov(value ~ CheeseOutcome, data = subset(x, measure %in% "Shannon"))
     y <- summary(fit.sha)[[1]]
     y <- rbind(y, summary(fit.sim)[[1]])
     y
@@ -885,7 +888,7 @@ qPCR4.3Nm <- melt(qPCR4.3N, id.vars = c("Week.y","CheeseOutcome.y","SampleType",
 ```{r fig.height=3, fig.width=4.3}
 # PMA treated 
 qPCR4.3Ym$facet <- "Log cells/ml"
-pdf(file.path(path,"milk/alpha/log4.3Y.pdf"), w = 5, h = 2.5)
+pdf(file.path(path,"milk/alpha/log4.3Y.pdf"), w = 5.5, h = 3.3)
 ggplot(qPCR4.3Ym, aes(x=SampleType, y=LogCellsML, fill=CheeseOutcome.y))+ 
   geom_boxplot() +
   scale_fill_manual(values=c("no_slits"="#a6cee3", "slits"="#1f78b4")) +
@@ -900,7 +903,7 @@ aov(LogCellsML ~ CheeseOutcome.y,
 
 # PMA untreated
 qPCR4.3Nm$facet <- "Log cells/ml"
-pdf(file.path(path,"milk/alpha/log4.3N.pdf"), w = 5, h = 2.5)
+pdf(file.path(path,"milk/alpha/log4.3N.pdf"), w = 5.5, h = 3.3)
 ggplot(qPCR4.3Nm, aes(x=SampleType, y=LogCellsML, fill=CheeseOutcome.y))+ 
   geom_boxplot() +
   scale_fill_manual(values=c("no_slits"="#a6cee3", "slits"="#1f78b4")) +
