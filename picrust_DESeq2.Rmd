@@ -691,5 +691,50 @@ for(i in 1:length(comm$X)){
   LinePlot2(ps10.tsclean.commN, x = comm$X[i], w = 4.5, h = 3.5, 
             path.out = file.path(path, "picrust/fig_TiSinCleaning/N", paste(comm$X[i], ".pdf", sep ='')))
 }
+
+# Define ANOVA test for figures of each pathway 
+```{r}
+TiSiCleanANOVA <- function(ps, x, path.out){
+  agg <- psmelt(ps)
+  
+  fit <- aov(Abundance ~ TimeSinceCleaning, data = subset(agg, KEGG_Pathways3 %in% x))
+  y <- summary(fit)[[1]]
+  if (y$`Pr(>F)`[1] == "NaN"){  # if might be NaN value if taxa abudance is 0
+    print(paste(x, "abundance is 0", sep = ' '))
+  } else if (y$`Pr(>F)`[1] >= 0.08) { # Indicate if not significant
+    print(paste(x, "is not significant", sep = ' '))
+  } else if (y$`Pr(>F)`[1] < 0.08){ # If significant, move on to post hoc test
+    attach(subset(agg, KEGG_Pathways3 %in% x))
+    z <- pairwise.t.test(Abundance, TimeSinceCleaning, p.adjust.method = "none")[[3]]
+    detach()
+    write.csv(z, path.out)
+  }
+}
+
+# Loop ANOVA test for all taxa in HTST milk ## PMA treated
+ps10.tsclean.commYhtst <-  subset_samples(ps10.tsclean.commY, SampleType %in% "HTST_milk")
+for(i in 1:length(tax_table(ps10.tsclean.commYhtst)[,3])){
+  TiSiCleanANOVA(ps, x = tax_table(ps10.tsclean.commYhtst)[,3][i],
+                 path.out = file.path(path, "picrust/fig_TiSinCleaning/htstY/ANOVA", paste(tax_table(ps10.tsclean.commYhtst)[,3][i],".csv", sep ='')))
+}
+# Loop ANOVA test for all taxa in HTST milk ## PMA UNtreated
+ps10.tsclean.commNhtst <-  subset_samples(ps10.tsclean.commN, SampleType %in% "HTST_milk")
+for(i in 1:length(tax_table(ps10.tsclean.commNhtst)[,3])){
+  TiSiCleanANOVA(ps, x = tax_table(ps10.tsclean.commNhtst)[,3][i],
+                 path.out = file.path(path, "picrust/fig_TiSinCleaning/htstN/ANOVA", paste(tax_table(ps10.tsclean.commNhtst)[,3][i],".csv", sep ='')))
+}
+
+# Loop ANOVA test for all taxa in HTST feed ## PMA treated
+ps10.tsclean.commYfeed <-  subset_samples(ps10.tsclean.commY, SampleType %in% "HTST_feed")
+for(i in 1:length(tax_table(ps10.tsclean.commYfeed)[,3])){
+  TiSiCleanANOVA(ps, x = tax_table(ps10.tsclean.commYfeed)[,3][i],
+                 path.out = file.path(path, "picrust/fig_TiSinCleaning/feedY/ANOVA", paste(tax_table(ps10.tsclean.commYfeed)[,3][i],".csv", sep ='')))
+}
+# Loop ANOVA test for all taxa in HTST feed ## PMA UNtreated
+ps10.tsclean.commNfeed <-  subset_samples(ps10.tsclean.commN, SampleType %in% "HTST_feed")
+for(i in 1:length(tax_table(ps10.tsclean.commNfeed)[,3])){
+  TiSiCleanANOVA(ps, x = tax_table(ps10.tsclean.commNfeed)[,3][i],
+                 path.out = file.path(path, "picrust/fig_TiSinCleaning/feedN/ANOVA", paste(tax_table(ps10.tsclean.commNfeed)[,3][i],".csv", sep ='')))
+}
 ```
 
