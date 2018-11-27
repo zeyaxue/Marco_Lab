@@ -113,9 +113,15 @@ AlphaMilkType(alpha.milkN1m, w = 6.5, h = 3.8,
 attach(subset(alpha.milkY1m, measure == "Observed"))
 pairwise.t.test(value, SampleType, p.adjust.method = "none")[[3]]
 detach()
+attach(subset(alpha.milkY1m, measure == "Shannon"))
+pairwise.t.test(value, SampleType, p.adjust.method = "none")[[3]]
+detach()
 
-attach(subset(alpha.milk, PMA == "Y"))
-pairwise.t.test(LogCellsML, TimeSinceCleaning, p.adjust.method = "none")[[3]]
+attach(subset(alpha.milkN1m, measure == "Observed"))
+pairwise.t.test(value, SampleType, p.adjust.method = "none")[[3]]
+detach()
+attach(subset(alpha.milkN1m, measure == "Shannon"))
+pairwise.t.test(value, SampleType, p.adjust.method = "none")[[3]]
 detach()
 ```
 
@@ -592,6 +598,11 @@ summary(fit)
 # post hoc
 attach(subset(wuf.dist, PMA == "Y"))
 pairwise.t.test(weighted_distance, MilkType, p.adjust.method = "none")[[3]]
+detach()
+attach(subset(wuf.dist, PMA == "N"))
+pairwise.t.test(weighted_distance, MilkType, p.adjust.method = "none")[[3]]
+detach()
+
 ```
 
 ### 1.3 CheeseOutcome with 4hr (1 set) HTST feed and pasteurized milk 
