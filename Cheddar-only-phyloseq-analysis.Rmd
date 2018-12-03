@@ -12,6 +12,7 @@ knitr::opts_chunk$set(echo = TRUE)
 ## Load needed packages
 ```{r}
 library(phyloseq);packageVersion("phyloseq")
+library(vegan)
 library(ggplot2);packageVersion("ggplot2")
 library(DESeq2);packageVersion("DESeq2")
 library(reshape2)
@@ -100,7 +101,7 @@ alphaHTSTfig(alpha.CheddarY1m,
              samType = "PMA treated samples", w = 6.5, h = 2.4,
              path.out = file.path(path, "cheddar/alpha/alphaY.pdf"))
 alphaHTSTfig(alpha.CheddarN1m, 
-             samType = "PMA untreated samples", w = 6.5, h = 2.6,
+             samType = "PMA untreated samples", w = 6.5, h = 2.4,
              path.out = file.path(path, "cheddar/alpha/alphaN.pdf"))
 
 
@@ -182,12 +183,26 @@ NMDSfig <- function(ps, w, h, path.out){
 # beta plot per sample type
 NMDSfig(ps.Cheddar.noLY, w = 10.6, h = 2.4, 
         path.out = file.path(path, "cheddar/beta/chedY.pdf"))
+NMDSfig(ps.Cheddar.noLN, w = 10.6, h = 2.4, 
+        path.out = file.path(path, "cheddar/beta/chedN.pdf"))
 
 
+## Define function for Adonis on weighted unifrac distance
+AdonisWuf <- function(ps){
+  wuf.dist <- phyloseq::distance(ps, method = "wunifrac")  # dist matrix
+  sampledf <- data.frame(sample_data(ps))  # data frame from the sample_data
+  adonis(wuf.dist ~ CheeseOutcome, data = sampledf)
+}
 
 # Adonis test
-AdonisWuf(subset_samples(ps.milk4.3Y, SampleType %in% "HTST_feed"))
-AdonisWuf(subset_samples(ps.milk4.3Y, SampleType %in% "HTST_milk"))
+AdonisWuf(subset_samples(ps.Cheddar.noLY, SampleType %in% "Cheese_0D"))
+AdonisWuf(subset_samples(ps.Cheddar.noLY, SampleType %in% "Cheese_30D"))
+AdonisWuf(subset_samples(ps.Cheddar.noLY, SampleType %in% "Cheese_90D"))
+AdonisWuf(subset_samples(ps.Cheddar.noLY, SampleType %in% "Cheese_120D"))
+AdonisWuf(subset_samples(ps.Cheddar.noLN, SampleType %in% "Cheese_0D"))
+AdonisWuf(subset_samples(ps.Cheddar.noLN, SampleType %in% "Cheese_30D"))
+AdonisWuf(subset_samples(ps.Cheddar.noLN, SampleType %in% "Cheese_90D"))
+AdonisWuf(subset_samples(ps.Cheddar.noLN, SampleType %in% "Cheese_120D"))
 ```
 
 ## Get Lactobacillus sequences
