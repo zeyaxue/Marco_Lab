@@ -190,7 +190,7 @@ alpha.coN1 <- ggplot(alpha.milkN1m, aes(x=SampleType, y=value, fill=CheeseOutcom
   xlab("PMA untreated samples by milk type")
 alpha.coN1
 
-# Function to plot Shannon and Simpson diversity for HTST_feed and HTST_milk
+# Define function to plot Shannon and observed diversity for HTST_feed and HTST_milk
 alphaHTSTfig <- function(x, samType, w, h, path.out){
   x <- subset(x, SampleType %in% c("HTST_feed", "HTST_milk"))
   x <- subset(x, measure %in% c("Shannon", "Observed")) 
