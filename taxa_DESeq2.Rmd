@@ -984,7 +984,6 @@ ggplot(subset(qPCR.agg, PMA == "N"), aes(x = TimeSinceCleaning, y = mean, color 
 dev.off()
 
 
-
 # loop for all specific taxa
 for(i in 1:length(tax_table(ps.milkq)[,6])){
   LinePlot(ps.milkq, x = tax_table(ps.milkq)[,6][i], w = 4.5, h = 3.5, 
@@ -1055,6 +1054,35 @@ LinePlot3(ps.htstqY, x = res.lo, w = 4.5, h = 3.5,
 LinePlot3(ps.htstqY, x = res.xs, w = 4.5, h = 3.5, 
           path.out = file.path(path, "milk/fig_TiSinCleaning/htstqY/xs_taxa.pdf"))
 ```
+
+# Check for normality of the data before ANOVA
+```{r}
+NormCheck <- function(ps, x, w, h, path.out){
+  melt <- psmelt(ps)
+  
+  pdf(path.out, width = w, height = h)
+  attach(subset(melt, Genus %in% x))
+  hist(Abundance, probability = T)
+  lines(density(Abundance), col = 2)
+  detach()
+  dev.off()
+}
+
+# plot to get all the normality plots 
+for(i in 1:length(tax_table(ps.htstqY)[,6])){
+  NormCheck(ps.htstqY, x = tax_table(ps.htstqY)[,6][i], w = 4.5, h = 3.5, 
+            path.out = file.path(path, "milk/normality/htstqY", paste(tax_table(ps.htstqY)[,6][i],".pdf", sep ='')))
+}
+for(i in 1:length(tax_table(ps.feedqY)[,6])){
+  NormCheck(ps.feedqY, x = tax_table(ps.feedqY)[,6][i], w = 4.5, h = 3.5, 
+            path.out = file.path(path, "milk/normality/feedqY", paste(tax_table(ps.feedqY)[,6][i],".pdf", sep ='')))
+}
+
+
+
+```
+The distribution of taxa was not normal at all....Use Kruskal wallis test instead of ANOVA
+
 
 ## ANOVA line figures for each taxa 
 ```{r}
