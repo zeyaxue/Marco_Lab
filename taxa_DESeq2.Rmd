@@ -1095,7 +1095,7 @@ TiSiCleanKW <- function(ps, x, path.out){
   # if overall value < 0.05, move on with post hoc test
   if (y == "NaN"){  # if might be NaN value if taxa abudance is 0
     print(paste(x, "abundance is 0", sep = ' '))
-  } else if (y < 0.08){
+  } else if (y < 0.05){
     attach(subset(agg, Genus %in% x))
     # because Nemenyi is no appropriate for groups with unequal sample sizes
     z <- posthoc.kruskal.dunn.test(Abundance, TimeSinceCleaning, p.adjust.method = "none")[[3]]
@@ -1111,13 +1111,13 @@ for(i in 1:length(tax_table(ps.htstqY)[,6])){
 }
 # Loop ANOVA test for all taxa in HTST milk ## PMA UNtreated
 for(i in 1:length(tax_table(ps.htstqN)[,6])){
-  TiSiCleanANOVA(ps.htstqN, x = tax_table(ps.htstqN)[,6][i],
-                 path.out = file.path(path, "milk/fig_TiSinCleaning/htstqN/KW", paste(tax_table(ps.htstqN)[,6][i],".csv", sep ='')))
+  TiSiCleanKW(ps.htstqN, x = tax_table(ps.htstqN)[,6][i],
+              path.out = file.path(path, "milk/fig_TiSinCleaning/htstqN/KW", paste(tax_table(ps.htstqN)[,6][i],".csv", sep ='')))
 }
 # Loop ANOVA test for all taxa in HTST feed ## PMA treated
 for(i in 1:length(tax_table(ps.feedqY)[,6])){
-  TiSiCleanANOVA(ps.feedqY, x = tax_table(ps.feedqY)[,6][i],
-                 path.out = file.path(path, "milk/fig_TiSinCleaning/feedqY/ANOVA", paste(tax_table(ps.feedqY)[,6][i],".csv", sep ='')))
+  TiSiCleanKW(ps.feedqY, x = tax_table(ps.feedqY)[,6][i],
+              path.out = file.path(path, "milk/fig_TiSinCleaning/feedqY/KW", paste(tax_table(ps.feedqY)[,6][i],".csv", sep ='')))
 }
 
 # ANOVA function for qPCR files
