@@ -23,6 +23,7 @@ library(reshape2)
 library(superheat)
 library(plyr)
 library(dplyr)
+library(PMCMR) # pairwise comparison
 
 
 # Define project path
@@ -1084,33 +1085,34 @@ for(i in 1:length(tax_table(ps.feedqY)[,6])){
 The distribution of taxa was not normal at all....Use Kruskal wallis test instead of ANOVA
 
 
-## ANOVA line figures for each taxa 
+## Kruskal Wallis (KW) line figures for each taxa 
 ```{r}
-TiSiCleanANOVA <- function(ps, x, path.out){
+TiSiCleanKW <- function(ps, x, path.out){
   agg <- psmelt(ps)
   
   fit <- aov(Abundance ~ TimeSinceCleaning, data = subset(agg, Genus %in% x))
-  y <- summary(fit)[[1]]
+  y <- fit[[3]]  # p-value
   # if overall value < 0.05, move on with post hoc test
-  if (y$`Pr(>F)`[1] == "NaN"){  # if might be NaN value if taxa abudance is 0
+  if (y == "NaN"){  # if might be NaN value if taxa abudance is 0
     print(paste(x, "abundance is 0", sep = ' '))
-  } else if (y$`Pr(>F)`[1] < 0.08){
+  } else if (y < 0.08){
     attach(subset(agg, Genus %in% x))
-    z <- pairwise.t.test(Abundance, TimeSinceCleaning, p.adjust.method = "none")[[3]]
+    # because Nemenyi is no appropriate for groups with unequal sample sizes
+    z <- posthoc.kruskal.dunn.test(Abundance, TimeSinceCleaning, p.adjust.method = "none")[[3]]
     detach()
     write.csv(z, path.out)
   }
 }
 
-# Loop ANOVA test for all taxa in HTST milk ## PMA treated
+# Loop KW test for all taxa in HTST milk ## PMA treated
 for(i in 1:length(tax_table(ps.htstqY)[,6])){
-  TiSiCleanANOVA(ps.htstqY, x = tax_table(ps.htstqY)[,6][i],
-                 path.out = file.path(path, "milk/fig_TiSinCleaning/htstqY/ANOVA", paste(tax_table(ps.htstqY)[,6][i],".csv", sep ='')))
+  TiSiCleanKW(ps.htstqY, x = tax_table(ps.htstqY)[,6][i],
+              path.out = file.path(path, "milk/fig_TiSinCleaning/htstqY/KW", paste(tax_table(ps.htstqY)[,6][i],".csv", sep ='')))
 }
 # Loop ANOVA test for all taxa in HTST milk ## PMA UNtreated
 for(i in 1:length(tax_table(ps.htstqN)[,6])){
   TiSiCleanANOVA(ps.htstqN, x = tax_table(ps.htstqN)[,6][i],
-                 path.out = file.path(path, "milk/fig_TiSinCleaning/htstqN/ANOVA", paste(tax_table(ps.htstqN)[,6][i],".csv", sep ='')))
+                 path.out = file.path(path, "milk/fig_TiSinCleaning/htstqN/KW", paste(tax_table(ps.htstqN)[,6][i],".csv", sep ='')))
 }
 # Loop ANOVA test for all taxa in HTST feed ## PMA treated
 for(i in 1:length(tax_table(ps.feedqY)[,6])){
