@@ -1192,3 +1192,89 @@ TiSinBar(ps.milkqN,
 
 ```
 
+# Log odds ratio plot with 95% confidence level (Cl)
+```{r}
+FisherSlit <- function(ps, Genus){
+  melt <- psmelt(ps)
+  
+  agg <- ddply(melt, c("CheeseOutcome","Genus"),
+               summarise,
+               N = length(Abundance),
+               mean = mean(Abundance),
+               sd = sd(Abundance),
+               se = sd / sqrt(N))
+  Tab <- acast(melt, formula = Genus ~ CheeseOutcome, value.var = "Abundance",
+               fun.aggregate = mean)
+  fisher.test(Tab, alternative = "greater",workspace=2e9) # Otherwise the workspace runs out of space
+                )
+  
+}
+
+```
+
+
+
+# Import Lactobacillus qPCR results 
+Only PMA samples were quantified using qPCR. 
+```{r}
+# 12/13/2018 !!!!!!!! Need to update once Kay finished all qPCR
+qPCR.Lb <- read.csv(file.path(path, "mapping/Lactobacillus_qPCR_ZX.csv"))
+
+# melt dataframe to be suited for ploting
+qPCR.Lbm <- melt(qPCR.Lb, id.vars = c("Week","CheeseOutcome","SampleType","Lb_helveticus","Lb_fermentum"),
+                 variable.name = "measure",
+                 value.name = "value")
+qPCR.Lbm$SampleType <- factor(qPCR.Lbm$SampleType, 
+                              levels = c("HTST_feed","HTST_milk", 
+                                         "Cheese_0D","Cheese_30D","Cheese_90D",
+                                         "Cheese_120D"))
+
+
+
+ggplot(qPCR.Lbm, aes(x=SampleType, y=Lb_helveticus, fill=CheeseOutcome))+ 
+  geom_boxplot() +
+  scale_fill_manual(values=c("no_slits"="#a6cee3", "slits"="#1f78b4")) +
+  theme_bw()+
+  theme(text = element_text(size = 15),axis.text.x = element_text(angle = 45, hjust = 1))+
+  ylab("Log10 cells/ml")+
+  ggtitle("Lactobacillus helveticus")   
+ggplot(qPCR.Lbm, aes(x=SampleType, y=Lb_fermentum, fill=CheeseOutcome))+ 
+  geom_boxplot() +
+  scale_fill_manual(values=c("no_slits"="#a6cee3", "slits"="#1f78b4")) +
+  theme_bw()+
+  theme(text = element_text(size = 15),axis.text.x = element_text(angle = 45, hjust = 1))+
+  ylab("Log10 cells/ml")+
+  ggtitle("Lactobacillus fermentum") 
+
+#
+helveticusKW <- function(x, sample){
+  kruskal.test(subset(x, SampleType %in% sample), Lb_helveticus ~ CheeseOutcome)
+  attach(subset(x, SampleType %in% sample))
+  # because Nemenyi is no appropriate for groups with unequal sample sizes
+  z <- posthoc.kruskal.dunn.test(Lb_helveticus, CheeseOutcome, p.adjust.method = "none")[[3]]
+  detach()
+  z
+}
+helveticusKW(qPCR.Lbm, sample = "HTST_feed")
+helveticusKW(qPCR.Lbm, sample = "HTST_milk")
+helveticusKW(qPCR.Lbm, sample = "Cheese_0D")
+helveticusKW(qPCR.Lbm, sample = "Cheese_30D")
+helveticusKW(qPCR.Lbm, sample = "Cheese_90D")
+helveticusKW(qPCR.Lbm, sample = "Cheese_120D")
+
+
+#
+fermentumKW <- function(x, sample){
+  kruskal.test(subset(x, SampleType %in% sample), Lb_fermentum ~ CheeseOutcome)
+  attach(subset(x, SampleType %in% sample))
+  # because Nemenyi is no appropriate for groups with unequal sample sizes
+  z <- posthoc.kruskal.dunn.test(Lb_helveticus, CheeseOutcome, p.adjust.method = "none")[[3]]
+  detach()
+  z
+}
+fermentumKW(qPCR.Lbm, sample = "HTST_feed")
+fermentumKW(qPCR.Lbm, sample = "HTST_milk")
+fermentumKW(qPCR.Lbm, sample = "Cheese_0D")
+fermentumKW(qPCR.Lbm, sample = "Cheese_30D")
+fermentumKW(qPCR.Lbm, sample = "Cheese_90D")
+fermentumKW(qPCR.Lbm, sample = "Cheese_120D")
