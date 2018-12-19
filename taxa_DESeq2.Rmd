@@ -1220,19 +1220,62 @@ Rarefy <- function(ps, depth){
 }
 
 # Define function to plot Log odds ratio plot
-LogPlot <- function(df){
+LogPlot <- function(df, samType, path.out, w, h){
   ### organize in Excel the output from LogOR()
-  ggplot(df, aes(x = X, y = LogOR, ymin = Log2.5, ymax = Log97.5))+
+  pdf(path.out, w, h)
+  (ggplot(df, aes(x = X, y = LogOR, ymin = Log2.5, ymax = Log97.5))+
     geom_point()+
     geom_pointrange() + 
-    # plus a fixed scale 
-    theme_bw() +
-    coord_flip()
+    geom_hline(yintercept = 0)+
+    ggtitle(samType)+
+    theme_bw(base_size = 16) +
+    coord_flip()) %>% print()
+  dev.off()
 }
 
+# PMA treated HTST milk
 LogOR(Rarefy(ps.htst4Y, 2000), 
       file.path(path, "milk/fig_LogOR_biomarker/htst4Y.csv"))
-LogPlot(read.csv(file.path(path, "milk/fig_LogOR_biomarker/htst4Y - Copy.csv")))
+LogPlot(read.csv(file.path(path, "milk/fig_LogOR_biomarker/htst4Y - Copy.csv")), 
+        samType = "PMA treated HTST milk",
+        path.out = file.path(path, "milk/fig_LogOR_biomarker/htst4Y.pdf"),
+        w = 6, h = 4.2)
+# PMA treated HTST feed
+LogOR(Rarefy(ps.feed4Y, 2000), 
+      file.path(path, "milk/fig_LogOR_biomarker/feed4Y.csv"))
+LogPlot(read.csv(file.path(path, "milk/fig_LogOR_biomarker/feed4Y copy.csv")), 
+        samType = "PMA treated HTST feed",
+        path.out = file.path(path, "milk/fig_LogOR_biomarker/feed4Y.pdf"),
+        w = 6, h = 4.2)
+
+# PMA treated cheese 0 day
+LogOR(ps.chedY.noL0, 
+      file.path(path, "cheddar/fig_LogOR_biomarker/chedY.noL0.csv"))
+LogPlot(read.csv(file.path(path, "cheddar/fig_LogOR_biomarker/chedY.noL0 copy.csv")), 
+        samType = "PMA treated cheddar 0 day",
+        path.out = file.path(path, "cheddar/fig_LogOR_biomarker/chedY.noL0.pdf"),
+        w = 6, h = 4.2)
+# PMA treated cheese 30 day
+LogOR(ps.chedY.noL30, 
+      file.path(path, "cheddar/fig_LogOR_biomarker/chedY.noL30.csv"))
+LogPlot(read.csv(file.path(path, "cheddar/fig_LogOR_biomarker/chedY.noL30 copy.csv")), 
+        samType = "PMA treated cheddar 30 day",
+        path.out = file.path(path, "cheddar/fig_LogOR_biomarker/chedY.noL30.pdf"),
+        w = 6, h = 4.2)
+# PMA treated cheese 90 day
+LogOR(ps.chedY.noL90, 
+      file.path(path, "cheddar/fig_LogOR_biomarker/chedY.noL90.csv"))
+LogPlot(read.csv(file.path(path, "cheddar/fig_LogOR_biomarker/chedY.noL90 copy.csv")), 
+        samType = "PMA treated cheddar 90 day",
+        path.out = file.path(path, "cheddar/fig_LogOR_biomarker/chedY.noL90.pdf"),
+        w = 6, h = 4.2)
+# PMA treated cheese 120 day
+LogOR(ps.chedY.noL120, 
+      file.path(path, "cheddar/fig_LogOR_biomarker/chedY.noL120.csv"))
+LogPlot(read.csv(file.path(path, "cheddar/fig_LogOR_biomarker/chedY.noL120 copy.csv")), 
+        samType = "PMA treated cheddar 120 day",
+        path.out = file.path(path, "cheddar/fig_LogOR_biomarker/chedY.noL120.pdf"),
+        w = 6, h = 4.2)
 
 ```
 
