@@ -1192,27 +1192,23 @@ TiSinBar(ps.milkqN,
 
 ```
 
-# Define function of Log odds ratio plot with 95% confidence level (Cl)
+# Make log odds ratios plot for biomarker taxa 
 ```{r}
 library(questionr)
-LogOR <- function(ps, Genus){
+# Define function of Log odds ratio plot with 95% confidence level (Cl)
+LogOR <- function(ps, path.out){
   melt <- psmelt(ps)
   melt$Abundance <- factor(melt$Abundance)
   
-  reg <- glm(Abundance ~ Genus + CheeseOutcome, data = melt, family = binomial)
-  odds.ratio(reg)
+  reg <- glm(CheeseOutcome ~ Abundance + Genus, data = melt, family = binomial)
+  OR.tab <- odds.ratio(reg, level = 0.95)  # factor level is no slits vs slits
+  write.csv(OR.tab, path.out)
   
-  
-## not run
-data(hdv2003)
-reg <- glm(cinema ~ sexe + age, data=hdv2003, family=binomial)
-odds.ratio(reg)
-odds.ratio(hdv2003$sport, hdv2003$cuisine)
-odds.ratio(table(hdv2003$sport, hdv2003$cuisine))
-M <- matrix(c(759, 360, 518, 363), ncol = 2)
-odds.ratio(M)
-odds.ratio(0.26, 0.42)
+  OR.tab$LogOR <- log10(OR.tab$OR)
 }
+
+LogOR(ps.htst4Y, file.path(path, "milk/fig_LogOR_biomarker/htst4Y.csv"))
+
 
 ```
 
