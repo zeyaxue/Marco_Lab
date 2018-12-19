@@ -1222,7 +1222,7 @@ Rarefy <- function(ps, depth){
 # Define function to plot Log odds ratio plot
 LogPlot <- function(df){
   ### organize in Excel the output from LogOR()
-  ggplot(df, aes(x = X, y = OR, ymin = X2.50., ymax = X97.50.))+
+  ggplot(df, aes(x = X, y = LogOR, ymin = Log2.5, ymax = Log97.5))+
     geom_point()+
     geom_pointrange() + 
     # plus a fixed scale 
