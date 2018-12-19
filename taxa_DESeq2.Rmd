@@ -1195,20 +1195,44 @@ TiSinBar(ps.milkqN,
 # Make log odds ratios plot for biomarker taxa 
 ```{r}
 library(questionr)
-# Define function of Log odds ratio plot with 95% confidence level (Cl)
+# Define function of Log odds ratio plot with 95% confidence level (Cl) with 
+# logistic modelling for more than 2 groups
 LogOR <- function(ps, path.out){
   melt <- psmelt(ps)
-  melt$Abundance <- factor(melt$Abundance)
+  agg <- ddply(melt, c("CheeseOutcome", "Genus"),
+               summarise,
+               sum = sum(Abundance))
+  cast <- dcast(agg, Genus ~ CheeseOutcome, value.var = "sum")   # keep in long ~ convert to short format
   
-  reg <- glm(CheeseOutcome ~ Abundance + Genus, data = melt, family = binomial)
-  OR.tab <- odds.ratio(reg, level = 0.95)  # factor level is no slits vs slits
-  write.csv(OR.tab, path.out)
-  
+  reg <- glm(cbind(no_slits, slits) ~ Genus, data = cast, family = binomial)
+   
+  OR.tab <- odds.ratio(reg)  # factor level is no slits vs slits
   OR.tab$LogOR <- log10(OR.tab$OR)
+  OR.tab$Log2.5 <- log10(OR.tab[,2])
+  OR.tab$Log97.5 <- log10(OR.tab[,3])
+  write.csv(OR.tab, path.out)
 }
 
-LogOR(ps.htst4Y, file.path(path, "milk/fig_LogOR_biomarker/htst4Y.csv"))
+# Define rarefaction function
+Rarefy <- function(ps, depth){
+  phyloseq::rarefy_even_depth(ps, sample.size = depth, replace = TRUE, 
+                              rngseed = 123 , trimOTUs = TRUE, verbose = TRUE)
+}
 
+# Define function to plot Log odds ratio plot
+LogPlot <- function(df){
+  ### organize in Excel the output from LogOR()
+  ggplot(df, aes(x = X, y = OR, ymin = X2.50., ymax = X97.50.))+
+    geom_point()+
+    geom_pointrange() + 
+    # plus a fixed scale 
+    theme_bw() +
+    coord_flip()
+}
+
+LogOR(Rarefy(ps.htst4Y, 2000), 
+      file.path(path, "milk/fig_LogOR_biomarker/htst4Y.csv"))
+LogPlot(read.csv(file.path(path, "milk/fig_LogOR_biomarker/htst4Y - Copy.csv")))
 
 ```
 
