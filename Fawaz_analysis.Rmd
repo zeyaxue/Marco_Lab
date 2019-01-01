@@ -1,0 +1,16 @@
+---
+title: "Fawaz analysis"
+author: "Zeya Zhengyao Xue"
+date: "12/31/2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Setting up packages and working directory 
+```{r}
+
+```
+
