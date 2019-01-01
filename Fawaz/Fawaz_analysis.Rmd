@@ -11,6 +11,20 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ## Setting up packages and working directory 
 ```{r}
+library(phyloseq);packageVersion("phyloseq")
+
+path <- "~/Google Drive File Stream/My Drive/UC_Davis/Marco_lab/Fawaz_analysis/"
+```
+
+## Import QIIME2 output and make phyloseq object
+```{r}
+#Transpose the QIIME2 output in excel
+SeqTab <- read.table(file.path(path,"feature-table-mc2.txt"), header = TRUE, stringsAsFactors = FALSE)
+  
+colnames(SeqTab) <- gsub("X","",colnames(SeqTab))
+row.names(SeqTab) <- SeqTab$OTUID
+SeqTab <- SeqTab[,-1]
+SeqTab <- as.matrix.data.frame(SeqTab)
 
 ```
 
