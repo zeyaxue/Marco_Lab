@@ -33,3 +33,58 @@ CFUoverT <- function(x, w, h, path.out) {
 
 CFUoverT(tab.LABr)
 
+
+
+
+
+
+tab.area <- read.csv(file.path(path,"image analysis.csv"))
+tab.area$Species <- factor(tab.area$Species, levels = c("saline", "Lactobacillus plantarum", 
+                                          "milk_no_slits", "milk_slits",
+                                          "Leuconostoc lactis ", 
+                                          "Leuconostoc mesenteroides", 
+                                          "Lactobacillus fermentum "))
+
+# milk inoculated samples 
+tab.arem <- subset(tab.area, Species %in% c("saline", "milk_no_slits", "milk_slits"))
+tab.arem <- subset(tab.arem, Inoculum != "NC4")
+tab.arem <- subset(tab.arem, Inoculum != "NC2")
+
+# Bacterial isolate inoculated samples 
+tab.areb <- subset(tab.area, Species %in% c("saline", "Leuconostoc lactis ", 
+                                            "Leuconostoc mesenteroides", 
+                                            "Lactobacillus fermentum ",
+                                            "Lactobacillus plantarum"))
+tab.areb <- subset(tab.areb, Inoculum != "NC3")
+tab.areb <- subset(tab.areb, Inoculum != "NC1")
+
+# Define function to plot slit area 
+SlitArea <- function(x, path.out, w, h){
+  pdf(path.out, width = w, height = h)
+  print(ggplot(x, aes(x = Species, y = slit_area.)) +
+          geom_boxplot(aes(x = Species, y = slit_area.)) +
+          ylab("slit area%")+
+          xlab("Inoculum")+
+          theme_bw(base_size = 16) +
+          theme(axis.text.x = element_text(angle = 45, hjust = 1)))
+  dev.off()
+}
+
+SlitArea(tab.arem, path.out = file.path(path, "fig/slit_area_milk.pdf"), w = 4, h =3.7)
+SlitArea(tab.areb, path.out = file.path(path, "fig/slit_area_isolates.pdf"), w = 4, h = 4.63)
+
+## Kruskal Wallis (KW) line figures for each taxa 
+library(PMCMR)
+SlitAreaKW <- function(x, path.out){
+  fit <- aov(slit_area. ~ Species, data = x)
+  
+  attach(x)
+  # because Nemenyi is no appropriate for groups with unequal sample sizes
+  Z <- posthoc.kruskal.dunn.test(slit_area., Species, p.adjust.method = "none")[[3]]
+  detach()
+  
+  write.csv(Z, path.out)
+}
+
+SlitAreaKW(tab.arem, path.out = file.path(path, "fig/slit_area_milk_KW.csv"))
+SlitAreaKW(tab.areb, path.out = file.path(path, "fig/slit_area_isolates_KW.csv"))
