@@ -6,10 +6,13 @@ path <- "G:/My Drive/UC_Davis/Marco_lab/milk_microbiota/2017_Hilmar_sampling/iso
 
 tab <- read.csv(file.path(path,"sample information sheet.csv"))
 
-tab.milk <- subset(tab, Species %in% c( "milk_no_slits", "milk_slits")) 
+tab.milk <- subset(tab, Species %in% c( "milk_no_slits", "milk_slits", "saline")) 
+tab.milk <- subset(tab.milk, Aging_Time %in% c("0D", "11D"))
 
 tab.iso <- subset(tab, Species %in% c("Leuconostoc lactis", "Leuconostoc mesenteroides", 
                                                 "Lactobacillus fermentum", "saline"))
+tab.iso <- subset(tab.iso, Aging_Time %in% c("Inoculation", "0D", "5D"))
+
 tab.LABr <- subset(tab.iso, Rifampicin %in% c("R", "NC"))
 tab.LAB <- subset(tab.iso, Rifampicin %in%  c("WT", "NC"))
 
@@ -24,19 +27,59 @@ CFUoverT <- function(x, path.out, w, h) {
                                                   "milk_no_slits", "milk_slits"))
   
   pdf(path.out, w, h)
-  print(ggplot(tabm, aes(x = Aging_Time, y = value, color = Species)) +
+  print(ggplot(tabm, aes(x = Aging_Time, y = value)) +
           geom_boxplot() +
           ylab("Log10(CFU/mL)") +
-          facet_wrap("variable") +
-          theme_bw(base_size = 16))
+          facet_grid(variable ~ Species) +
+          theme_bw(base_size = 16)) 
   dev.off()
 }
 
-CFUoverT(tab.LAB, path.out = file.path(path, "30C_aging_isolates.pdf"), w = 10, h = 2.8)
-CFUoverT(tab.LABr, path.out = file.path(path, "30C_aging_isolatesR.pdf"), w = 10, h = 2.8)
-CFUoverT(tab.milk, path.out = file.path(path, "30C_aging_milk.pdf"), w = 10, h = 2.8)
+CFUoverT(tab.LAB, path.out = file.path(path, "fig/30C_aging_isolates.pdf"), w = 11, h = 7)
+CFUoverT(tab.LABr, path.out = file.path(path, "fig/30C_aging_isolatesR.pdf"), w = 11, h = 7)
+CFUoverT(tab.milk, path.out = file.path(path, "fig/30C_aging_milk.pdf"), w = 8.65, h = 7)
 
 # KW for CFU count 
+TotalCFUKW <- function(x, y, path.out){
+  x <- subset(x, Species %in% y)
+  fit <- aov(Total_CFU.g ~ Aging_Time, data = x)
+  
+  attach(x)
+  # because Nemenyi is no appropriate for groups with unequal sample sizes
+  Z <- posthoc.kruskal.dunn.test(Total_CFU.g, Aging_Time, p.adjust.method = "none")[[3]]
+  detach()
+  
+  write.csv(Z, path.out)
+}
+LABCFUKW <- function(x, y, path.out){
+  x <- subset(x, Species %in% y)
+  fit <- aov(LAB_CFU.g ~ Aging_Time, data = x)
+  
+  attach(x)
+  # because Nemenyi is no appropriate for groups with unequal sample sizes
+  Z <- posthoc.kruskal.dunn.test(LAB_CFU.g, Aging_Time, p.adjust.method = "none")[[3]]
+  detach()
+  
+  write.csv(Z, path.out)
+}
+  
+
+TotalCFUKW(tab.milk, "saline", file.path(path, "fig/Total_salineKW.csv"))
+TotalCFUKW(tab.milk, "milk_no_slits", file.path(path, "fig/Total_milknoslitsKW.csv"))
+TotalCFUKW(tab.milk, "milk_slits", file.path(path, "fig/Total_milkslitsKW.csv"))
+LABCFUKW(tab.milk, "saline", file.path(path, "fig/LAB_salineKW.csv"))
+LABCFUKW(tab.milk, "milk_no_slits", file.path(path, "fig/LAB_milknoslitsKW.csv"))
+LABCFUKW(tab.milk, "milk_slits", file.path(path, "fig/LAB_milkslitsKW.csv"))
+
+
+TotalCFUKW(tab.iso, "saline", file.path(path, "fig/Total_salineKWiso.csv"))
+TotalCFUKW(tab.iso, "Leuconostoc lactis", file.path(path, "fig/Total_LLKW.csv"))
+TotalCFUKW(tab.iso, "Leuconostoc mesenteroides", file.path(path, "fig/Total_LMKW.csv"))
+TotalCFUKW(tab.iso, "Lactobacillus fermentum", file.path(path, "fig/Total_LBFKW.csv"))
+LABCFUKW(tab.iso, "saline", file.path(path, "fig/LAB_salineKWiso.csv"))
+LABCFUKW(tab.iso, "Leuconostoc lactis", file.path(path, "fig/LAB_LLKW.csv"))
+LABCFUKW(tab.iso, "Leuconostoc mesenteroides", file.path(path, "fig/LAB_LMKW.csv"))
+LABCFUKW(tab.iso, "Lactobacillus fermentum", file.path(path, "fig/LAB_LBFKW.csv"))
 
 
 # Slit area analysis
