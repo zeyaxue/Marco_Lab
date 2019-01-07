@@ -1223,7 +1223,7 @@ Rarefy <- function(ps, depth){
 LogPlot <- function(df, samType, path.out, w, h){
   ### organize in Excel the output from LogOR()
   pdf(path.out, w, h)
-  (ggplot(df, aes(x = X, y = LogOR, ymin = Log2.5, ymax = Log97.5))+
+  (ggplot(df, aes(x = X, y = -LogOR, ymin = -Log2.5, ymax = -Log97.5))+  # minus to filp slit and no slit orientation
     geom_point()+
     geom_pointrange() + 
     geom_hline(yintercept = 0)+
@@ -1284,7 +1284,6 @@ LogPlot(read.csv(file.path(path, "cheddar/fig_LogOR_biomarker/chedY.noL120 copy.
 # Import Lactobacillus qPCR results 
 Only PMA samples were quantified using qPCR. 
 ```{r}
-# 12/13/2018 !!!!!!!! Need to update once Kay finished all qPCR
 qPCR.Lb <- read.csv(file.path(path, "mapping/Lactobacillus_qPCR_ZX.csv"))
 
 # melt dataframe to be suited for ploting
@@ -1296,24 +1295,41 @@ qPCR.Lbm$SampleType <- factor(qPCR.Lbm$SampleType,
                                          "Cheese_0D","Cheese_30D","Cheese_90D",
                                          "Cheese_120D"))
 
+# Define plotting function for helveticus data set 
+LbhelPlot <- function(df, path.out, w, h) {
+  pdf(file.path("~/Google Drive File Stream/My Drive/UC_Davis/Marco_lab/milk_microbiota/Hilmar_weekly_samples/",path.out), width = w, height = h)
+  print(ggplot(df, aes(x=SampleType, y=Lb_helveticus, fill=CheeseOutcome))+ 
+    geom_boxplot() +
+    scale_fill_manual(values=c("no_slits"="#a6cee3", "slits"="#1f78b4")) +
+    theme_bw(base_size = 15)+
+    ylab("Log10 cells/ml")+
+    ggtitle("Lactobacillus helveticus"))
+  dev.off()
+}
+LbhelPlot(subset(qPCR.Lbm, SampleType %in% c("HTST_feed", "HTST_milk")),
+          path.out = "Lactobacillus qPCR/results/Lb_hel_milk.pdf", 6, 3.8)
+LbhelPlot(subset(qPCR.Lbm, SampleType %in% c("Cheese_0D", "Cheese_30D", "Cheese_90D", "Cheese_120D")),
+          path.out = "Lactobacillus qPCR/results/Lb_hel_cheese.pdf", 7.5, 3.8)
+
+# Define plotting function for fermentum data set 
+LbfermPlot <- function(df, path.out, w, h) {
+  pdf(file.path("~/Google Drive File Stream/My Drive/UC_Davis/Marco_lab/milk_microbiota/Hilmar_weekly_samples/",path.out), width = w, height = h)
+  print(ggplot(df, aes(x=SampleType, y=Lb_fermentum, fill=CheeseOutcome))+ 
+    geom_boxplot() +
+    scale_fill_manual(values=c("no_slits"="#a6cee3", "slits"="#1f78b4")) +
+    theme_bw(base_size = 15)+
+    ylab("Log10 cells/ml")+
+    ggtitle("Lactobacillus fermentum"))
+  dev.off()
+}
+LbfermPlot(subset(qPCR.Lbm, SampleType %in% c("HTST_feed", "HTST_milk")),
+           path.out = "Lactobacillus qPCR/results/Lb_ferm_milk.pdf", 6, 3.8)
+LbfermPlot(subset(qPCR.Lbm, SampleType %in% c("Cheese_0D", "Cheese_30D", "Cheese_90D", "Cheese_120D")),
+           path.out = "Lactobacillus qPCR/results/Lb_ferm_cheese.pdf", 7.5, 3.8)
 
 
-ggplot(qPCR.Lbm, aes(x=SampleType, y=Lb_helveticus, fill=CheeseOutcome))+ 
-  geom_boxplot() +
-  scale_fill_manual(values=c("no_slits"="#a6cee3", "slits"="#1f78b4")) +
-  theme_bw()+
-  theme(text = element_text(size = 15),axis.text.x = element_text(angle = 45, hjust = 1))+
-  ylab("Log10 cells/ml")+
-  ggtitle("Lactobacillus helveticus")   
-ggplot(qPCR.Lbm, aes(x=SampleType, y=Lb_fermentum, fill=CheeseOutcome))+ 
-  geom_boxplot() +
-  scale_fill_manual(values=c("no_slits"="#a6cee3", "slits"="#1f78b4")) +
-  theme_bw()+
-  theme(text = element_text(size = 15),axis.text.x = element_text(angle = 45, hjust = 1))+
-  ylab("Log10 cells/ml")+
-  ggtitle("Lactobacillus fermentum") 
 
-#
+# Define Kruskal Wallis test for helveticus data set 
 helveticusKW <- function(x, sample){
   kruskal.test(subset(x, SampleType %in% sample), Lb_helveticus ~ CheeseOutcome)
   attach(subset(x, SampleType %in% sample))
@@ -1330,7 +1346,7 @@ helveticusKW(qPCR.Lbm, sample = "Cheese_90D")
 helveticusKW(qPCR.Lbm, sample = "Cheese_120D")
 
 
-#
+# Define Kruskal Wallis test for fermentum data set 
 fermentumKW <- function(x, sample){
   kruskal.test(subset(x, SampleType %in% sample), Lb_fermentum ~ CheeseOutcome)
   attach(subset(x, SampleType %in% sample))
@@ -1345,3 +1361,73 @@ fermentumKW(qPCR.Lbm, sample = "Cheese_0D")
 fermentumKW(qPCR.Lbm, sample = "Cheese_30D")
 fermentumKW(qPCR.Lbm, sample = "Cheese_90D")
 fermentumKW(qPCR.Lbm, sample = "Cheese_120D")
+
+
+
+## Import the qPCR results for Turicibacter counts in cheese and milk
+```{r}
+qPCR.Tur <- read.csv(file.path(path, "mapping/Good_data_Turicibacter_qPCR-1-6-19.csv"))
+qPCR.Tur <- qPCR.Tur[,-3] #remove old log value
+# subset by PMA treated and untreated
+qPCR.TurY <- qPCR.Tur[qPCR.Tur$PMA == "Y",]
+qPCR.TurN <- qPCR.Tur[qPCR.Tur$PMA == "N",] 
+# melt dataframe to be suited for ploting
+qPCR.TurYm <- melt(qPCR.TurY, id.vars = c("Week","CheeseOutcome","SampleType","LOG2"),
+                   variable.name = "measure",
+                   value.name = "value")
+qPCR.TurNm <- melt(qPCR.TurY, id.vars = c("Week","CheeseOutcome","SampleType","LOG2"),
+                   variable.name = "measure",
+                   value.name = "value")
+# Set levels to the SampleType
+qPCR.TurYm$SampleType <- factor(qPCR.TurYm$SampleType, levels = c("Cheese_0D","Cheese_30D","Cheese_90D","Cheese_120D","HTST_feed","HTST_milk"))
+qPCR.TurNm$SampleType <- factor(qPCR.TurNm$SampleType, levels = c("Cheese_0D","Cheese_30D","Cheese_90D","Cheese_120D","HTST_feed","HTST_milk"))
+
+# Make similar figure as the total cell count by creating a slit.plot function
+TuriPlot <- function(df, path.out, w, h){
+  pdf(file.path("~/Google Drive File Stream/My Drive/UC_Davis/Marco_lab/milk_microbiota/Hilmar_weekly_samples/",path.out), width = w, height = h)
+  print(ggplot(df, aes(x=SampleType, y=LOG2, fill=CheeseOutcome))+ 
+          geom_boxplot() +
+          scale_fill_manual(values=c("no_slits"="#a6cee3", "slits"="#1f78b4")) +
+          theme_bw(base_size = 15)+
+          ylab("Log10 cells/ml")+
+          ggtitle("Turicibacter"))
+  dev.off()
+}
+TuriPlot(subset(qPCR.TurYm, SampleType %in% c("HTST_feed", "HTST_milk")),
+         path.out = "Turicibacter qPCR/Turi_milkY.pdf", 6, 3.8)
+TuriPlot(subset(qPCR.TurNm, SampleType %in% c("HTST_feed", "HTST_milk")),
+         path.out = "Turicibacter qPCR/Turi_milkN.pdf", 6, 3.8)
+TuriPlot(subset(qPCR.TurYm, SampleType %in% c("Cheese_0D", "Cheese_30D", "Cheese_90D", "Cheese_120D")),
+         path.out = "Turicibacter qPCR/Turi_cheeseY.pdf", 7.5, 3.8)
+TuriPlot(subset(qPCR.TurNm, SampleType %in% c("Cheese_0D", "Cheese_30D", "Cheese_90D", "Cheese_120D")),
+         path.out = "Turicibacter qPCR/Turi_cheeseN.pdf", 7.5, 3.8)
+
+
+# ANOVA tests for taxa 
+## I didn't use Wald test because I couldn't get it to work to establish a lm or other model
+ChouANOVA <- function(x){
+  fit <- aov(LOG ~ CheeseOutcome, data = x)
+  summary(fit)
+}
+slit.plot(qPCR.TurYm[qPCR.TurYm$SampleType %in% c("Cheese_0D","Cheese_30D","Cheese_90D","Cheese_120D"),]) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))+
+  xlab("PMA treated samples by cheese type")
+ChouANOVA(qPCR.TurYm[qPCR.TurYm$SampleType %in% c("Cheese_0D"),])
+ChouANOVA(qPCR.TurYm[qPCR.TurYm$SampleType %in% c("Cheese_30D"),])
+ChouANOVA(qPCR.TurYm[qPCR.TurYm$SampleType %in% c("Cheese_90D"),])
+ChouANOVA(qPCR.TurYm[qPCR.TurYm$SampleType %in% c("Cheese_120D"),])
+slit.plot(qPCR.TurNm[qPCR.TurNm$SampleType %in% c("Cheese_0D","Cheese_30D","Cheese_90D","Cheese_120D"),]) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))+
+  xlab("PMA untreated samples by cheese type")
+ChouANOVA(qPCR.TurNm[qPCR.TurNm$SampleType %in% c("Cheese_0D"),])
+ChouANOVA(qPCR.TurNm[qPCR.TurNm$SampleType %in% c("Cheese_30D"),])
+ChouANOVA(qPCR.TurNm[qPCR.TurNm$SampleType %in% c("Cheese_90D"),])
+ChouANOVA(qPCR.TurNm[qPCR.TurNm$SampleType %in% c("Cheese_120D"),])
+slit.plot(qPCR.TurYm[qPCR.TurYm$SampleType %in% c("HTST_feed","HTST_milk"),]) +
+  xlab("PMA treated samples by milk type")
+ChouANOVA(qPCR.TurNm[qPCR.TurNm$SampleType %in% c("HTST_feed"),])
+ChouANOVA(qPCR.TurNm[qPCR.TurNm$SampleType %in% c("HTST_milk"),])
+
+slit.plot(qPCR.TurNm[qPCR.TurNm$SampleType %in% c("HTST_feed","HTST_milk"),]) +
+  xlab("PMA treated samples by milk type")
+```
