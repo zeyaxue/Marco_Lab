@@ -62,7 +62,17 @@ LABCFUKW <- function(x, y, path.out){
   
   write.csv(Z, path.out)
 }
+LABRCFUKW <- function(x, y, path.out){
+  x <- subset(x, Species %in% y)
+  fit <- aov(Rif_LAB_CFU.g ~ Aging_Time, data = x)
   
+  attach(x)
+  # because Nemenyi is no appropriate for groups with unequal sample sizes
+  Z <- posthoc.kruskal.dunn.test(Rif_LAB_CFU.g, Aging_Time, p.adjust.method = "none")[[3]]
+  detach()
+  
+  write.csv(Z, path.out)
+}
 
 TotalCFUKW(tab.milk, "saline", file.path(path, "fig/Total_salineKW.csv"))
 TotalCFUKW(tab.milk, "milk_no_slits", file.path(path, "fig/Total_milknoslitsKW.csv"))
@@ -80,7 +90,9 @@ LABCFUKW(tab.iso, "saline", file.path(path, "fig/LAB_salineKWiso.csv"))
 LABCFUKW(tab.iso, "Leuconostoc lactis", file.path(path, "fig/LAB_LLKW.csv"))
 LABCFUKW(tab.iso, "Leuconostoc mesenteroides", file.path(path, "fig/LAB_LMKW.csv"))
 LABCFUKW(tab.iso, "Lactobacillus fermentum", file.path(path, "fig/LAB_LBFKW.csv"))
-
+LABRCFUKW(tab.LABr, "Leuconostoc lactis", file.path(path, "fig/LABR_LLKW.csv"))
+LABRCFUKW(tab.LABr, "Leuconostoc mesenteroides", file.path(path, "fig/LABR_LMKW.csv"))
+LABRCFUKW(tab.LABr, "Lactobacillus fermentum", file.path(path, "fig/LABR_LBFKW.csv"))
 
 # Slit area analysis
 tab.area <- read.csv(file.path(path,"image analysis.csv"))
