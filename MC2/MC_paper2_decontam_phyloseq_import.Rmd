@@ -29,13 +29,28 @@ path <- "G:/My Drive/UC_Davis/Marco_lab/milk_microbiota/Mock_community/MC_paper2
 # Transpose the QIIME2 output in excel
 # For the theoretical values, I can adjust its absolute reads to suit data set by
 # changing values in the feature table
-SeqTab <- read.table(file.path(path,"feature-table-mc2.txt"), header = TRUE, stringsAsFactors = FALSE)
+SeqTab <- read.table(file.path(path,"feature_table/4file-combined_table-dada2_mc2.txt"), header = TRUE, stringsAsFactors = FALSE)
 colnames(SeqTab) <- gsub("X","",colnames(SeqTab))
 row.names(SeqTab) <- SeqTab$OTUID
 SeqTab <- SeqTab[,-1]
 SeqTab <- as.matrix.data.frame(SeqTab)
 
+# Parse out taxonomic assignment in excel and remove confidence column
+TaxTab <- read.table(file.path(path,"taxonomy.tsv"), header = TRUE, sep = '\t', na.strings = NA)
+rownames(TaxTab) <- TaxTab$Feature.ID
+TaxTab <- TaxTab[,-1]
+TaxTab <- as.matrix.data.frame(TaxTab)
 
+# Read in metadata file
+samdf <- read.csv(file.path(path,"mapping/MC_paper2_samdf.csv"))
+rownames(samdf) <- samdf$SampleID
+
+# Read in exported rooted tree 
+tree <- read_tree(file.path(path, "tree.nwk"))
+
+### Merge as one phyloseq object
+ps <- phyloseq(otu_table(SeqTab,taxa_are_rows = FALSE), tax_table(TaxTab), sample_data(samdf), phy_tree(tree))
+ps # 700 taxa and 24 samples
 ```
 
 
