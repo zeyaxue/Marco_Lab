@@ -9,22 +9,33 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## R Markdown
+This file follows the analysis in QIIME2, which imports mapping file, feature table,
+taxonomy and tree as a 4-component phyloseq object. 
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+## Setting up packages and working directory 
+```{r}
+library(decontam);packageVersion("decontam")
+library(phyloseq);packageVersion("phyloseq")
+library(ggplot2);packageVersion("ggplot2")
+library(reshape2);packageVersion("reshape2")
+library(cowplot);packageVersion("cowplot")
+library(dplyr);packageVersion("dplyr")
 
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
-
-```{r cars}
-summary(cars)
+path <- "G:/My Drive/UC_Davis/Marco_lab/milk_microbiota/Mock_community/MC_paper2_QIIME2/"
 ```
 
-## Including Plots
+## Import QIIME2 output and make phyloseq object
+```{r}
+# Transpose the QIIME2 output in excel
+# For the theoretical values, I can adjust its absolute reads to suit data set by
+# changing values in the feature table
+SeqTab <- read.table(file.path(path,"feature-table-mc2.txt"), header = TRUE, stringsAsFactors = FALSE)
+colnames(SeqTab) <- gsub("X","",colnames(SeqTab))
+row.names(SeqTab) <- SeqTab$OTUID
+SeqTab <- SeqTab[,-1]
+SeqTab <- as.matrix.data.frame(SeqTab)
 
-You can also embed plots, for example:
 
-```{r pressure, echo=FALSE}
-plot(pressure)
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
