@@ -60,7 +60,7 @@ write.csv(ps@otu_table, file.path(path,"feature_table/feature-table-mc2.csv"))
 ```
 
 ## Inspect Library Sizes
-```
+```{r}
 #add a colum for read counts/library size
 samdf$LibrarySize <- sample_sums(ps)
 #sort by the library size in increasing order
@@ -108,7 +108,7 @@ ps.Phy05 # 155 taxa and 161 samples
 ```
 
 ## Determine rarefaction level for Alpha and Beta analysis later on
-```
+```{r}
 set.seed(123)
 # Define function to calculate alpha diversity and rarefaction levels
 calculate_rarefaction_curves <- function(psdata, measures, depths) {
@@ -163,7 +163,7 @@ ps.Phy.rare # 155 taxa and 155 samples
 
 ## Divide the ps object for different dataset 
 ### For taxonomy analysis based on "ps.Phy.REC"
-```
+```{r}
 # Clean up the taxonomy level
 #make the deepest taxonomic identification in TaxTab as the recommened taxonomy (REC)
 RECps <- function(x, ps) {
@@ -226,11 +226,21 @@ ps1 <- phyloseq(sample_data(samdf_BCMC1_total_lyse), otu_table(ps.Phy.REC),
 ps1 # 91 taxa and 23 samples
 write.csv(AveFeatTab(ps1), file.path(path, "feature_table/FeatTab_BCMC1_total_lyseAVE.csv"))
 
+# 2. DNA extraction kit with MoBio
+samdf_BCMC1_MoBio <- read.csv(file.path(path, "mapping/MC_paper2_samdf_BCMC1_MoBio.csv"))
+rownames(samdf_BCMC1_MoBio) <- samdf_BCMC1_MoBio$SampleID
+ps2 <- phyloseq(sample_data(samdf_BCMC1_MoBio), otu_table(ps.Phy.REC),
+                tax_table(ps.Phy.REC), phy_tree(ps.Phy.REC))
+ps2 # 91 taxa and 6 samples
+write.csv(AveFeatTab(ps2), file.path(path, "feature_table/FeatTab_BCMC1_MoBioAVE.csv"))
 
-
-
-
-# DNA extraction kit choice on 10 ml UHT milk; BCMC2
+# 3. DNA extraction kit choice on 10 ml UHT milk; BCMC2
+samdf_BCMC2_kit_10ml <- read.csv(file.path(path, "mapping/MC_paper2_samdf_BCMC2_kit_10ml.csv"))
+rownames(samdf_BCMC2_kit_10ml) <- samdf_BCMC2_kit_10ml$SampleID
+ps3 <- phyloseq(sample_data(samdf_BCMC2_kit_10ml), otu_table(ps.Phy.REC),
+                tax_table(ps.Phy.REC), phy_tree(ps.Phy.REC))
+ps3 # 91 taxa and 30 samples
+write.csv(AveFeatTab(ps3), file.path(path, "feature_table/FeatTab_BCMC2_kit_10mlAVE.csv"))
 
 
 # PMA treatment
@@ -238,8 +248,8 @@ write.csv(AveFeatTab(ps1), file.path(path, "feature_table/FeatTab_BCMC1_total_ly
 ```
 
 
-### For alpha and beta div based ono ps.Phy.rare
-```
+### For alpha and beta div based on ps.Phy.rare
+```{r}
 # 1.rare 
 ps1.rare <- phyloseq(sample_data(samdf_mc2_BCMC1_total_lyse), otu_table(ps.Phy.rare),
                      tax_table(ps.Phy.rare), phy_tree(ps.Phy.rare))
