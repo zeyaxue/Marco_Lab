@@ -243,7 +243,13 @@ ps3 # 91 taxa and 30 samples
 write.csv(AveFeatTab(ps3), file.path(path, "feature_table/FeatTab_BCMC2_kit_10mlAVE.csv"))
 
 
-# PMA treatment
+# 4. PMA treatment
+samdf_BCMC2_kit_10ml <- read.csv(file.path(path, "mapping/MC_paper2_samdf_BCMC2_kit_10ml.csv"))
+rownames(samdf_BCMC2_kit_10ml) <- samdf_BCMC2_kit_10ml$SampleID
+ps3 <- phyloseq(sample_data(samdf_BCMC2_kit_10ml), otu_table(ps.Phy.REC),
+                tax_table(ps.Phy.REC), phy_tree(ps.Phy.REC))
+ps3 # 91 taxa and 30 samples
+write.csv(AveFeatTab(ps3), file.path(path, "feature_table/FeatTab_BCMC2_kit_10mlAVE.csv"))
 
 ```
 
