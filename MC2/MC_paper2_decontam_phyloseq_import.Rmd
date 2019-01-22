@@ -242,25 +242,55 @@ ps3 <- phyloseq(sample_data(samdf_BCMC2_kit_10ml), otu_table(ps.Phy.REC),
 ps3 # 91 taxa and 30 samples
 write.csv(AveFeatTab(ps3), file.path(path, "feature_table/FeatTab_BCMC2_kit_10mlAVE.csv"))
 
-
 # 4. PMA treatment
-samdf_BCMC2_kit_10ml <- read.csv(file.path(path, "mapping/MC_paper2_samdf_BCMC2_kit_10ml.csv"))
-rownames(samdf_BCMC2_kit_10ml) <- samdf_BCMC2_kit_10ml$SampleID
-ps3 <- phyloseq(sample_data(samdf_BCMC2_kit_10ml), otu_table(ps.Phy.REC),
+samdf_PMA <- read.csv(file.path(path, "mapping/MC_paper2_samdf_PMA.csv"))
+rownames(samdf_PMA) <- samdf_PMA$SampleID
+ps4 <- phyloseq(sample_data(samdf_PMA), otu_table(ps.Phy.REC),
                 tax_table(ps.Phy.REC), phy_tree(ps.Phy.REC))
-ps3 # 91 taxa and 30 samples
-write.csv(AveFeatTab(ps3), file.path(path, "feature_table/FeatTab_BCMC2_kit_10mlAVE.csv"))
+ps4 # 91 taxa and 15 samples
+write.csv(AveFeatTab(ps4), file.path(path, "feature_table/FeatTab_PMA.csv"))
+
+# 5. Sample storage
+samdf_sample_storage <- read.csv(file.path(path, "mapping/MC_paper2_samdf_sample_storage.csv"))
+rownames(samdf_sample_storage) <- samdf_sample_storage$SampleID
+ps5 <- phyloseq(sample_data(samdf_sample_storage), otu_table(ps.Phy.REC),
+                tax_table(ps.Phy.REC), phy_tree(ps.Phy.REC))
+ps5 # 91 taxa and 24 samples
+write.csv(AveFeatTab(ps5), file.path(path, "feature_table/FeatTab_sample_storage.csv"))
+
+# 6. Sample Volume
+samdf_total_vol <- read.csv(file.path(path, "mapping/MC_paper2_samdf_total_vol.csv"))
+rownames(samdf_total_vol) <- samdf_total_vol$SampleID
+ps6 <- phyloseq(sample_data(samdf_total_vol), otu_table(ps.Phy.REC),
+                tax_table(ps.Phy.REC), phy_tree(ps.Phy.REC))
+ps6 # 91 taxa and 18 samples
+write.csv(AveFeatTab(ps6), file.path(path, "feature_table/FeatTab_total_vol.csv"))
 
 ```
 
 
 ### For alpha and beta div based on ps.Phy.rare
 ```{r}
-# 1.rare 
-ps1.rare <- phyloseq(sample_data(samdf_mc2_BCMC1_total_lyse), otu_table(ps.Phy.rare),
-                     tax_table(ps.Phy.rare), phy_tree(ps.Phy.rare))
-ps1.rare
+ps1.rare <- rarefy_even_depth(ps1, sample.size = 4000, replace = TRUE, rngseed = 123 , trimOTUs = TRUE, verbose = TRUE) 
+ps2.rare <- rarefy_even_depth(ps2, sample.size = 4000, replace = TRUE, rngseed = 123 , trimOTUs = TRUE, verbose = TRUE) 
+ps3.rare <- rarefy_even_depth(ps3, sample.size = 4000, replace = TRUE, rngseed = 123 , trimOTUs = TRUE, verbose = TRUE) 
+ps4.rare <- rarefy_even_depth(ps4, sample.size = 4000, replace = TRUE, rngseed = 123 , trimOTUs = TRUE, verbose = TRUE) 
+ps5.rare <- rarefy_even_depth(ps5, sample.size = 4000, replace = TRUE, rngseed = 123 , trimOTUs = TRUE, verbose = TRUE) 
+ps6.rare <- rarefy_even_depth(ps6, sample.size = 4000, replace = TRUE, rngseed = 123 , trimOTUs = TRUE, verbose = TRUE) 
+
+ps1.rare #  27 taxa and 23 samples
+ps2.rare # 10 taxa and 6 samples
+ps3.rare # 55 taxa and 29 samples
+ps4.rare # 61 taxa and 15 samples
+ps5.rare # 18 taxa and 24 samples
+ps6.rare # 51 taxa and 18 samples
 ```
 
+BBBBBB
+USE CCA TRIPLOT TO SEE IF THERE'S ASSOCIATION BETWEEN METHOD AND TAXA
 
+AAAAAA
+Alpha could be more useful when using actual milk samples? 
 
+Percent recovery of GBS DNA with meconium extractions
+generated from various extraction kits. Data are mean ± S
