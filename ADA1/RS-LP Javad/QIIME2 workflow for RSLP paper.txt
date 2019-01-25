@@ -1,0 +1,223 @@
+#catenating R1+R2 like I did is not the best way.  I will reanalyze but treat R1 and R2 as separate analyses until after the ASV picking step (see mock community) 
+extract_barcodes.py -f "/media/marcolabuser/GoFlex Home/Zach/ADA_rawdata/Yin-102214_S1_L001_R1_001.fastq" --bc1_len 8 -m /home/marcolabuser/Zach/ADA_RS_LP/mapping_ADA_all_groups.txt -o /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/R1/
+
+gzip /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/R1/barcodes.fastq -r /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/R1/barcodes.fastq.gz
+
+gzip /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/R1/reads.fastq -r /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/R1/reads.fastq.gz
+
+mv /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/R1/reads.fastq.gz /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/R1/sequences.fastq.gz
+#R2 files
+extract_barcodes.py -f "/media/marcolabuser/GoFlex Home/Zach/ADA_rawdata/Yin-102214_S1_L001_R2_001.fastq" --bc1_len 8 -m /home/marcolabuser/Zach/ADA_RS_LP/mapping_ADA_all_groups.txt -o /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/R2/
+
+gzip /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/R2/barcodes.fastq -r /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/R2/barcodes.fastq.gz
+
+gzip /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/R2/reads.fastq -r /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/R2/reads.fastq.gz
+
+mv /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/R2/reads.fastq.gz /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/R2/sequences.fastq.gz
+#loading data into QIIME2
+source activate qiime2-2018.4
+
+qiime tools import --type EMPSingleEndSequences --input-path /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/R1/ --output-path /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/R1/R1_imported.qza
+
+qiime tools import --type EMPSingleEndSequences --input-path /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/R2/ --output-path /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/R2/R2_imported.qza
+
+#demultiplexing
+qiime demux emp-single \
+  --i-seqs /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/R1/R1_imported.qza \
+  --m-barcodes-file /home/marcolabuser/Zach/ADA_RS_LP/mapping_ADA_all_groups.txt \
+  --m-barcodes-column BarcodeSequence \
+  --o-per-sample-sequences /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/R1/demux.qza 
+
+qiime demux summarize \
+  --i-data /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/R1/demux.qza \
+  --o-visualization /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/R1/demux.qzv
+#position 216 is when quality drops off 
+qiime demux emp-single \
+  --i-seqs /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/R2/R2_imported.qza \
+  --m-barcodes-file /home/marcolabuser/Zach/ADA_RS_LP/mapping_ADA_all_groups.txt \
+  --m-barcodes-column BarcodeSequence \
+  --o-per-sample-sequences /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/R2/demux.qza 
+
+qiime demux summarize \
+  --i-data /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/R2/demux.qza \
+  --o-visualization /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/R2/demux.qzv
+#position 159 is when quality drops off 
+
+#DADA2 ASV picking on R1 and R2 
+qiime dada2 denoise-single \
+  --i-demultiplexed-seqs /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/R1/demux.qza \
+  --p-trim-left 21 \
+  --p-trunc-len 216 \
+  --output-dir /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/R1/dada2/ \
+  --p-n-threads 23
+
+qiime feature-table summarize \
+  --i-table /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/R1/dada2/table.qza \
+  --o-visualization /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/R1/dada2/table.qzv \
+  --m-sample-metadata-file /home/marcolabuser/Zach/ADA_RS_LP/mapping_ADA_all_groups.txt
+
+qiime dada2 denoise-single \
+  --i-demultiplexed-seqs /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/R2/demux.qza \
+  --p-trim-left 21 \
+  --p-trunc-len 159 \
+  --output-dir /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/R2/dada2/ \
+  --p-n-threads 23
+
+qiime feature-table summarize \
+  --i-table /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/R2/dada2/table.qza \
+  --o-visualization /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/R2/dada2/table.qzv \
+  --m-sample-metadata-file /home/marcolabuser/Zach/ADA_RS_LP/mapping_ADA_all_groups.txt
+
+#merge tables 
+#have to supply the tables and rep seqs files individually
+qiime feature-table merge \
+  --i-tables /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/R1/dada2/table.qza \
+  --i-tables /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/R2/dada2/table.qza \
+  --p-overlap-method sum \
+  --o-merged-table /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/merged_table.qza
+
+qiime feature-table summarize \
+  --i-table /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/merged_table.qza \
+  --o-visualization /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/merged_table.qzv \
+  --m-sample-metadata-file /home/marcolabuser/Zach/ADA_RS_LP/mapping_ADA_all_groups.txt
+#min=28591 but the next smallest is 41141 then 47087.  I chose 41141 as rarefaction depth
+qiime feature-table merge-seqs \
+  --i-data /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/R1/dada2/representative_sequences.qza \
+  --i-data /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/R2/dada2/representative_sequences.qza \
+  --o-merged-data /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/merged_rep_seqs.qza
+
+qiime feature-table tabulate-seqs \
+  --i-data /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/merged_rep_seqs.qza \
+  --o-visualization /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/merged_rep_seqs.qzv
+
+#generating phylogenetic tree
+qiime alignment mafft \
+  --i-sequences /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/merged_rep_seqs.qza \
+  --o-alignment /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/aligned_merged_rep_seqs.qza
+
+qiime alignment mask \
+  --i-alignment /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/aligned_merged_rep_seqs.qza \
+  --o-masked-alignment /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/masked_aligned_merged_rep_seqs.qza
+
+qiime phylogeny fasttree \
+  --i-alignment /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/masked_aligned_merged_rep_seqs.qza \
+  --o-tree /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/tree_masked_aligned_merged_rep_seqs.qza
+
+qiime phylogeny midpoint-root \
+  --i-tree /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/tree_masked_aligned_merged_rep_seqs.qza \
+  --o-rooted-tree /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/rooted_tree_masked_aligned_merged_rep_seqs.qza
+
+#Diversity analysis
+qiime diversity core-metrics-phylogenetic \
+  --i-phylogeny /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/rooted_tree_masked_aligned_merged_rep_seqs.qza \
+  --i-table /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/merged_table.qza \
+  --p-sampling-depth 41141 \
+  --m-metadata-file /home/marcolabuser/Zach/ADA_RS_LP/mapping_ADA_all_groups.txt \
+  --output-dir /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/diversity/
+#beta significance
+mkdir /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/diversity/beta
+
+qiime diversity beta-group-significance \
+  --i-distance-matrix /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/diversity/weighted_unifrac_distance_matrix.qza \
+  --m-metadata-column Treatment \
+  --p-pairwise \
+  --p-method anosim \
+  --m-metadata-file /home/marcolabuser/Zach/ADA_RS_LP/mapping_ADA_all_groups.txt \
+  --o-visualization /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/diversity/beta/significance_treatment.qzv
+
+qiime diversity beta-group-significance \
+  --i-distance-matrix /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/diversity/weighted_unifrac_distance_matrix.qza \
+  --m-metadata-column Starch \
+  --p-pairwise \
+  --m-metadata-file /home/marcolabuser/Zach/ADA_RS_LP/mapping_ADA_all_groups.txt \
+  --o-visualization /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/diversity/beta/significance_RS.qzv
+
+qiime diversity beta-group-significance \
+  --i-table /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/diversity/weighted_unifrac_distance_matrix.qza \
+  --m-metadata-column LP \
+  --p-pairwise \
+  --m-metadata-file /home/marcolabuser/Zach/ADA_RS_LP/mapping_ADA_all_groups.txt \
+  --o-visualization /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/diversity/beta/significance_LP.qzv
+
+#Plot alpha div
+mkdir /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/diversity/alpha/
+
+qiime diversity alpha-rarefaction \
+  --i-table /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/merged_table.qza \
+  --i-phylogeny /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/rooted_tree_masked_aligned_merged_rep_seqs.qza \
+  --p-max-depth 41141 \
+  --m-metadata-file /home/marcolabuser/Zach/ADA_RS_LP/mapping_ADA_all_groups.txt \
+  --o-visualization /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/diversity/alpha/alpha_rarefaction.qzv
+
+qiime diversity alpha-group-significance \
+  --i-alpha-diversity /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/diversity/faith_pd_vector.qza \
+  --m-metadata-file /home/marcolabuser/Zach/ADA_RS_LP/mapping_ADA_all_groups.txt \
+  --o-visualization /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/diversity/significance_faith_pd_vector.qzv
+#taxonomy summary 
+mkdir /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/diversity/taxonomy/
+
+qiime feature-classifier classify-sklearn \
+  --i-classifier /home/marcolabuser/QIIME2/gg-13-8-99-515-806-nb-classifier.qza \
+  --i-reads /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/merged_rep_seqs.qza \
+  --o-classification /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/diversity/taxonomy/taxonomy.qza
+
+qiime taxa collapse \
+  --i-table /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/diversity/rarefied_table.qza \
+  --i-taxonomy /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/diversity/taxonomy/taxonomy.qza \
+  --p-level 6 \
+  --o-collapsed-table /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/diversity/taxonomy/collapsed_taxonomy.qza
+
+qiime metadata tabulate \
+  --m-input-file /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/diversity/taxonomy/taxonomy.qza \
+  --o-visualization /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/diversity/taxonomy/taxonomy.qzv
+
+#generating .txt file of the rarefied, collapsed ASV table
+unzip /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/diversity/taxonomy/collapsed_taxonomy.qza -d /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/diversity/taxonomy/collapsed_taxonomy/
+
+biom convert -i /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/diversity/taxonomy/collapsed_taxonomy/bede1625-c0f0-406e-8f26-3b8dae99928b/data/feature-table.biom -o /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/diversity/taxonomy/collapsed_taxonomy.txt --header-key taxonomy --to-tsv --table-type "OTU table"
+#since there were Lactobacillaceae ASVs that did not BLAST to L. plantarum, I will convert the unaggregated table to .txt and combine just the Lp ASVs 
+unzip /home/marcolabuser/Zach/ADA_RS_LP/reanalxysis/diversity/rarefied_table.qza -d /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/diversity/rarefied_table/
+
+biom convert -i /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/diversity/rarefied_table/4b405e02-29bf-4310-b896-628f9efb2e35/data/feature-table.biom -o /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/diversity/rarefied_table.txt --header-key taxonomy --to-tsv --table-type "OTU table"
+#converting Faith PD vector to have stats for figure  
+unzip /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/diversity/faith_pd_vector.qza -d /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/diversity/faith_pd_vector/
+#obtaining PCoA principal coordinates and distance matrix 
+unzip /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/diversity/weighted_unifrac_distance_matrix.qza -d /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/diversity/weighted_unifrac_pcoa/
+
+unzip /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/diversity/weighted_unifrac_pcoa_results.qza -d /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/diversity/weighted_unifrac_pcoa/coordinates/
+
+#machine learning script to classify features that distinguish samples in a group 
+qiime sample-classifier classify-samples \
+  --i-table /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/diversity/taxonomy/collapsed_taxonomy.qza \
+  --m-metadata-file /home/marcolabuser/Zach/ADA_RS_LP/mapping_ADA_all_groups.txt \
+  --m-metadata-column Treatment \
+  --p-optimize-feature-selection \
+  --p-parameter-tuning \
+  --p-estimator RandomForestClassifier \
+  --p-n-estimators 100 \
+  --o-visualization /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/diversity/machine_learning_collapsed_table_treatment.qzv
+
+#also running on uncollapsed table 
+qiime sample-classifier classify-samples \
+  --i-table /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/diversity/rarefied_table.qza \
+  --m-metadata-file /home/marcolabuser/Zach/ADA_RS_LP/mapping_ADA_all_groups.txt \
+  --m-metadata-column Treatment \
+  --p-optimize-feature-selection \
+  --p-parameter-tuning \
+  --p-estimator RandomForestClassifier \
+  --p-n-estimators 100 \
+  --o-visualization /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/diversity/machine_learning_ASV_table_treatment_no_taxa.qzv
+
+#ANCOM between RS and RS+LP samples 
+qiime feature-table filter-samples --i-table /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/diversity/rarefied_table.qza --m-metadata-file /home/marcolabuser/Zach/ADA_RS_LP/mapping_ADA_all_groups.txt --p-where "Treatment IN ('HF+RS', 'HF+RS+LP')" --o-filtered-table /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/diversity/rarefied_table_RS_RSLP.qza
+
+qiime composition add-pseudocount \
+  --i-table /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/diversity/rarefied_table_RS_RSLP.qza \
+  --o-composition-table /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/diversity/rarefied_table_RS_RSLP_pseudocount.qza
+
+qiime composition ancom \
+  --i-table /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/diversity/rarefied_table_RS_RSLP_pseudocount.qza \
+  --m-metadata-file /home/marcolabuser/Zach/ADA_RS_LP/mapping_ADA_all_groups.txt \
+  --m-metadata-column Treatment \
+  --p-difference-function f_statistic \
+  --o-visualization /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/diversity/ANCOM_rarefied_table_RS_RSLP_pseudocount.qzv
