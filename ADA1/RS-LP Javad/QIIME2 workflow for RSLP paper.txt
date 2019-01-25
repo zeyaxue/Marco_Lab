@@ -1,3 +1,7 @@
+#QIIME2 workflow for RSLP paper 
+#Zachary Bendiks
+#January 2019
+
 #catenating R1+R2 like I did is not the best way.  I will reanalyze but treat R1 and R2 as separate analyses until after the ASV picking step (see mock community) 
 extract_barcodes.py -f "/media/marcolabuser/GoFlex Home/Zach/ADA_rawdata/Yin-102214_S1_L001_R1_001.fastq" --bc1_len 8 -m /home/marcolabuser/Zach/ADA_RS_LP/mapping_ADA_all_groups.txt -o /home/marcolabuser/Zach/ADA_RS_LP/reanalysis/R1/
 
