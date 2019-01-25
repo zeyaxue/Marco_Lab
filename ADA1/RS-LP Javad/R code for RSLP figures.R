@@ -150,6 +150,19 @@ tiff("ADA RS LP alpha div plot.tiff", width = 4, height = 3.5, units = "in", com
 ADA1_alpha_plot
 dev.off()
 
+#2.1) Alpha diversity interaction effects####
+ADA_alphadiv$Lp <- c(rep("no LP", 19), rep("LP", 20))
+ADA_alphadiv$Lp <- as.factor(ADA_alphadiv$Lp)
+ADA_alphadiv$Starch <- c(rep("no RS", 9), rep("RS", 10), rep("no RS", 10), rep("RS", 10))
+ADA_alphadiv$Starch <- as.factor(ADA_alphadiv$Starch)
+
+#parametric
+ADA_lm <- lm(data = ADA_alphadiv, formula = faith_pd ~ Starch * Lp)
+ADA_anova_results <- anova(ADA_lm) #Starch was significant, but no interaction effects between the two 
+ADA_anova_model <- aov(ADA_lm) #model fitting
+TukeyHSD(x = ADA_anova_model, conf.level = 0.95) #HF v. RS and RS v. LP are the only pairwise differences  
+
+
 
 #3) L. plantarum abundance across all 4 groups#### 
 #I manually removed "Constructed from biom file" line, changed "#OTU ID" to "OTU_ID", and deleted the "taxonomy" header before reading table in
@@ -207,3 +220,17 @@ dev.off()
 tiff("ADA RS LP abundance plot.tiff", width = 4, height = 3.5, units = "in", compression = "lzw", res = 300)
 ADA_RSLP_Lacto_plot
 dev.off()
+
+
+#3.1) Lp abundance interaction effects####
+ADA_table_Lp_ASVs_only_percent_abundance$Lp <- c(rep("no LP", 19), rep("LP", 20))
+ADA_table_Lp_ASVs_only_percent_abundance$Lp <- as.factor(ADA_alphadiv$Lp)
+ADA_table_Lp_ASVs_only_percent_abundance$Starch <- c(rep("no RS", 9), rep("RS", 10), rep("no RS", 10), rep("RS", 10))
+ADA_table_Lp_ASVs_only_percent_abundance$Starch <- as.factor(ADA_table_Lp_ASVs_only_percent_abundance$Starch)
+
+#parametric
+ADA_lm <- lm(data = ADA_table_Lp_ASVs_only_percent_abundance, formula = Total ~ Starch * Lp)
+ADA_anova_results <- anova(ADA_lm) #Lp abundance was significant, but no interaction effects between the two 
+ADA_anova_model <- aov(ADA_lm) #model fitting
+TukeyHSD(x = ADA_anova_model, conf.level = 0.95) #HF v. RS and RS v. LP are the only pairwise differences  
+
