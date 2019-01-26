@@ -232,5 +232,19 @@ TAX.Cheddar.noLN <- as.data.frame(TAX.Cheddar.noLN)
 write.csv(TAX.Cheddar.noLN, "decontam/phyloseq/cheese/TAX.Cheddar.noLN.csv")
 ```
 
+## Write feature table for ps object with Lactococcus to get the Lb% for low CFU inoculation
+```{r}
+ps.ched <- readRDS(file.path(path, "cheddar/ps.ched.rds"))
+
+# Define function to get the average value of the feature table 
+AveFeatTab <- function(ps){
+  df <- psmelt(ps)
+  df.cast <- dcast(df, REC ~ SampleID, mean, value.var = "Abundance")
+  df.cast[, -1] <- lapply( df.cast[ , -1], function(x) x/sum(x, na.rm=TRUE) )
+  df.cast
+}
+
+write.csv(AveFeatTab(ps.ched), file.path(path, "cheddar/FeatTab_ched.csv"))
+```
 
 
