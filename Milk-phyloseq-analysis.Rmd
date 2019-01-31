@@ -1,0 +1,989 @@
+---
+title: "Milk-phyloseq-analysis"
+author: "Zeya Zhengyao Xue"
+date: "April 2, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Setting up
+```{r}
+library(phyloseq)
+library(ggplot2);packageVersion("ggplot2")
+library(superheat)
+library(reshape2)
+library(cowplot)
+library(plyr)
+library(dplyr)
+library(RColorBrewer)
+library(vegan)
+
+
+# Define project path
+path <- "G:/My Drive/UC_Davis/Marco_lab/milk_microbiota/Hilmar_weekly_samples/QIIME2/"
+```
+
+## Subset to contain milk samples
+```{r}
+setwd("/Volumes/GoogleDrive/My Drive/UC_Davis/Marco_lab/milk_microbiota/Hilmar_weekly_samples/QIIME2")
+ps05.Phy05.rare.tre.sample <- readRDS("decontam/phyloseq/ps05.Phy05.rare.tre.sample.rds")
+
+ps.milk <- subset_samples(ps05.Phy05.rare.tre.sample, SampleType %in% c("HTST_milk","Raw_milk","HTST_feed"))
+ps.milk #260 taxa and 349 samples
+saveRDS(ps.milk,"decontam/phyloseq/milk/ps.milk.rds")
+
+#PMA treated sample
+ps.milkY <- subset_samples(ps.milk, PMA %in% "Y")
+ps.milkY #260 taxa and 173 samples
+saveRDS(ps.milkY, "decontam/phyloseq/milk/ps.milkY.rds")
+#PMA untreated samples
+ps.milkN <- subset_samples(ps.milk, PMA %in% "N")
+ps.milkN #260 taxa and 176 samples
+saveRDS(ps.milkN, "decontam/phyloseq/milk/ps.milkN.rds")
+```
+
+## Alpha diversity analysis
+```{r}
+alpha_measures = c("Observed", "Chao1", "Shannon", "Simpson") 
+alpha.milk <- estimate_richness(ps.milk, split = TRUE, measures = alpha_measures) 
+alpha.milkY <- estimate_richness(ps.milkY, split = TRUE, measures = alpha_measures)
+alpha.milkN <- estimate_richness(ps.milkN, split = TRUE, measures = alpha_measures)
+row.names(alpha.milk) <- gsub("X","",row.names(alpha.milk) )
+row.names(alpha.milkY) <- gsub("X","",row.names(alpha.milkY) )
+row.names(alpha.milkN) <- gsub("X","",row.names(alpha.milkN) )
+alpha.milk$ID <- row.names(alpha.milk)
+alpha.milkY$ID <- row.names(alpha.milkY)
+alpha.milkN$ID <- row.names(alpha.milkN)
+#add sample metadata information
+alpha.milk <- merge(alpha.milk, data.frame(sample_data(ps.milk)), by.x = 'ID', by.y = 'row.names')
+alpha.milkY <- merge(alpha.milkY, data.frame(sample_data(ps.milkY)), by.x = 'ID', by.y = 'row.names')
+alpha.milkN <- merge(alpha.milkN, data.frame(sample_data(ps.milkN)), by.x = 'ID', by.y = 'row.names')
+#Keep only ID variable and variables
+var <- c("Observed","Chao1","Shannon","Simpson","Week","CheeseOutcome","SampleType") 
+var2 <- c("Observed","Chao1","Shannon","Simpson","Week","CheeseOutcome","SampleType","PMA")#should be modified for different problems
+alpha.milk <- alpha.milk[var2]
+alpha.milkY1 <- alpha.milkY[var]
+alpha.milkN1 <- alpha.milkN[var]
+alpha.milk <- melt(alpha.milk, id.vars = c("Week","CheeseOutcome","SampleType","PMA"),
+                   variable.name = "measure",
+                   value.name = "value")
+alpha.milkY1m <- melt(alpha.milkY1, id.vars = c("Week","CheeseOutcome","SampleType"),
+                      variable.name = "measure",
+                      value.name = "value")
+alpha.milkN1m <- melt(alpha.milkN1, id.vars = c("Week","CheeseOutcome","SampleType"),
+                      variable.name = "measure",
+                      value.name = "value")
+#need to reset the order of the factors because this is using molten data frame
+alpha.milk$SampleType <- factor(alpha.milk$SampleType, levels = c("Raw_milk","HTST_feed","HTST_milk"))
+alpha.milkY1m$SampleType <- factor(alpha.milkY1m$SampleType, levels = c("Raw_milk","HTST_feed","HTST_milk"))
+alpha.milkY1m$Week <- factor(alpha.milkY1m$Week, levels = c("1","2","3","4","5","6","7","8","9","10","11"))
+alpha.milkY1m$CheeseOutcome <- factor(alpha.milkY1m$CheeseOutcome, levels = c("no_slits","slits"))
+alpha.milkN1m$SampleType <- factor(alpha.milkN1m$SampleType, levels = c("Raw_milk","HTST_feed","HTST_milk"))
+alpha.milkN1m$Week <- factor(alpha.milkN1m$Week, levels = c("1","2","3","4","5","6","7","8","9","10","11"))
+alpha.milkN1m$CheeseOutcome <- factor(alpha.milkN1m$CheeseOutcome, levels = c("no_slits","slits"))
+```
+
+After cleaning and organizing the data, we can make some plots for visualization:
+
+### Plot to contain both PMA treated and untreated 
+```{r}
+AlphaMilkType <- function(x, w, h, path.out){
+  x <- subset(x, measure %in% c("Observed", "Shannon"))
+  
+  pdf(path.out, w, h)
+  (ggplot(x, aes(x=SampleType, y=value))+ 
+  geom_boxplot() +
+  facet_wrap(facets = ~ measure, scales = "free_y") + #strip.position="right"
+  theme_bw(base_size = 15)+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))+
+  xlab("")) %>% print()
+  dev.off()
+}
+
+AlphaMilkType(alpha.milk, w = 7, h = 3.7, 
+              path.out = file.path(path,"milk/alpha/milktype.pdf"))
+AlphaMilkType(alpha.milkY1m, w = 6.5, h = 3.8,
+              path.out = file.path(path,"milk/alpha/milktypeY.pdf"))
+AlphaMilkType(alpha.milkN1m, w = 6.5, h = 3.8,
+              path.out = file.path(path,"milk/alpha/milktypeN.pdf"))
+
+attach(subset(alpha.milkY1m, measure == "Observed"))
+pairwise.t.test(value, SampleType, p.adjust.method = "none")[[3]]
+detach()
+attach(subset(alpha.milkY1m, measure == "Shannon"))
+pairwise.t.test(value, SampleType, p.adjust.method = "none")[[3]]
+detach()
+
+attach(subset(alpha.milkN1m, measure == "Observed"))
+pairwise.t.test(value, SampleType, p.adjust.method = "none")[[3]]
+detach()
+attach(subset(alpha.milkN1m, measure == "Shannon"))
+pairwise.t.test(value, SampleType, p.adjust.method = "none")[[3]]
+detach()
+```
+
+
+### 1. Plot by week (PMA treated as main figure, untreated as supplemental figure)
+```{r}
+alpha.wkY <- ggplot(alpha.milkY1m, aes(x=Week, y=value, group=SampleType, color=SampleType))+
+  geom_point(size=0.5) + 
+  geom_smooth() +
+  scale_color_manual(values=c("Raw_milk"="black", "HTST_feed"="red", "HTST_milk"="blue")) +
+  facet_wrap(facets = ~ measure, scales = "free_y") + #strip.position="right"
+  theme_bw()+
+  ylab("Alpha diversity value")+
+  xlab("PMA treated samples by collection week")
+alpha.wkY
+
+alpha.wkN <- ggplot(alpha.milkN1m, aes(x=Week, y=value, group=SampleType, color=SampleType))+
+  geom_point(size=0.5) + 
+  geom_smooth() +
+  scale_color_manual(values=c("Raw_milk"="black", "HTST_feed"="red", "HTST_milk"="blue")) +
+  facet_wrap(facets = ~ measure, scales = "free_y") + #strip.position="right"
+  theme_bw()+
+  ylab("Alpha diversity value")+
+  xlab("PMA untreated samples by collection week")
+alpha.wkN
+#save 6*4
+```
+
+### 2. Plot by CheeseOutcome (PMA treated as main figure, untreated as supplemental figure)
+```{r}
+alpha.coY <- ggplot(alpha.milkY1m, aes(x=CheeseOutcome, y=value, color=SampleType))+ 
+  geom_boxplot() +
+  scale_color_manual(values=c("Raw_milk"="black", "HTST_feed"="red", "HTST_milk"="blue")) +
+  facet_wrap(facets = ~ measure, scales = "free_y") + #strip.position="right"
+  theme_bw()+
+  ylab("Alpha diversity value")+
+  xlab("PMA treated samples by cheese outcome")
+alpha.coY
+
+alpha.coN <- ggplot(alpha.milkN1m, aes(x=CheeseOutcome, y=value, color=SampleType))+ 
+  geom_boxplot() +
+  scale_color_manual(values=c("Raw_milk"="black", "HTST_feed"="red", "HTST_milk"="blue")) +
+  facet_wrap(facets = ~ measure, scales = "free_y") + #strip.position="right"
+  theme_bw()+
+  ylab("Alpha diversity value")+
+  xlab("PMA untreated samples by cheese outcome")
+alpha.coN
+
+alpha.coY1 <- ggplot(alpha.milkY1m, aes(x=SampleType, y=value, fill=CheeseOutcome))+ 
+  geom_boxplot() +
+  scale_fill_manual(values=c("no_slits"="#a6cee3", "slits"="#1f78b4")) +
+  facet_wrap(facets = ~ measure, scales = "free_y") + #strip.position="right"
+  theme_bw()+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))+
+  ylab("Alpha diversity value")+
+  xlab("PMA treated samples by milk type")
+alpha.coY1
+
+alpha.coN1 <- ggplot(alpha.milkN1m, aes(x=SampleType, y=value, fill=CheeseOutcome))+ 
+  geom_boxplot() +
+  scale_fill_manual(values=c("no_slits"="#a6cee3", "slits"="#1f78b4")) +
+  facet_wrap(facets = ~ measure, scales = "free_y") + #strip.position="right"
+  theme_bw()+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))+
+  ylab("Alpha diversity value")+
+  xlab("PMA untreated samples by milk type")
+alpha.coN1
+
+# Define function to plot Shannon and observed diversity for HTST_feed and HTST_milk
+alphaHTSTfig <- function(x, samType, w, h, path.out){
+  x <- subset(x, SampleType %in% c("HTST_feed", "HTST_milk"))
+  x <- subset(x, measure %in% c("Shannon", "Observed")) 
+         
+  pdf(path.out, width = w, height = h)
+  (ggplot(x, aes(x = SampleType, y = value, fill = CheeseOutcome))+ 
+  geom_boxplot() +
+  scale_fill_manual(values = c("no_slits" = "#a6cee3", "slits" = "#1f78b4")) +
+  facet_wrap(facets = ~ measure, scales = "free_y") +
+  theme_bw(base_size = 15)+
+  xlab(samType)) %>% print()
+  dev.off()
+}
+
+# Generate figures for only HTST feed and HTST milk 
+alphaHTSTfig(alpha.milkY1m, 
+             samType = "PMA treated samples", w = 8.5, h = 3.3,
+             path.out = file.path(path, "milk/alpha/alphaY.pdf"))
+alphaHTSTfig(alpha.milkN1m, 
+             samType = "PMA untreated samples", w = 8.5, h = 3.3,
+             path.out = file.path(path, "milk/alpha/alphaN.pdf"))
+# ANOVA test on the diversity
+AlphaANOVA(subset(alpha.milkY1m, SampleType %in% "HTST_feed"))
+AlphaANOVA(subset(alpha.milkY1m, SampleType %in% "HTST_milk"))
+AlphaANOVA(subset(alpha.milkN1m, SampleType %in% "HTST_feed"))
+AlphaANOVA(subset(alpha.milkN1m, SampleType %in% "HTST_milk"))
+
+```
+
+## Beta diversity analysis
+As of May 15th, only certain diatance matrix work due to conflict in vegan and phyloseq versions.
+```{r}
+#set the order of factors
+sample_data(ps.milkY)$SampleType <- factor(sample_data(ps.milkY)$SampleType, levels = c("Raw_milk","HTST_feed","HTST_milk"))
+sample_data(ps.milkN)$SampleType <- factor(sample_data(ps.milkN)$SampleType, levels = c("Raw_milk","HTST_feed","HTST_milk"))
+```
+
+### NMDS (PMA treated as main figure, untreated as supplemental figure)
+```{r eval=FALSE, include=FALSE, results="hide"}
+set.seed(123)
+#bray PMA
+NMDS.bray.milkY <- ordinate(ps.milkY, method = "NMDS", distance = "bray") #stress < 0.2
+
+NMDS.bray.milkYp <- plot_ordination(ps.milkY, NMDS.bray.milkY,
+                                    type = "sample",
+                                    color = "CheeseOutcome") + 
+  scale_color_manual(values=c("no_slits"="#a6cee3", "slits"="#1f78b4"))+ 
+  stat_ellipse() +
+  geom_point() + 
+  facet_wrap(~SampleType)+
+  ggtitle("PMA treated samples (NMDS of Bray-Curtis dissimilarity)")+
+  theme_bw()#+
+  #theme(text = element_text(size = 16),plot.title = element_text(size = 18, hjust = 0.5)) #to center the title of the plot
+NMDS.bray.milkYp #I can save 12x4 to generate square output 
+```
+
+Similar commends were used for making plots with other clustering and distance method, see original Rmarkdown file if interested in raw codes.
+```{r eval=FALSE, include=FALSE, results="hide"}
+#bray NO PMA
+NMDS.bray.milkN <- ordinate(ps.milkN, method = "NMDS", distance = "bray") #stress < 0.2
+
+NMDS.bray.milkNp <- plot_ordination(ps.milkN, NMDS.bray.milkN,
+                                    type = "sample",
+                                    color = "CheeseOutcome") + 
+  scale_color_manual(values=c("no_slits"="#a6cee3", "slits"="#1f78b4"))+ 
+  stat_ellipse() +
+  geom_point() + 
+  facet_wrap(~SampleType)+
+  ggtitle("PMA untreated samples (NMDS of Bray-Curtis dissimilarity)")+
+  theme_bw()
+NMDS.bray.milkNp
+```
+
+```{r eval=FALSE, include=FALSE, results="hide"}
+#weighted unifrac PMA
+NMDS.wuf.milkY <- ordinate(ps.milkY, method = "NMDS", distance = "wunifrac") #stress < 0.2
+NMDS.wuf.milkYp <- plot_ordination(ps.milkY, NMDS.wuf.milkY,
+                                   type = "sample",
+                                   color = "CheeseOutcome") + 
+  scale_color_manual(values=c("no_slits"="#a6cee3", "slits"="#1f78b4"))+ 
+  stat_ellipse() +
+  geom_point() + 
+  facet_wrap(~SampleType)+
+  ggtitle("PMA treated samples (NMDS of weighted unifrac distance)")+
+  theme_bw()
+NMDS.wuf.milkYp
+```
+
+```{r eval=FALSE, include=FALSE, results="hide"}
+#weighted unifrac NO PMA
+NMDS.wuf.milkN <- ordinate(ps.milkN, method = "NMDS", distance = "wunifrac") #stress < 0.2
+NMDS.wuf.milkNp <- plot_ordination(ps.milkN, NMDS.wuf.milkN,
+                                   type = "sample",
+                                   color = "CheeseOutcome") + 
+  scale_color_manual(values=c("no_slits"="#a6cee3", "slits"="#1f78b4"))+ 
+  stat_ellipse() +
+  geom_point() + 
+  facet_wrap(~SampleType)+
+  ggtitle("PMA untreated samples (NMDS of weighted unifrac distance)")+
+  theme_bw()
+NMDS.wuf.milkNp
+```
+
+### PCoA analysis (PMA treated as main figure, untreated as supplemental figure)
+```{r eval=FALSE, include=FALSE}
+#Bray-Curtis PMA
+PCoA.bray.milkY <- ordinate(ps.milkY, method = "PCoA", distance = "bray")
+PCoA.bray.milkYp <- plot_ordination(ps.milkY, PCoA.bray.milkY,
+                                   type = "sample",
+                                   color = "CheeseOutcome") + 
+  scale_color_manual(values=c("no_slits"="#a6cee3", "slits"="#1f78b4"))+ 
+  stat_ellipse() +
+  geom_point() + 
+  facet_wrap(~SampleType)+
+  ggtitle("PMA treated samples (PCoA of Bray-Curtis dissimilarity)")+
+  theme_bw()
+PCoA.bray.milkYp
+
+#Bray-Curtis NO PMA
+PCoA.bray.milkN <- ordinate(ps.milkN, method = "PCoA", distance = "bray")
+PCoA.bray.milkNp <- plot_ordination(ps.milkN, PCoA.bray.milkN,
+                                   type = "sample",
+                                   color = "CheeseOutcome") + 
+  scale_color_manual(values=c("no_slits"="#a6cee3", "slits"="#1f78b4"))+ 
+  stat_ellipse() +
+  geom_point() + 
+  facet_wrap(~SampleType)+
+  ggtitle("PMA untreated samples (PCoA of Bray-Curtis dissimilarity)")+
+  theme_bw()
+PCoA.bray.milkNp
+
+#weighted unifrac PMA
+PCoA.wuf.milkY <- ordinate(ps.milkY, method = "PCoA", distance = "wunifrac")
+PCoA.wuf.milkYp <- plot_ordination(ps.milkY, PCoA.bray.milkY,
+                                   type = "sample",
+                                   color = "CheeseOutcome") + 
+  scale_color_manual(values=c("no_slits"="#a6cee3", "slits"="#1f78b4"))+ 
+  stat_ellipse() +
+  geom_point() + 
+  facet_wrap(~SampleType)+
+  ggtitle("PMA treated samples (PCoA of weighted unifrac distance")+
+  theme_bw()
+PCoA.wuf.milkYp
+
+#weighted unifrac NO PMA
+PCoA.wuf.milkN <- ordinate(ps.milkN, method = "PCoA", distance = "wunifrac")
+PCoA.wuf.milkNp <- plot_ordination(ps.milkN, PCoA.bray.milkN,
+                                   type = "sample",
+                                   color = "CheeseOutcome") + 
+  scale_color_manual(values=c("no_slits"="#a6cee3", "slits"="#1f78b4"))+ 
+  stat_ellipse() +
+  geom_point() + 
+  facet_wrap(~SampleType)+
+  ggtitle("PMA untreated samples (PCoA of weighted unifrac distance")+
+  theme_bw()
+PCoA.wuf.milkNp
+```
+
+## Beta diverity analysis 
+### 1.1 CheeseOutcome with all milk
+```{r fig.height=3, fig.width=13}
+#set the order of factors
+sample_data(ps.milkY)$SampleType <- factor(sample_data(ps.milkY)$SampleType, levels = c("Raw_milk","HTST_feed","HTST_milk"))
+sample_data(ps.milkN)$SampleType <- factor(sample_data(ps.milkN)$SampleType, levels = c("Raw_milk","HTST_feed","HTST_milk"))
+
+## PCoA 
+# PMA treated
+PCoA.wuf.milkY <- ordinate(ps.milkY, method = "PCoA", distance = "wunifrac")
+# Create cluster centroid locations for only the first 3 axes
+PCoA.wuf.milkY_vector <- data.frame(PCoA.wuf.milkY["vectors"])[,1:3]
+# Add sample data to the vector
+PCoA.wuf.milkY_vector$ID <- row.names(PCoA.wuf.milkY_vector)
+PCoA.wuf.milkY_vector <- merge(PCoA.wuf.milkY_vector, 
+                                sample_data(ps.milkY) %>% data.frame(),
+                                by.x = "ID", by.y = "SampleID", 
+                                all.x = TRUE, sort=FALSE)
+#calculate the mean/centroids of the vector
+PCoA.wuf.milkY_center <- ddply(PCoA.wuf.milkY_vector,
+                                c("SampleType","CheeseOutcome"),
+                                summarize,
+                                ave1 = mean(vectors.Axis.1),
+                                ave2 = mean(vectors.Axis.2),
+                                ave3 = mean(vectors.Axis.3))
+#merge vector and center data frame together by SampleType and CheeseOutcome columns
+PCoA.wuf.milkY_merge <- merge(PCoA.wuf.milkY_vector,
+                               PCoA.wuf.milkY_center,
+                               by = c("SampleType","CheeseOutcome"))
+
+#split the data 
+dat_list <- split(PCoA.wuf.milkY_merge, PCoA.wuf.milkY_merge$SampleType)
+#use lapply to creat plot for the 3 milk SampleType
+fig_list <- lapply(dat_list, function(x){
+  
+  f1 <- ggplot(x, aes(vectors.Axis.1, vectors.Axis.2, color = CheeseOutcome)) + 
+    geom_point(size = 1)+ 
+    geom_point(aes(x = ave1, y = ave2), size = 3)+
+    scale_color_manual(values=c("no_slits" = "#a6cee3", "slits" = "#1f78b4"))+
+    geom_segment(aes(x = ave1, xend = vectors.Axis.1,
+                     y = ave2, yend = vectors.Axis.2))+
+    facet_wrap(~SampleType, scales = "fixed")+
+    ylab("PCoA 2")+ 
+    xlab("PCoA 1")+
+    theme_bw()
+})
+#make the figure
+legend <- get_legend(fig_list[[1]])
+PCoA.wuf.milkYp <- plot_grid(fig_list[[1]] + theme(legend.position = "none"),
+                              fig_list[[2]] + theme(legend.position = "none"),
+                              fig_list[[3]] + theme(legend.position = "none"),
+                              legend, nrow = 1, align="hv",  labels= c("A","B","C"))
+PCoA.wuf.milkYp
+
+
+# PMA untreated
+PCoA.wuf.milkN <- ordinate(ps.milkN, method = "PCoA", distance = "wunifrac")
+# Create cluster centroid locations for only the first 3 axes
+PCoA.wuf.milkN_vector <- data.frame(PCoA.wuf.milkN["vectors"])[,1:3]
+# Add sample data to the vector
+PCoA.wuf.milkN_vector$ID <- row.names(PCoA.wuf.milkN_vector)
+PCoA.wuf.milkN_vector <- merge(PCoA.wuf.milkN_vector, 
+                                sample_data(ps.milkN) %>% data.frame(),
+                                by.x = "ID", by.y = "SampleID", 
+                                all.x = TRUE, sort=FALSE)
+#calculate the mean/centroids of the vector
+PCoA.wuf.milkN_center <- ddply(PCoA.wuf.milkN_vector,
+                                c("SampleType","CheeseOutcome"),
+                                summarize,
+                                ave1 = mean(vectors.Axis.1),
+                                ave2 = mean(vectors.Axis.2),
+                                ave3 = mean(vectors.Axis.3))
+#merge vector and center data frame together by SampleType and CheeseOutcome columns
+PCoA.wuf.milkN_merge <- merge(PCoA.wuf.milkN_vector,
+                               PCoA.wuf.milkN_center,
+                               by = c("SampleType","CheeseOutcome"))
+
+#split the data 
+dat_list <- split(PCoA.wuf.milkN_merge, PCoA.wuf.milkN_merge$SampleType)
+#use lapply to creat plot for the 3 milk SampleType
+fig_list <- lapply(dat_list, function(x){
+  
+  f1 <- ggplot(x, aes(vectors.Axis.1, vectors.Axis.2, color = CheeseOutcome)) + 
+    geom_point(size = 1)+ 
+    geom_point(aes(x = ave1, y = ave2), size = 3)+
+    scale_color_manual(values=c("no_slits" = "#a6cee3", "slits" = "#1f78b4"))+
+    geom_segment(aes(x = ave1, xend = vectors.Axis.1,
+                     y = ave2, yend = vectors.Axis.2))+
+    facet_wrap(~SampleType, scales = "fixed")+
+    ylab("PCoA 2")+ 
+    xlab("PCoA 1")+
+    theme_bw()
+})
+#make the figure
+legend <- get_legend(fig_list[[1]])
+PCoA.wuf.milkNp <- plot_grid(fig_list[[1]] + theme(legend.position = "none"),
+                              fig_list[[2]] + theme(legend.position = "none"),
+                              fig_list[[3]] + theme(legend.position = "none"),
+                              legend, nrow = 1, align="hv",  labels= c("A","B","C"))
+PCoA.wuf.milkNp
+
+
+## NMDS 
+# PMA treated
+NMDS.wuf.milkY <- ordinate(ps.milkY, method = "NMDS", distance = "wunifrac")
+# Create cluster centroid locations for only the first 3 axes
+NMDS.wuf.milkY_vector <- data.frame(NMDS.wuf.milkY["points"])
+# Add sample data to the vector
+NMDS.wuf.milkY_vector$ID <- row.names(NMDS.wuf.milkY_vector)
+NMDS.wuf.milkY_vector <- merge(NMDS.wuf.milkY_vector, 
+                                sample_data(ps.milkY) %>% data.frame(),
+                                by.x = "ID", by.y = "SampleID", 
+                                all.x = TRUE, sort=FALSE)
+#calculate the mean/centroids of the vector
+NMDS.wuf.milkY_center <- ddply(NMDS.wuf.milkY_vector,
+                                c("SampleType","CheeseOutcome"),
+                                summarize,
+                                ave1 = mean(points.MDS1),
+                                ave2 = mean(points.MDS2))
+#merge vector and center data frame together by SampleType and CheeseOutcome columns
+NMDS.wuf.milkY_merge <- merge(NMDS.wuf.milkY_vector,
+                               NMDS.wuf.milkY_center,
+                               by = c("SampleType","CheeseOutcome"))
+
+#split the data 
+dat_list <- split(NMDS.wuf.milkY_merge, NMDS.wuf.milkY_merge$SampleType)
+#use lapply to creat plot for the 3 milk SampleType
+fig_list <- lapply(dat_list, function(x){
+  
+  f1 <- ggplot(x, aes(points.MDS1, points.MDS2, color = CheeseOutcome)) + 
+    geom_point(size = 1)+ 
+    geom_point(aes(x = ave1, y = ave2), size = 3)+
+    scale_color_manual(values=c("no_slits" = "#a6cee3", "slits" = "#1f78b4"))+
+    geom_segment(aes(x = ave1, xend = points.MDS1,
+                     y = ave2, yend = points.MDS2))+
+    facet_wrap(~SampleType, scales = "fixed")+
+    ylab("NMDS 2")+ 
+    xlab("NMDS 1")+
+    theme_bw()
+})
+#make the figure
+legend <- get_legend(fig_list[[1]])
+NMDS.wuf.milkYp <- plot_grid(fig_list[[1]] + theme(legend.position = "none"),
+                              fig_list[[2]] + theme(legend.position = "none"),
+                              fig_list[[3]] + theme(legend.position = "none"),
+                              legend, nrow = 1, align="hv",  labels= c("A","B","C"))
+NMDS.wuf.milkYp
+
+# PMA untreated
+NMDS.wuf.milkN <- ordinate(ps.milkN, method = "NMDS", distance = "wunifrac")
+# Create cluster centroid locations for only the first 3 axes
+NMDS.wuf.milkN_vector <- data.frame(NMDS.wuf.milkN["points"])
+# Add sample data to the vector
+NMDS.wuf.milkN_vector$ID <- row.names(NMDS.wuf.milkN_vector)
+NMDS.wuf.milkN_vector <- merge(NMDS.wuf.milkN_vector, 
+                                sample_data(ps.milkN) %>% data.frame(),
+                                by.x = "ID", by.y = "SampleID", 
+                                all.x = TRUE, sort=FALSE)
+#calculate the mean/centroids of the vector
+NMDS.wuf.milkN_center <- ddply(NMDS.wuf.milkN_vector,
+                                c("SampleType","CheeseOutcome"),
+                                summarize,
+                                ave1 = mean(points.MDS1),
+                                ave2 = mean(points.MDS2))
+#merge vector and center data frame together by SampleType and CheeseOutcome columns
+NMDS.wuf.milkN_merge <- merge(NMDS.wuf.milkN_vector,
+                               NMDS.wuf.milkN_center,
+                               by = c("SampleType","CheeseOutcome"))
+
+#split the data 
+dat_list <- split(NMDS.wuf.milkN_merge, NMDS.wuf.milkN_merge$SampleType)
+#use lapply to creat plot for the 3 milk SampleType
+fig_list <- lapply(dat_list, function(x){
+  
+  f1 <- ggplot(x, aes(points.MDS1, points.MDS2, color = CheeseOutcome)) + 
+    geom_point(size = 1)+ 
+    geom_point(aes(x = ave1, y = ave2), size = 3)+
+    scale_color_manual(values=c("no_slits" = "#a6cee3", "slits" = "#1f78b4"))+
+    geom_segment(aes(x = ave1, xend = points.MDS1,
+                     y = ave2, yend = points.MDS2))+
+    facet_wrap(~SampleType, scales = "fixed")+
+    ylab("NMDS 2")+ 
+    xlab("NMDS 1")+
+    theme_bw()
+})
+#make the figure
+legend <- get_legend(fig_list[[1]])
+NMDS.wuf.milkNp <- plot_grid(fig_list[[1]] + theme(legend.position = "none"),
+                              fig_list[[2]] + theme(legend.position = "none"),
+                              fig_list[[3]] + theme(legend.position = "none"),
+                              legend, nrow = 1, align="hv",  labels= c("A","B","C"))
+NMDS.wuf.milkNp
+```
+
+### 1.2 MilkType with all milk
+```{r}
+sample_data(ps.milkY)$SampleType <- factor(sample_data(ps.milkY)$SampleType, levels = c("Raw_milk","HTST_feed","HTST_milk"))
+sample_data(ps.milkN)$SampleType <- factor(sample_data(ps.milkN)$SampleType, levels = c("Raw_milk","HTST_feed","HTST_milk"))
+
+## PCoA 
+ps.milk <- readRDS(file.path(path,"decontam/phyloseq/milk/ps.milk.rds"))
+PCoA.wuf.milk <- ordinate(ps.milk, method = "PCoA", distance = "wunifrac")
+sample_data(ps.milk)$SampleType <- factor(sample_data(ps.milk)$SampleType, levels = c("Raw_milk","HTST_feed","HTST_milk"))
+sample_data(ps.milk)$PMA <- factor(sample_data(ps.milk)$PMA, levels = c("N","Y"))
+
+pdf(file.path(path,"milk/PCoA_allmilk.pdf"), w = 5.3, h = 3.7)
+plot_ordination(ps.milk, PCoA.wuf.milk,color="SampleType",shape = "PMA") + 
+  geom_point(size=3)+ 
+  scale_color_brewer(palette="Set2")+
+  ggtitle("")+
+  ylab("PCoA 2")+ 
+  xlab("PCoA 1")+
+  theme_bw(base_size = 15)
+dev.off()
+
+# Adonis testing
+metadata <- as(sample_data(ps.milk), "data.frame")
+# milk type
+adonis2(phyloseq::distance(ps.milk, "wunifrac") ~ SampleType, data = metadata)
+
+# Make boxplots for weighted unifrac
+wuf.dist <- read.csv(file.path(path, "decontam/phyloseq/milk/PMA_MilkType_Distances_noPMA_andPMA.csv"))
+wuf.dist$MilkType = factor(wuf.dist$MilkType,levels=c("Raw_milk","HTST_feed","HTST_milk"))
+
+pdf(file.path(path, "milk/fig_SampleType/wufY.pdf"), w = 3.6, h = 3.8)
+wuf.dist$facet <- "Weighted Unifrac"
+ggplot(subset(wuf.dist, PMA == "Y"), aes(x=MilkType, y=weighted_distance))+
+  geom_boxplot(position = position_dodge(0.77))+
+  facet_wrap(~ facet) +
+  xlab("")+
+  theme_bw(base_size = 15) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+dev.off()
+
+pdf(file.path(path, "milk/fig_SampleType/wufN.pdf"), w = 3.6, h = 3.8)
+ggplot(subset(wuf.dist, PMA == "N"), aes(x=MilkType, y=weighted_distance))+
+  geom_boxplot(position = position_dodge(0.77))+
+  facet_wrap(~ facet) +
+  xlab("")+
+  theme_bw(base_size = 15) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+dev.off()
+
+# ANOVA
+fit <- aov(weighted_distance ~ MilkType, data = subset(wuf.dist, PMA == "Y"))
+summary(fit)
+# post hoc
+attach(subset(wuf.dist, PMA == "Y"))
+pairwise.t.test(weighted_distance, MilkType, p.adjust.method = "none")[[3]]
+detach()
+attach(subset(wuf.dist, PMA == "N"))
+pairwise.t.test(weighted_distance, MilkType, p.adjust.method = "none")[[3]]
+detach()
+
+```
+
+### 1.3 CheeseOutcome with 4hr (1 set) HTST feed and pasteurized milk 
+```{r fig.height=3, fig.width=10}
+# Define some useful functions to use 
+# Define function Adonis on the beta plot
+AdonisWuf <- function(ps){
+  wuf.dist <- phyloseq::distance(ps, method = "wunifrac")  # dist matrix
+  sampledf <- data.frame(sample_data(ps))  # data frame from the sample_data
+  adonis(wuf.dist ~ CheeseOutcome, data = sampledf)
+}
+
+#merge the 4hr map with phyloseq object that has not been adjust for qPCR cell count
+tree <- phy_tree(ps.milk)
+tax <- tax_table(ps.milk)
+otu <- otu_table(ps.milk)
+ps.milk4.3 <- phyloseq(otu_table(otu, taxa_are_rows = FALSE), tax_table(tax),sample_data(samdf.4hr2), phy_tree(tree))
+saveRDS(ps.milk4.3,"decontam/phyloseq/milk/ps.milk4.3.rds")
+
+ps.milk4.3Y <- subset_samples(ps.milk4.3, PMA %in% "Y")
+saveRDS(ps.milk4.3Y, "decontam/phyloseq/milk/ps.milk4.3Y.rds")
+ps.milk4.3N <- subset_samples(ps.milk4.3, PMA %in% "N")
+saveRDS(ps.milk4.3N, "decontam/phyloseq/milk/ps.milk4.3N.rds")
+
+#set the order of factors
+sample_data(ps.milk4.3Y)$SampleType <- factor(sample_data(ps.milk4.3Y)$SampleType, levels = c("HTST_feed","HTST_milk"))
+sample_data(ps.milk4.3N)$SampleType <- factor(sample_data(ps.milk4.3N)$SampleType, levels = c("HTST_feed","HTST_milk"))
+
+## PCoA 
+# PMA treated
+PCoA.wuf.milk4.3Y <- ordinate(ps.milk4.3Y, method = "PCoA", distance = "wunifrac")
+# Create cluster centroid locations for only the first 3 axes
+PCoA.wuf.milk4.3Y_vector <- data.frame(PCoA.wuf.milk4.3Y["vectors"])[,1:3]
+# Add sample data to the vector
+PCoA.wuf.milk4.3Y_vector$ID <- row.names(PCoA.wuf.milk4.3Y_vector)
+PCoA.wuf.milk4.3Y_vector <- merge(PCoA.wuf.milk4.3Y_vector, 
+                                sample_data(ps.milk4.3Y) %>% data.frame(),
+                                by.x = "ID", by.y = "SampleID", 
+                                all.x = TRUE, sort=FALSE)
+#calculate the mean/centroids of the vector
+PCoA.wuf.milk4.3Y_center <- ddply(PCoA.wuf.milk4.3Y_vector,
+                                c("SampleType","CheeseOutcome"),
+                                summarize,
+                                ave1 = mean(vectors.Axis.1),
+                                ave2 = mean(vectors.Axis.2),
+                                ave3 = mean(vectors.Axis.3))
+#merge vector and center data frame together by SampleType and CheeseOutcome columns
+PCoA.wuf.milk4.3Y_merge <- merge(PCoA.wuf.milk4.3Y_vector,
+                               PCoA.wuf.milk4.3Y_center,
+                               by = c("SampleType","CheeseOutcome"))
+
+#split the data 
+dat_list <- split(PCoA.wuf.milk4.3Y_merge, PCoA.wuf.milk4.3Y_merge$SampleType)
+#use lapply to creat plot for the 3 milk SampleType
+fig_list <- lapply(dat_list, function(x){
+  
+  f1 <- ggplot(x, aes(vectors.Axis.1, vectors.Axis.2, color = CheeseOutcome)) + 
+    geom_point(size = 1)+ 
+    geom_point(aes(x = ave1, y = ave2), size = 3)+
+    scale_color_manual(values=c("no_slits" = "#a6cee3", "slits" = "#1f78b4"))+
+    geom_segment(aes(x = ave1, xend = vectors.Axis.1,
+                     y = ave2, yend = vectors.Axis.2))+
+    facet_wrap(~SampleType, scales = "fixed")+
+    ylab("PCoA 2")+ 
+    xlab("PCoA 1")+
+    theme_bw()
+})
+#make the figure
+legend <- get_legend(fig_list[[1]])
+plot_grid(fig_list[[1]] + theme(legend.position = "none"),
+          fig_list[[2]] + theme(legend.position = "none"),
+          legend, nrow = 1, align="hv",  labels= c("A","B"))
+
+# PMA untreated
+PCoA.wuf.milk4.3N <- ordinate(ps.milk4.3N, method = "PCoA", distance = "wunifrac")
+# Create cluster centroid locations for only the first 3 axes
+PCoA.wuf.milk4.3N_vector <- data.frame(PCoA.wuf.milk4.3N["vectors"])[,1:3]
+# Add sample data to the vector
+PCoA.wuf.milk4.3N_vector$ID <- row.names(PCoA.wuf.milk4.3N_vector)
+PCoA.wuf.milk4.3N_vector <- merge(PCoA.wuf.milk4.3N_vector, 
+                                sample_data(ps.milk4.3N) %>% data.frame(),
+                                by.x = "ID", by.y = "SampleID", 
+                                all.x = TRUE, sort=FALSE)
+#calculate the mean/centroids of the vector
+PCoA.wuf.milk4.3N_center <- ddply(PCoA.wuf.milk4.3N_vector,
+                                c("SampleType","CheeseOutcome"),
+                                summarize,
+                                ave1 = mean(vectors.Axis.1),
+                                ave2 = mean(vectors.Axis.2),
+                                ave3 = mean(vectors.Axis.3))
+#merge vector and center data frame together by SampleType and CheeseOutcome columns
+PCoA.wuf.milk4.3N_merge <- merge(PCoA.wuf.milk4.3N_vector,
+                               PCoA.wuf.milk4.3N_center,
+                               by = c("SampleType","CheeseOutcome"))
+
+#split the data 
+dat_list <- split(PCoA.wuf.milk4.3N_merge, PCoA.wuf.milk4.3N_merge$SampleType)
+#use lapply to creat plot for the 3 milk SampleType
+fig_list <- lapply(dat_list, function(x){
+  
+  f1 <- ggplot(x, aes(vectors.Axis.1, vectors.Axis.2, color = CheeseOutcome)) + 
+    geom_point(size = 1)+ 
+    geom_point(aes(x = ave1, y = ave2), size = 3)+
+    scale_color_manual(values=c("no_slits" = "#a6cee3", "slits" = "#1f78b4"))+
+    geom_segment(aes(x = ave1, xend = vectors.Axis.1,
+                     y = ave2, yend = vectors.Axis.2))+
+    facet_wrap(~SampleType, scales = "fixed")+
+    ylab("PCoA 2")+ 
+    xlab("PCoA 1")+
+    theme_bw()
+})
+#make the figure
+legend <- get_legend(fig_list[[1]])
+plot_grid(fig_list[[1]] + theme(legend.position = "none"),
+          fig_list[[2]] + theme(legend.position = "none"),
+          legend, nrow = 1, align="hv",  labels= c("A","B"))
+
+## NMDS 
+# PMA treated
+NMDS.wuf.milk4.3Y <- ordinate(ps.milk4.3Y, method = "NMDS", distance = "wunifrac")
+# Create cluster centroid locations for only the first 3 axes
+NMDS.wuf.milk4.3Y_vector <- data.frame(NMDS.wuf.milk4.3Y["points"])
+# Add sample data to the vector
+NMDS.wuf.milk4.3Y_vector$ID <- row.names(NMDS.wuf.milk4.3Y_vector)
+NMDS.wuf.milk4.3Y_vector <- merge(NMDS.wuf.milk4.3Y_vector, 
+                                sample_data(ps.milk4.3Y) %>% data.frame(),
+                                by.x = "ID", by.y = "SampleID", 
+                                all.x = TRUE, sort=FALSE)
+#calculate the mean/centroids of the vector
+NMDS.wuf.milk4.3Y_center <- ddply(NMDS.wuf.milk4.3Y_vector,
+                                c("SampleType","CheeseOutcome"),
+                                summarize,
+                                ave1 = mean(points.MDS1),
+                                ave2 = mean(points.MDS2))
+#merge vector and center data frame together by SampleType and CheeseOutcome columns
+NMDS.wuf.milk4.3Y_merge <- merge(NMDS.wuf.milk4.3Y_vector,
+                               NMDS.wuf.milk4.3Y_center,
+                               by = c("SampleType","CheeseOutcome"))
+
+#split the data 
+dat_list <- split(NMDS.wuf.milk4.3Y_merge, NMDS.wuf.milk4.3Y_merge$SampleType)
+#use lapply to creat plot for the 3 milk SampleType
+fig_list <- lapply(dat_list, function(x){
+  
+  f1 <- ggplot(x, aes(points.MDS1, points.MDS2, color = CheeseOutcome)) + 
+    geom_point(size = 1)+ 
+    geom_point(aes(x = ave1, y = ave2), size = 3)+
+    scale_color_manual(values=c("no_slits" = "#a6cee3", "slits" = "#1f78b4"))+
+    geom_segment(aes(x = ave1, xend = points.MDS1,
+                     y = ave2, yend = points.MDS2))+
+    facet_wrap(~SampleType, scales = "fixed")+
+    ylab("NMDS 2")+ 
+    xlab("NMDS 1")+
+    theme_bw() +
+    theme(text = element_text(size = 15)) 
+})
+#make the figure
+#legend <- get_legend(fig_list[[1]])
+pdf(file.path(path,"milk/fig/wuf_NMDSY.pdf"), w = 7.1, h = 3.2)
+plot_grid(fig_list[[1]] + theme(legend.position = "none"),
+          fig_list[[2]] + theme(legend.position = "none"),
+          nrow = 1, align="hv",  labels= c("A","B"))
+dev.off()
+# Adonis test
+AdonisWuf(subset_samples(ps.milk4.3Y, SampleType %in% "HTST_feed"))
+AdonisWuf(subset_samples(ps.milk4.3Y, SampleType %in% "HTST_milk"))
+
+
+# PMA untreated
+NMDS.wuf.milk4.3N <- ordinate(ps.milk4.3N, method = "NMDS", distance = "wunifrac")
+# Create cluster centroid locations for only the first 3 axes
+NMDS.wuf.milk4.3N_vector <- data.frame(NMDS.wuf.milk4.3N["points"])
+# Add sample data to the vector
+NMDS.wuf.milk4.3N_vector$ID <- row.names(NMDS.wuf.milk4.3N_vector)
+NMDS.wuf.milk4.3N_vector <- merge(NMDS.wuf.milk4.3N_vector, 
+                                sample_data(ps.milk4.3N) %>% data.frame(),
+                                by.x = "ID", by.y = "SampleID", 
+                                all.x = TRUE, sort=FALSE)
+#calculate the mean/centroids of the vector
+NMDS.wuf.milk4.3N_center <- ddply(NMDS.wuf.milk4.3N_vector,
+                                c("SampleType","CheeseOutcome"),
+                                summarize,
+                                ave1 = mean(points.MDS1),
+                                ave2 = mean(points.MDS2))
+#merge vector and center data frame together by SampleType and CheeseOutcome columns
+NMDS.wuf.milk4.3N_merge <- merge(NMDS.wuf.milk4.3N_vector,
+                               NMDS.wuf.milk4.3N_center,
+                               by = c("SampleType","CheeseOutcome"))
+
+#split the data 
+dat_list <- split(NMDS.wuf.milk4.3N_merge, NMDS.wuf.milk4.3N_merge$SampleType)
+#use lapply to creat plot for the 3 milk SampleType
+fig_list <- lapply(dat_list, function(x){
+  
+  f1 <- ggplot(x, aes(points.MDS1, points.MDS2, color = CheeseOutcome)) + 
+    geom_point(size = 1)+ 
+    geom_point(aes(x = ave1, y = ave2), size = 3)+
+    scale_color_manual(values=c("no_slits" = "#a6cee3", "slits" = "#1f78b4"))+
+    geom_segment(aes(x = ave1, xend = points.MDS1,
+                     y = ave2, yend = points.MDS2))+
+    facet_wrap(~SampleType, scales = "fixed")+
+    ylab("NMDS 2")+ 
+    xlab("NMDS 1")+
+    theme_bw() +
+    theme(text = element_text(size = 15)) 
+})
+#make the figure
+#legend <- get_legend(fig_list[[1]])
+pdf(file.path(path,"milk/fig/wuf_NMDSN.pdf"), w = 7.1, h = 3.2)
+plot_grid(fig_list[[1]] + theme(legend.position = "none"),
+          fig_list[[2]] + theme(legend.position = "none"),
+          nrow = 1, align="hv",  labels= c("A","B"))
+dev.off()
+# Adonis
+AdonisWuf(subset_samples(ps.milk4.3N, SampleType %in% "HTST_feed"))
+AdonisWuf(subset_samples(ps.milk4.3N, SampleType %in% "HTST_milk"))
+```
+
+
+Now that I have the phyloseq containing milk samples (1 set) that were collected ~4hr before the cheese was made and were not adjusted with qPCR cell counts, I just redid the alpha diversity analysis here using this phyloseq object.
+
+
+```{r}
+# Define ANOVA for alpha diversity testing
+AlphaANOVA <- function(x){
+    fit.sha <- aov(value ~ CheeseOutcome, data = subset(x, measure %in% "Observed"))
+    fit.sim <- aov(value ~ CheeseOutcome, data = subset(x, measure %in% "Shannon"))
+    y <- summary(fit.sha)[[1]]
+    y <- rbind(y, summary(fit.sim)[[1]])
+    y
+}
+
+## Alpha diversity of milk directly linked to cheese 
+alpha.milk4.3Y <- estimate_richness(ps.milk4.3Y, split = TRUE, measures = alpha_measures)
+alpha.milk4.3N <- estimate_richness(ps.milk4.3N, split = TRUE, measures = alpha_measures)
+row.names(alpha.milk4.3Y) <- gsub("X","",row.names(alpha.milk4.3Y) )
+row.names(alpha.milk4.3N) <- gsub("X","",row.names(alpha.milk4.3N) )
+alpha.milk4.3Y$ID <- row.names(alpha.milk4.3Y)
+alpha.milk4.3N$ID <- row.names(alpha.milk4.3N)
+#add sample metadata information
+alpha.milk4.3Y <- merge(alpha.milk4.3Y, data.frame(sample_data(ps.milk4.3Y)), by.x = 'ID', by.y = 'row.names')
+alpha.milk4.3N <- merge(alpha.milk4.3N, data.frame(sample_data(ps.milk4.3N)), by.x = 'ID', by.y = 'row.names')
+#Keep only ID variable and variables
+var <- c("Observed","Chao1","Shannon","Simpson","Week","CheeseOutcome","SampleType") 
+alpha.milk4.3Y <- alpha.milk4.3Y[var]
+alpha.milk4.3N <- alpha.milk4.3N[var]
+alpha.milk4.3Ym <- melt(alpha.milk4.3Y, id.vars = c("Week","CheeseOutcome","SampleType"),
+                      variable.name = "measure",
+                      value.name = "value")
+alpha.milk4.3Nm <- melt(alpha.milk4.3N, id.vars = c("Week","CheeseOutcome","SampleType"),
+                      variable.name = "measure",
+                      value.name = "value")
+
+# PMA treated 
+ggplot(alpha.milk4.3Ym, aes(x=SampleType, y=value, fill=CheeseOutcome))+ 
+  geom_boxplot() +
+  scale_fill_manual(values=c("no_slits"="#a6cee3", "slits"="#1f78b4")) +
+  facet_wrap(facets = ~ measure, scales = "free_y") + #strip.position="right"
+  theme_bw()+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))+
+  ylab("Alpha diversity value")+
+  xlab("PMA treated samples by milk type")
+# ANOVA stats on alpha diversities
+AlphaANOVA(subset(alpha.milk4.3Ym, SampleType %in% "HTST_feed"))
+
+# PMA untreated 
+ggplot(alpha.milk4.3Nm, aes(x=SampleType, y=value, fill=CheeseOutcome))+ 
+  geom_boxplot() +
+  scale_fill_manual(values=c("no_slits"="#a6cee3", "slits"="#1f78b4")) +
+  facet_wrap(facets = ~ measure, scales = "free_y") + #strip.position="right"
+  theme_bw()+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))+
+  ylab("Alpha diversity value")+
+  xlab("PMA untreated samples by milk type")
+AlphaANOVA(subset(alpha.milk4.3Nm, SampleType %in% "HTST_feed"))
+
+
+## Bacterial cell count of milk directly linked to cheese 
+samdf4.3Y <- sample_data(ps.milk4.3Y) %>% data.frame()
+samdf4.3N <- sample_data(ps.milk4.3N) %>% data.frame()
+qPCR4.3Y <- merge(x = qPCR, y = samdf4.3Y, by.x = "SampleID", by.y = "SampleID")
+qPCR4.3N <- merge(x = qPCR, y = samdf4.3N, by.x = "SampleID", by.y = "SampleID")
+#Keep only ID variable and variables
+qPCR4.3Y <- qPCR4.3Y[c("SampleType","CheeseOutcome.y","CollectionTime","Week.y","LogCellsML")]
+qPCR4.3N <- qPCR4.3N[c("SampleType","CheeseOutcome.y","CollectionTime","Week.y","LogCellsML")]
+qPCR4.3Ym <- melt(qPCR4.3Y, id.vars = c("Week.y","CheeseOutcome.y","SampleType","LogCellsML"),
+                  variable.name = "measure",
+                  value.name = "value")
+qPCR4.3Nm <- melt(qPCR4.3N, id.vars = c("Week.y","CheeseOutcome.y","SampleType","LogCellsML"),
+                  variable.name = "measure",
+                  value.name = "value")
+```
+
+```{r fig.height=3, fig.width=4.3}
+# PMA treated 
+qPCR4.3Ym$facet <- "Log cells/ml"
+pdf(file.path(path,"milk/alpha/log4.3Y.pdf"), w = 5.5, h = 3.3)
+ggplot(qPCR4.3Ym, aes(x=SampleType, y=LogCellsML, fill=CheeseOutcome.y))+ 
+  geom_boxplot() +
+  scale_fill_manual(values=c("no_slits"="#a6cee3", "slits"="#1f78b4")) +
+  theme_bw(base_size = 15)+
+  facet_wrap(~ facet)+
+  ylab("Log cells/ml")
+dev.off()
+aov(LogCellsML ~ CheeseOutcome.y, 
+    data = subset(qPCR4.3Ym, SampleType %in% "HTST_feed")) %>% summary()
+aov(LogCellsML ~ CheeseOutcome.y, 
+    data = subset(qPCR4.3Ym, SampleType %in% "HTST_milk")) %>% summary()
+
+# PMA untreated
+qPCR4.3Nm$facet <- "Log cells/ml"
+pdf(file.path(path,"milk/alpha/log4.3N.pdf"), w = 5.5, h = 3.3)
+ggplot(qPCR4.3Nm, aes(x=SampleType, y=LogCellsML, fill=CheeseOutcome.y))+ 
+  geom_boxplot() +
+  scale_fill_manual(values=c("no_slits"="#a6cee3", "slits"="#1f78b4")) +
+  theme_bw(base_size = 15)+
+  facet_wrap(~ facet)+
+  ylab("Log cells/ml")
+dev.off()
+```
+
+## Import the qPCR results for Turicibacter counts in cheese and milk
+```{r fig.height=3, fig.width=4.3}
+qPCR.Tur <- read.csv("mapping/Good_data_Turicibacter_qPCR_NoLowValue.csv")
+# subset by PMA treated and untreated
+qPCR.TurY <- qPCR.Tur[qPCR.Tur$PMA == "Y",]
+qPCR.TurN <- qPCR.Tur[qPCR.Tur$PMA == "N",] 
+
+# melt dataframe to be suited for ploting
+qPCR.TurYm <- melt(qPCR.TurY, id.vars = c("Week","CheeseOutcome","SampleType","LOG"),
+                  variable.name = "measure",
+                  value.name = "value")
+qPCR.TurNm <- melt(qPCR.TurY, id.vars = c("Week","CheeseOutcome","SampleType","LOG"),
+                  variable.name = "measure",
+                  value.name = "value")
+
+# Set levels to the SampleType
+qPCR.TurYm$SampleType <- factor(qPCR.TurYm$SampleType, levels = c("Cheese_0D","Cheese_30D","Cheese_90D","Cheese_120D","HTST_feed","HTST_milk"))
+qPCR.TurNm$SampleType <- factor(qPCR.TurNm$SampleType, levels = c("Cheese_0D","Cheese_30D","Cheese_90D","Cheese_120D","HTST_feed","HTST_milk"))
+
+
+# Make similar figure as the total cell count by creating a slit.plot function
+## SHOULD HAVE DONE THIS A LONG TIME AGO, WOULD BE MUCH SMARTER
+slit.plot <- function(x){
+  ggplot(x, aes(x=SampleType, y=LOG, fill=CheeseOutcome))+ 
+  geom_boxplot() +
+  scale_fill_manual(values=c("no_slits"="#a6cee3", "slits"="#1f78b4")) +
+  theme_bw()+
+  ylab("Turicibacter")
+}
+# ANOVA tests for taxa 
+## I didn't use Wald test because I couldn't get it to work to establish a lm or other model
+ChouANOVA <- function(x){
+  fit <- aov(LOG ~ CheeseOutcome, data = x)
+  summary(fit)
+}
+
+
+slit.plot(qPCR.TurYm[qPCR.TurYm$SampleType %in% c("Cheese_0D","Cheese_30D","Cheese_90D","Cheese_120D"),]) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))+
+  xlab("PMA treated samples by cheese type")
+ChouANOVA(qPCR.TurYm[qPCR.TurYm$SampleType %in% c("Cheese_0D"),])
+ChouANOVA(qPCR.TurYm[qPCR.TurYm$SampleType %in% c("Cheese_30D"),])
+ChouANOVA(qPCR.TurYm[qPCR.TurYm$SampleType %in% c("Cheese_90D"),])
+ChouANOVA(qPCR.TurYm[qPCR.TurYm$SampleType %in% c("Cheese_120D"),])
+
+slit.plot(qPCR.TurNm[qPCR.TurNm$SampleType %in% c("Cheese_0D","Cheese_30D","Cheese_90D","Cheese_120D"),]) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))+
+  xlab("PMA untreated samples by cheese type")
+ChouANOVA(qPCR.TurNm[qPCR.TurNm$SampleType %in% c("Cheese_0D"),])
+ChouANOVA(qPCR.TurNm[qPCR.TurNm$SampleType %in% c("Cheese_30D"),])
+ChouANOVA(qPCR.TurNm[qPCR.TurNm$SampleType %in% c("Cheese_90D"),])
+ChouANOVA(qPCR.TurNm[qPCR.TurNm$SampleType %in% c("Cheese_120D"),])
+
+
+slit.plot(qPCR.TurYm[qPCR.TurYm$SampleType %in% c("HTST_feed","HTST_milk"),]) +
+  xlab("PMA treated samples by milk type")
+ChouANOVA(qPCR.TurNm[qPCR.TurNm$SampleType %in% c("HTST_feed"),])
+ChouANOVA(qPCR.TurNm[qPCR.TurNm$SampleType %in% c("HTST_milk"),])
+  
+slit.plot(qPCR.TurNm[qPCR.TurNm$SampleType %in% c("HTST_feed","HTST_milk"),]) +
+  xlab("PMA treated samples by milk type")
+```
+

@@ -1,0 +1,378 @@
+---
+title: "Fawaz analysis"
+author: "Zeya Zhengyao Xue"
+date: "12/31/2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Setting up packages and working directory 
+```{r}
+library(phyloseq);packageVersion("phyloseq")
+library(ggplot2)
+library(reshape2)
+library(plyr)
+library(dplyr)
+library(PMCMR)
+library(vegan)
+library(RColorBrewer)
+library(superheat)
+library(DESeq2);packageVersion("DESeq2")
+
+path <- "~/Google Drive File Stream/My Drive/UC_Davis/Marco_lab/Fawaz_analysis/"
+```
+
+## Import QIIME2 output and make phyloseq object
+```{r}
+# Transpose the QIIME2 output in excel
+SeqTab <- read.table(file.path(path,"feature-table-mc2.txt"), header = TRUE, stringsAsFactors = FALSE)
+colnames(SeqTab) <- gsub("X","",colnames(SeqTab))
+row.names(SeqTab) <- SeqTab$OTUID
+SeqTab <- SeqTab[,-1]
+SeqTab <- as.matrix.data.frame(SeqTab)
+
+# Parse out taxonomic assignment in excel and remove confidence column
+TaxTab <- read.table(file.path(path,"taxonomy-mc2.tsv"), header = TRUE, sep = '\t', na.strings = NA)
+rownames(TaxTab) <- TaxTab$Feature.ID
+TaxTab <- TaxTab[,-1]
+TaxTab <- as.matrix.data.frame(TaxTab)
+
+# Read in metadata file
+samdf <- read.csv(file.path(path,"samdf_Fawaz_study.csv"))
+rownames(samdf) <- samdf$SampleID
+
+# Read in exported rooted tree 
+tree <- read_tree(file.path(path, "tree.nwk"))
+
+### Merge as one phyloseq object
+ps <- phyloseq(otu_table(SeqTab,taxa_are_rows = FALSE), tax_table(TaxTab), sample_data(samdf), phy_tree(tree))
+ps # 700 taxa and 24 samples
+```
+
+
+## Filter ASVs based on taxonomy and abundance 
+```{r}
+# Show available ranks in the dataset
+rank_names(ps)
+# Create table, number of features for each phylum
+table(tax_table(ps)[, "Phylum"], exclude = NULL)
+# remove asv that was not assigned at phylum level
+ps.Phy <- subset_taxa(ps, !is.na(Phylum) & !Phylum %in% c(""))
+ps.Phy # 697 taxa and 24 samples
+
+# Explore abundance to decide filter threshold
+## Compute prevalence of each feature, store as data.frame
+prevdf <- apply(X = otu_table(ps.Phy),
+                MARGIN = ifelse(taxa_are_rows(ps.Phy), yes = 1, no = 2),
+                FUN = function(x)(sum(x>0)))
+# Add taxonomy and total read counts to this data.frame
+prevdf <- data.frame(Prevalence = prevdf,
+                     TotalAbundance = taxa_sums(ps.Phy),
+                     tax_table(ps.Phy))
+# plot the abudance per phylum 
+ggplot(prevdf, aes(TotalAbundance, Prevalence / nsamples(ps.Phy),color=Phylum)) +
+  # Include a guess for parameter
+  geom_hline(yintercept = 0.01,  linetype = 2) + geom_point(size = 2, alpha = 0.7) +
+  scale_x_log10() +  xlab("Total Abundance") + ylab("Prevalence [Frac. Samples]") +
+  facet_wrap(~Phylum) + theme(legend.position="none")
+```
+No Phylum was lower than 0.01, so no abundance filtering is needed.
+
+## Determine rarefaction level
+```{r}
+set.seed(123)
+
+# Define function to calculate alpha diversity and rarefaction levels
+calculate_rarefaction_curves <- function(psdata, measures, depths) {
+  estimate_rarified_richness <- function(psdata, measures, depth) {
+    if(max(sample_sums(psdata)) < depth) return()
+    psdata <- prune_samples(sample_sums(psdata) >= depth, psdata)
+    rarified_psdata <- rarefy_even_depth(psdata, depth, verbose = FALSE)
+    alpha_diversity <- estimate_richness(rarified_psdata, measures = measures)
+    # as.matrix forces the use of melt.array, which includes the Sample names (rownames)
+    molten_alpha_diversity <- melt(as.matrix(alpha_diversity), varnames = c("SampleID", 'measures'), value.name = 'Alpha_diversity')
+    molten_alpha_diversity
+  }
+  names(depths) <- depths # this enables automatic addition of the Depth to the output by ldply
+  rarefaction_curve_data <- ldply(depths, estimate_rarified_richness, psdata = psdata, measures = measures, .id = 'Depth', .progress = ifelse(interactive(), 'text', 'none'))
+  #convert Depth from factor to numeric
+  rarefaction_curve_data$Depth <- as.numeric(levels(rarefaction_curve_data$Depth))[rarefaction_curve_data$Depth]
+  rarefaction_curve_data
+}
+
+rarefaction_curve_data <- calculate_rarefaction_curves(ps.Phy, c("Observed", "Shannon","Simpson","Chao1"), 
+                                                       rep(c(1, 2500, 5000, 10000, 20000, 40000, 80000), each = 10))
+rarefaction_curve_data$SampleID <- gsub("X","",rarefaction_curve_data$SampleID)
+
+# summarize alpha diversity
+rarefaction_curve_data_summary <- ddply(rarefaction_curve_data, c('Depth', 'SampleID', 'measures'), 
+                                        summarise, 
+                                        Alpha_diversity_mean = mean(Alpha_diversity), 
+                                        Alpha_diversity_sd = sd(Alpha_diversity))
+# Add sample data
+rarefaction_curve_data_summary_verbose <- merge(rarefaction_curve_data_summary, 
+                                                data.frame(sample_data(ps.Phy)), 
+                                                by.x = 'SampleID', by.y = 'row.names')
+rarefaction_curve_data_summary_verbose <- rarefaction_curve_data_summary_verbose[, -1]
+# plot out rarefaction curve
+ggplot(rarefaction_curve_data_summary_verbose, aes(x = Depth, y = Alpha_diversity_mean, 
+                                                   ymin = Alpha_diversity_mean - Alpha_diversity_sd, 
+                                                   ymax = Alpha_diversity_mean + Alpha_diversity_sd,
+                                                   color = Treatment, group = SampleID)) +
+  scale_fill_brewer(palette = "Set2") + 
+  geom_line()+
+  geom_pointrange(size=0.1)+
+  facet_wrap(facets = ~ measures, scales = "free")
+# The diversity leveled out after 10,000 seqs per sample, so rarefy at 11,300 reads
+# to keep the sample with the fewest reads
+ps.Phy.rare <- rarefy_even_depth(ps.Phy, sample.size = 11300, replace = TRUE, 
+                                 rngseed = 123 , trimOTUs = TRUE, verbose = TRUE) 
+ps.Phy.rare #695 taxa and 24 samples
+```
+
+# Alpha diversity analysis using rarefied phyloseq object "ps.Phy.rare"
+```{r}
+alpha_measures = c("Observed", "Chao1", "Shannon", "Simpson") 
+alpha.ps <- estimate_richness(ps.Phy.rare, split = TRUE, measures = alpha_measures) 
+row.names(alpha.ps) <- gsub("X","",row.names(alpha.ps) )
+
+# add sample metadata information
+alpha.ps <- merge(alpha.ps, data.frame(sample_data(ps.Phy.rare)), by.x = 'row.names', by.y = 'row.names')
+alpha.ps <- alpha.ps[, -1]
+
+# Melt dataframe for plotting figures
+alpha.psm <- melt(alpha.ps, id.vars = c("SampleID","Treatment","Date_extracted","Description"),
+                   variable.name = "measure",
+                   value.name = "value")
+pdf(file.path(path, "alpha.pdf"), w = 6, h = 3.6)
+ggplot(subset(alpha.psm, measure %in% c("Observed","Shannon")), aes(x = Treatment, y = value))+ 
+  geom_boxplot() +
+  geom_jitter() +
+  facet_wrap(facets = ~ measure, scales = "free_y") + #strip.position="right"
+  theme_bw(base_size = 15)+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+dev.off()
+# Kruskal Wallis test 
+AlphaKW <- function(x, alpha, path.out){
+  fit <- aov(value ~ Treatment, data = subset(x, measure %in% alpha))
+  
+  attach(x)
+  # because Nemenyi is no appropriate for groups with unequal sample sizes
+  Z <- posthoc.kruskal.dunn.test(value ~ Treatment, p.adjust.method = "none")[[3]]
+  detach()
+  
+  write.csv(Z, path.out)
+}
+AlphaKW(alpha.psm, "Observed", file.path(path, "ObservedKW.csv"))
+AlphaKW(alpha.psm, "Shannon", file.path(path, "ShannonKW.csv"))
+```
+
+# Beta diversity using phyloseq object "ps.Phy"
+```{r}
+BetaPlot <- function(ps.ord, w, h, path.out){
+  pdf(path.out, w, h )
+  print(plot_ordination(ps.Phy, ps.ord, color = "Treatment") + 
+          geom_point(size=3)+ 
+          scale_color_brewer(palette="Set2")+
+          ggtitle("")+
+          ylab("PCoA 2")+ 
+          xlab("PCoA 1")+
+          theme_bw(base_size = 15))
+  dev.off()
+}
+
+## PCoA 
+PCoA.wuf.milk <- ordinate(ps.Phy, method = "PCoA", distance = "wunifrac")
+BetaPlot(PCoA.wuf.milk, w = 5.3, h = 3.7, path.out = file.path(path, "PCoA_wunifrac.pdf"))
+# Adonis testing
+metadata <- as(sample_data(ps.Phy), "data.frame")
+adonis2(phyloseq::distance(ps.Phy, "wunifrac") ~ Treatment, data = metadata)
+
+PCoA.uf.milk <- ordinate(ps.Phy, method = "PCoA", distance = "unifrac")
+BetaPlot(PCoA.uf.milk, w = 5.3, h = 3.7, path.out = file.path(path, "PCoA_unifrac.pdf"))
+adonis2(phyloseq::distance(ps.Phy, "unifrac") ~ Treatment, data = metadata)
+
+NMDS.bray.milk <- ordinate(ps.Phy, method = "NMDS", distance = "bray")
+BetaPlot(NMDS.bray.milk, w = 5.3, h = 3.7, path.out = file.path(path, "NMDS_bray.pdf"))
+# can not do adonis, gives an error
+```
+
+
+# taxonomy analysis using phyloseq object "ps.Phy"
+```{r}
+# Clean up the taxonomy level for Stacked bar plot 
+# make the deepest taxonomic identification in TaxTab as the recommened taxonomy (REC)
+RECps <- function(x, ps) {
+  TaxTab2 <- as.data.frame(x)
+  
+  list.g <- as.character(TaxTab2$Genus)
+  list.f <- as.character(TaxTab2$Family)
+  list.o <- as.character(TaxTab2$Order)
+  list.c <- as.character(TaxTab2$Class)
+  list.p <- as.character(TaxTab2$Phylum)
+  list.k <- as.character(TaxTab2$Kingdom)
+  list.REC <- character(length(list.g))
+  
+  for(i in 1:dim(TaxTab2)[1]){
+    G = which(TaxTab2$Genus[i] == "")
+    F = which(TaxTab2$Family[i] == "")
+    O = which(TaxTab2$Order[i] == "")
+    C = which(TaxTab2$Class[i] == "")
+    P = which(TaxTab2$Phylum[i] == "")
+    K = which(TaxTab2$Kingdom[i] == "")
+    if(length(G) == 0){
+      list.REC[i] <- list.g[i]
+    } else if(length(F) == 0){
+      list.REC[i] <- list.f[i]
+    } else if(length(O) == 0){
+      list.REC[i] <- list.o[i]
+    } else if(length(C) == 0){
+      list.REC[i] <- list.c[i]
+    } else if(length(P) == 0){
+      list.REC[i] <- list.p[i]
+    } else if(length(K) == 0){
+      list.REC[i] <- list.k[i]
+    } else
+      list.REC[i] <- "meow"
+  }
+  
+  TaxTab2$REC <- list.REC
+  TaxTab2$REC <- factor(TaxTab2$REC)
+  merge_phyloseq(ps, TaxTab2 %>% as.matrix() %>% tax_table())
+}
+
+ps.Phy.glom <- tax_glom(ps.Phy, taxrank = "Genus", NArm = FALSE)
+ps.Phy.REC <- RECps(TaxTab, ps.Phy.glom)
+ps.Phy.REC # 70 taxa and 24 samples
+ps.Phy.REC.per <- ps.Phy.REC %>% transform_sample_counts(function(x) x/sum(x) )  #get abundance in %
+# create dataframe from phyloseq object
+taxa.df <- psmelt(ps.Phy.REC.per)
+# merge/average per Treatment
+taxa.df_agg <- aggregate(Abundance ~ Treatment + REC,
+                         data = taxa.df,
+                         mean)
+
+#### Bar plot #####
+TreatmentBar <- function(ps, df, path.out, w, h){  
+  # Filter to keep the top 15 taxa and other 
+  ps.Notop15 <- prune_taxa(names(sort(taxa_sums(ps), TRUE)[16:nrow(ps@tax_table)]), ps)
+  taxa.filtn <- ps.Notop15@tax_table[,8] %>% as.character() #8 for REC level 
+  # convert REC to a character vector from a factor because R
+  df$REC <- as.character(df$REC)
+  # change their name to "Other"
+  df[df$REC %in% taxa.filtn,]$REC <- "Other"
+  df$REC = factor(df$REC, levels = c("Bacteroides", "Clostridiales", 
+                                     "Coprococcus", "Desulfovibrio",
+                                     "Helicobacter", "Lachnospiraceae",
+                                     "Lactobacillus", "Mycoplasmataceae",
+                                     "Oscillospira", "Rikenellaceae",
+                                     "Ruminococcaceae", "Ruminococcus",
+                                     "S24-7", "Turicibacter", "Other"))
+  # Set colors for plotting
+  mycol = colorRampPalette(brewer.pal(12, "Paired"))(16)
+  
+  pdf(path.out, w, h)
+  print(ggplot(df, aes(x = SampleID, y = Abundance, fill = REC)) +
+    geom_bar(position = "fill",stat = "identity") + 
+    scale_fill_manual(values = mycol)+
+    theme_bw(base_size = 20) +
+    # Remove x axis title
+    theme(axis.title.x = element_blank(), text = element_text(size = 16)) + 
+    guides(fill = guide_legend(reverse = FALSE, keywidth = 1, keyheight = 1)) +
+    ylab("Relative abundance"))
+  dev.off()
+}
+
+TreatmentBar(ps.Phy.REC.per, taxa.df_agg, file.path(path, "tax_bar.pdf"), w = 6, h = 5)
+taxa.df$SampleID <- factor(taxa.df$SampleID, levels = c("260","261","282","286","311","312","375","262","267","284","294","313","271","343","349","350","368","369","333","366","385","446","449","455"))
+TreatmentBar(ps.Phy.REC.per, taxa.df, file.path(path, "tax_bar_SampleID.pdf"), w = 13, h = 5)
+
+#### Heat map #####
+taxa.cast <- dcast(taxa.df_agg, REC ~ Treatment, mean, value.var = "Abundance")
+# need to change results from factor to numeric because of R
+row.names(taxa.cast) <- taxa.cast$REC
+taxa.cast <- taxa.cast[, -1]
+indx <- sapply(taxa.cast, is.factor)
+taxa.cast[indx] <- lapply(taxa.cast[indx], function(x) as.numeric(as.character(x))) 
+# keep only the top 30 taxa
+taxa.cast30 <- cbind(taxa.cast, total = rowSums(taxa.cast)) #  need numeric values
+taxa.cast30$taxa <- rownames(taxa.cast30)
+taxa.cast30 <- head(dplyr::arrange(taxa.cast30, desc(taxa.cast30$total)), n = 30)
+row.names(taxa.cast30) <- taxa.cast30$taxa
+taxa.cast30 <- taxa.cast30[, -c(5,6)]
+
+png(file.path(path, "tax_heat.png"), width = 570, height = 900)
+superheat(taxa.cast30,
+          left.label.size = 0.8, 
+          bottom.label.size = 0.1,
+          left.label.text.size = 7,
+          bottom.label.text.size = 7,
+          grid.hline = TRUE,
+          col.dendrogram = TRUE,
+          heat.col.scheme = "red")
+dev.off()
+
+
+
+## Define function to use DESeq2 for differential analysis 
+# calculate geometric means prior to estimate size factors
+gmMean = function(x, na.rm=TRUE){
+  exp(sum(log(x[x > 0]), na.rm=na.rm) / length(x))
+}
+# Differential abundance and generate diagnostic plots and write sig tables 
+sample_data(ps.Phy.REC)$Treatment <- factor(sample_data(ps.Phy.REC)$Treatment)
+psdds <- phyloseq_to_deseq2(ps.Phy.REC, design = ~ Treatment)
+geoMeans <- apply(counts(psdds), 1, gmMean)
+psdds <- estimateSizeFactors(psdds, geoMeans = geoMeans)
+
+dds <- DESeq(psdds, test = "Wald", fitType = "local") 
+plotDispEsts(dds, ylim = c(1e-6, 1e2)) 
+alpha <- 0.5 #  padj for indepenent filtering and expect FDR < alpha
+resCT.KO <- results(dds, contrast = c("Treatment", "CT", "KO"),
+                    alpha = alpha, lfcThreshold = 0, altHypothesis = "greaterAbs")
+resCT.STZCT <- results(dds, contrast = c("Treatment", "CT", "STZCT"),
+                    alpha = alpha, lfcThreshold = 0, altHypothesis = "greaterAbs")
+resCT.STZKO <- results(dds, contrast = c("Treatment", "CT", "STZKO"),
+                       alpha = alpha, lfcThreshold = 0, altHypothesis = "greaterAbs")
+resKO.STZCT <- results(dds, contrast = c("Treatment", "KO", "STZCT"),
+                       alpha = alpha, lfcThreshold = 0, altHypothesis = "greaterAbs")
+resKO.STZKO <- results(dds, contrast = c("Treatment", "KO", "STZKO"),
+                       alpha = alpha, lfcThreshold = 0, altHypothesis = "greaterAbs")
+resSTZCT.STZKO <- results(dds, contrast = c("Treatment", "STZCT", "STZKO"),
+                    alpha = alpha, lfcThreshold = 0, altHypothesis = "greaterAbs")
+
+
+f <- function(res){
+  mcols(res, use.names = TRUE)
+  sigtab <- res[which(res$padj < alpha), ]
+}
+f2 <- function(sigtab){
+  cbind(as(sigtab, "data.frame"), as(tax_table(ps)[rownames(sigtab), ], "matrix"))
+}
+
+
+sigtabCT.KO <- f(resCT.KO) # ROW = 0
+
+
+sigtabSTZCT.STZKO <- f(resSTZCT.STZKO) 
+sigtabCT.STZCT <- f(resCT.STZCT)
+sigtabCT.STZKO<- f(resCT.STZKO)
+sigtabKO.STZCT <- f(resKO.STZCT)
+sigtabKO.STZKO <- f(resKO.STZKO)
+
+sigtabSTZCT.STZKO <- f2(sigtabSTZCT.STZKO) 
+sigtabCT.STZCT <- f2(sigtabCT.STZCT) 
+sigtabCT.STZKO <- f2(sigtabCT.STZKO) 
+sigtabKO.STZCT <- f2(sigtabKO.STZCT) 
+sigtabKO.STZKO <- f2(sigtabKO.STZKO) 
+
+write.csv(sigtabSTZCT.STZKO, file.path(path, "sigtabSTZCT.STZKO.csv"))
+write.csv(sigtabCT.STZCT, file.path(path, "sigtabCT.STZCT.csv"))
+write.csv(sigtabCT.STZKO, file.path(path, "sigtabCT.STZKO.csv"))
+write.csv(sigtabKO.STZCT, file.path(path, "sigtabKO.STZCT.csv"))
+write.csv(sigtabKO.STZKO, file.path(path, "sigtabKO.STZKO.csv"))
+
+```
