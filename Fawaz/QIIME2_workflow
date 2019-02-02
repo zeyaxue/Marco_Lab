@@ -1,0 +1,92 @@
+#December 31, 2018
+# 
+
+
+
+# separating barcodes from reads 
+time extract_barcodes.py -f /home/marcolabuser/Zeya/Fawaz_analysis/DH-1-5-16_S1_L001_R1_001.fastq --bc1_len 8 -m /home/marcolabuser/Zeya/Fawaz_analysis/Fawaz_study_mapping_file.txt -o /home/marcolabuser/Zeya/Fawaz_analysis/barcodes_R1/
+#20m54.424s
+
+time extract_barcodes.py -f /home/marcolabuser/Zeya/Fawaz_analysis/DH-1-5-16_S1_L001_R2_001.fastq --bc1_len 8 -m /home/marcolabuser/Zeya/Fawaz_analysis/Fawaz_study_mapping_file.txt -o /home/marcolabuser/Zeya/Fawaz_analysis/barcodes_R2/
+#21m14.483s
+
+
+# Compress the output files from extract barcodes step 
+gzip /home/marcolabuser/Zeya/Fawaz_analysis/barcodes_R1/barcodes.fastq -r /home/marcolabuser/Zeya/Fawaz_analysis/barcodes_R1/barcodes.fastq.gz
+
+gzip /home/marcolabuser/Zeya/Fawaz_analysis/barcodes_R2/barcodes.fastq -r home/marcolabuser/Zeya/Fawaz_analysis/barcodes_R2/barcodes.fastq.gz
+
+gzip /home/marcolabuser/Zeya/Fawaz_analysis/barcodes_R1/reads.fastq -r /home/marcolabuser/Zeya/Fawaz_analysis/barcodes_R1/reads.fastq.gz
+
+gzip /home/marcolabuser/Zeya/Fawaz_analysis/barcodes_R2/reads.fastq -r /home/marcolabuser/Zeya/Fawaz_analysis/barcodes_R2/reads.fastq.gz
+
+# RENAME THE READS FILE TO "sequences.fastq.gz" OR LATER SCRIPTS WILL NOT WORK
+
+#demultiplexing
+source activate qiime2-2018.4
+
+qiime tools import --type EMPSingleEndSequences --input-path /home/marcolabuser/Zeya/Fawaz_analysis/barcodes_R1/ --output-path /home/marcolabuser/Zeya/Fawaz_analysis/barcodes_R1/R1_imported.qza
+
+qiime tools import --type EMPSingleEndSequences --input-path /home/marcolabuser/Zeya/Fawaz_analysis/barcodes_R2/ --output-path /home/marcolabuser/Zeya/Fawaz_analysis/barcodes_R2/R2_imported.qza
+
+#demultiplexing
+qiime demux emp-single --i-seqs /home/marcolabuser/Zeya/Fawaz_analysis/barcodes_R1/R1_imported.qza --m-barcodes-file /home/marcolabuser/Zeya/Fawaz_analysis/Fawaz_study_mapping_file.txt --m-barcodes-column BarcodeSequence --output-dir /home/marcolabuser/Zeya/Fawaz_analysis/barcodes_R1/demux 
+
+qiime demux emp-single --i-seqs /home/marcolabuser/Zeya/Fawaz_analysis/barcodes_R2/R2_imported.qza --m-barcodes-file /home/marcolabuser/Zeya/Fawaz_analysis/Fawaz_study_mapping_file.txt --m-barcodes-column BarcodeSequence --output-dir /home/marcolabuser/Zeya/Fawaz_analysis/barcodes_R2/demux 
+
+qiime demux summarize --i-data /home/marcolabuser/Zeya/Fawaz_analysis/barcodes_R1/demux/per_sample_sequences.qza --o-visualization /home/marcolabuser/Zeya/Fawaz_analysis/barcodes_R1/demux/per_sample_sequences.qzv
+# position 200  
+qiime demux summarize --i-data /home/marcolabuser/Zeya/Fawaz_analysis/barcodes_R2/demux/per_sample_sequences.qza --o-visualization /home/marcolabuser/Zeya/Fawaz_analysis/barcodes_R2/demux/per_sample_sequences.qzv
+# position 200 
+
+# DADA2 on R1 and R2 demultiplexed reads 
+## I decided to have them as the same length of 
+time qiime dada2 denoise-single --i-demultiplexed-seqs /home/marcolabuser/Zeya/Fawaz_analysis/barcodes_R1/demux/per_sample_sequences.qza --p-trim-left 29 --p-trunc-len 200 --output-dir /home/marcolabuser/Zeya/Fawaz_analysis/barcodes_R1/dada2/ --p-n-threads 23
+#  23m11.634s
+
+time qiime dada2 denoise-single --i-demultiplexed-seqs /home/marcolabuser/Zeya/Fawaz_analysis/barcodes_R2/demux/per_sample_sequences.qza --p-trim-left 29 --p-trunc-len 200 --output-dir /home/marcolabuser/Zeya/Fawaz_analysis/barcodes_R2/dada2/ --p-n-threads 23
+# 30m2.628s
+
+# merge the output tables 
+qiime feature-table merge --i-tables /home/marcolabuser/Zeya/Fawaz_analysis/barcodes_R1/dada2/table.qza --i-tables /home/marcolabuser/Zeya/Fawaz_analysis/barcodes_R2/dada2/table.qza --p-overlap-method sum --o-merged-table /home/marcolabuser/Zeya/Fawaz_analysis/merged_table.qza
+
+qiime feature-table summarize --i-table /home/marcolabuser/Zeya/Fawaz_analysis/merged_table.qza --o-visualization /home/marcolabuser/Zeya/Fawaz_analysis/merged_table.qzv --m-sample-metadata-file /home/marcolabuser/Zeya/Fawaz_analysis/Fawaz_study_mapping_file.txt
+#min 11,471 seqs per sample 
+
+# merge representative sequences 
+qiime feature-table merge-seqs --i-data /home/marcolabuser/Zeya/Fawaz_analysis/barcodes_R1/dada2/representative_sequences.qza --i-data /home/marcolabuser/Zeya/Fawaz_analysis/barcodes_R2/dada2/representative_sequences.qza --o-merged-data /home/marcolabuser/Zeya/Fawaz_analysis/merged_rep_seqs.qza
+
+qiime feature-table tabulate-seqs --i-data /home/marcolabuser/Zeya/Fawaz_analysis/merged_rep_seqs.qza --o-visualization /home/marcolabuser/Zeya/Fawaz_analysis/merged_rep_seqs.qzv
+
+# tree building
+qiime alignment mafft --i-sequences /home/marcolabuser/Zeya/Fawaz_analysis/merged_rep_seqs.qza --o-alignment /home/marcolabuser/Zeya/Fawaz_analysis/aligned_merged_rep_seqs.qza
+
+qiime alignment mask --i-alignment /home/marcolabuser/Zeya/Fawaz_analysis/aligned_merged_rep_seqs.qza --o-masked-alignment /home/marcolabuser/Zeya/Fawaz_analysis/masked_aligned_merged_rep_seqs.qza
+
+qiime phylogeny fasttree --i-alignment /home/marcolabuser/Zeya/Fawaz_analysis/masked_aligned_merged_rep_seqs.qza --o-tree /home/marcolabuser/Zeya/Fawaz_analysis/tree_masked_aligned_merged_rep_seqs.qza
+
+qiime phylogeny midpoint-root --i-tree /home/marcolabuser/Zeya/Fawaz_analysis/tree_masked_aligned_merged_rep_seqs.qza --o-rooted-tree /home/marcolabuser/Zeya/Fawaz_analysis/rooted_tree_masked_aligned_merged_rep_seqs.qza
+
+# Classify taxonomy 
+qiime feature-classifier classify-sklearn --i-classifier /home/marcolabuser/matt_wright/rat_crc_study/gg-13-8-99-515-806-nb-classifier.qza --i-reads /home/marcolabuser/Zeya/Fawaz_analysis/merged_rep_seqs.qza --o-classification /home/marcolabuser/Zeya/Fawaz_analysis/taxonomy/taxonomy.qza
+# visualize/adding metadata to the taxonomy file
+qiime metadata tabulate --m-input-file /home/marcolabuser/Zeya/Fawaz_analysis/taxonomy/taxonomy.qza --o-visualization /home/marcolabuser/Zeya/Fawaz_analysis/taxonomy/taxonomy.qzv
+
+
+### min count 2 
+# Filter singleton out 
+qiime feature-table filter-features --i-table /home/marcolabuser/Zeya/Fawaz_analysis/merged_table.qza --p-min-samples 2 --o-filtered-table /home/marcolabuser/Zeya/Fawaz_analysis/merged_table-mc2.qza
+# convert biom feature table to txt table after extract the qza file
+biom convert -i /home/marcolabuser/Zeya/Fawaz_analysis/feature-table-mc2.biom -o /home/marcolabuser/Zeya/Fawaz_analysis/feature-table-mc2.txt --to-tsv 
+
+qiime feature-table summarize --i-table /home/marcolabuser/Zeya/Fawaz_analysis/merged_table-mc2.qza --o-visualization /home/marcolabuser/Zeya/Fawaz_analysis/merged_table-mc2.qzv --m-sample-metadata-file /home/marcolabuser/Zeya/Fawaz_analysis/Fawaz_study_mapping_file.txt
+# min 11,374 seqs per sample
+
+#filter rep seq file to contain only >mc2 taxa
+qiime feature-table filter-seqs --i-data /home/marcolabuser/Zeya/Fawaz_analysis/merged_rep_seqs.qza --i-table /home/marcolabuser/Zeya/Fawaz_analysis/merged_table-mc2.qza --o-filtered-data /home/marcolabuser/Zeya/Fawaz_analysis/merged_rep_seqs-mc2.qza
+
+##Classify >mc2 taxonomy 
+qiime feature-classifier classify-sklearn --i-classifier /home/marcolabuser/matt_wright/rat_crc_study/gg-13-8-99-515-806-nb-classifier.qza --i-reads /home/marcolabuser/Zeya/Fawaz_analysis/merged_rep_seqs-mc2.qza --o-classification /home/marcolabuser/Zeya/Fawaz_analysis/taxonomy/taxonomy-mc2.qza
+
+## Export to R and process with Phyloseq, file name "src/Marco_Lab/Fawaz/Fawaz_analysis.Rmd" 
+
