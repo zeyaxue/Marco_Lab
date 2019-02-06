@@ -21,41 +21,43 @@ library(cowplot);packageVersion("cowplot")
 library(plyr)
 library(dplyr)
 
+path <- "~/Google Drive File Stream/My Drive/UC_Davis/Marco_lab/milk_microbiota/Mock_community/MC_paper2_QIIME2/"
 ```
 
 ## Import QIIME2 output and make phyloseq object
+2/5/19: add Phase 3 results and import as the same ps object
 ```{r}
 # Transpose the QIIME2 output in excel
 # For the theoretical values, I can adjust its absolute reads to suit data set by
 # changing values in the feature table
-SeqTab <- read.table(("feature_table/4file-combined_table-dada2.txt"), header = TRUE, stringsAsFactors = FALSE)
+SeqTab <- read.table(file.path(path, "feature_table/5file-combined_table-dada2-mc2.txt"), header = TRUE, stringsAsFactors = FALSE)
 colnames(SeqTab) <- gsub("X","",colnames(SeqTab))
 row.names(SeqTab) <- SeqTab$OTUID
 SeqTab <- SeqTab[,-1]
 SeqTab <- as.matrix.data.frame(SeqTab)
 
 # Read in metadata file
-samdf <- read.csv(("mapping/MC_paper2_samdf.csv"))
+samdf <- read.csv(file.path(path,"mapping/5file-MC_paper2_samdf.csv"))
 rownames(samdf) <- samdf$SampleID
 
 # Read in exported rooted tree 
-tree <- read_tree(( "tree.nwk"))
+tree <- read_tree(file.path(path,"5file-tree.nwk"))
 
 # Parse out taxonomic assignment in excel and remove confidence column
 # keep only taxa included in the "feature-table-mc2.csv" file
-TaxTab <- read.table(("taxonomy.tsv"), header = TRUE, sep = '\t', na.strings = NA)
+TaxTab <- read.table(file.path(path,"5file-taxonomy-mc2.tsv"), header = TRUE, sep = '\t', na.strings = NA)
 rownames(TaxTab) <- TaxTab$FeatureID
 TaxTab <- TaxTab[,-1]
 TaxTab <- as.matrix.data.frame(TaxTab)
 
 # merge as the phyloseq ready to use
-ps <- phyloseq(otu_table(SeqTab, taxa_are_rows = FALSE), tax_table(TaxTab),sample_data(samdf), phy_tree(tree))
-ps # 3019 taxa and 161 sample
+ps <- phyloseq(otu_table(SeqTab, taxa_are_rows = TRUE), tax_table(TaxTab),sample_data(samdf), phy_tree(tree))
+ps # 1052 taxa and 212 samples 
 
 # Filter out singleton
 ps <- filter_taxa(ps, function (x) {sum(x > 0) > 1}, prune=TRUE)
-ps # 720 taxa and 161 samples
-write.csv(ps@otu_table, ("feature_table/feature-table-mc2.csv"))
+ps # 1049 taxa and 212 samples
+write.csv(ps@otu_table, file.path(path,"feature_table/5file-feature-table-mc2.csv"))
 ```
 
 ## Inspect Library Sizes
@@ -80,7 +82,7 @@ rank_names(ps)
 table(tax_table(ps)[, "Phylum"], exclude = NULL)
 # remove asv that was not assigned at phylum level
 ps.Phy <- subset_taxa(ps, !is.na(Phylum) & !Phylum %in% c(""))
-ps.Phy # 687 taxa and 161 samples  
+ps.Phy # 1013 taxa and 212 samples
 # Explore abundance to decide filter threshold
 ## Compute prevalence of each feature, store as data.frame
 prevdf <- apply(X = otu_table(ps.Phy),
@@ -103,7 +105,7 @@ ggplot(prevdf, aes(TotalAbundance, Prevalence / nsamples(ps.Phy),color=Phylum)) 
 x = taxa_sums(ps.Phy)
 keepTaxa = which((x / sum(x)) > 0.00005)
 ps.Phy05 <- prune_taxa(names(keepTaxa), ps.Phy)
-ps.Phy05 # 155 taxa and 161 samples
+ps.Phy05 # 197 taxa and 212 samples
 ```
 
 ## Determine rarefaction level for Alpha and Beta analysis later on
@@ -151,13 +153,13 @@ ggplot(rarefaction_curve_data_summary_verbose, aes(x = Depth, y = Alpha_diversit
   theme(legend.position="none") + #  remove legend
   facet_wrap(facets = ~ measures, scales = "free")
 # export the library size to a csv file
-write.csv(sample_sums(ps.Phy05), ( "mapping/library_size_ps.Phy05.csv"))
+write.csv(sample_sums(ps.Phy05), file.path(path, "mapping/library_size_ps.Phy05_5file.csv"))
 
-# The diversity leveled out after 2500 seqs per sample, rarefy at 4000
+# The diversity leveled out after 2500 seqs per sample, rarefy at 3990
 # to keep the sample with the fewest reads that is no a NC (MC.50.2)
-ps.Phy.rare <- rarefy_even_depth(ps.Phy05, sample.size = 4000, replace = TRUE, 
+ps.Phy.rare <- rarefy_even_depth(ps.Phy05, sample.size = 3990, replace = TRUE, 
                                  rngseed = 123 , trimOTUs = TRUE, verbose = TRUE) 
-ps.Phy.rare # 155 taxa and 155 samples
+ps.Phy.rare # 197 taxa and 203 samples
 ```
 
 ## Divide the ps object for different dataset 
@@ -206,7 +208,7 @@ RECps <- function(x, ps) {
 
 ps.Phy.glom <- tax_glom(ps.Phy05, taxrank = "Genus", NArm = FALSE)
 ps.Phy.REC <- RECps(TaxTab, ps.Phy.glom)
-ps.Phy.REC # 91 taxa and 161 samples
+ps.Phy.REC # 100 taxa and 212 samples
 
 
 # Define function to get the average value of the feature table 
@@ -258,24 +260,31 @@ ps5 # 91 taxa and 24 samples
 write.csv(AveFeatTab(ps5), ( "feature_table/FeatTab_sample_storage.csv"))
 
 # 6. Sample Volume
-samdf_total_vol <- read.csv(( "mapping/MC_paper2_samdf_total_vol.csv"))
+samdf_total_vol <- read.csv(file.path(path, "mapping/MC_paper2_samdf_total_vol.csv"))
 rownames(samdf_total_vol) <- samdf_total_vol$SampleID
 ps6 <- phyloseq(sample_data(samdf_total_vol), otu_table(ps.Phy.REC),
                 tax_table(ps.Phy.REC), phy_tree(ps.Phy.REC))
 ps6 # 91 taxa and 18 samples
 write.csv(AveFeatTab(ps6), ( "feature_table/FeatTab_total_vol.csv"))
 
+# 7. phase 3 kit, cleanup and lysing method 
+samdf_phase3 <- read.csv(file.path(path, "mapping/phase3_samdf.csv"))
+rownames(samdf_phase3) <- samdf_phase3$SampleID
+ps7 <- phyloseq(sample_data(samdf_phase3), otu_table(ps.Phy.REC),
+                tax_table(ps.Phy.REC), phy_tree(ps.Phy.REC))
+ps7 # 100 taxa and 51 samples
+write.csv(AveFeatTab(ps7), file.path(path, ("feature_table/FeatTab_phase3.csv")))
 ```
 
 
 ### For alpha and beta div based on ps.Phy.rare
 ```{r}
-ps1.rare <- rarefy_even_depth(ps1, sample.size = 4000, replace = TRUE, rngseed = 123 , trimOTUs = TRUE, verbose = TRUE) 
-ps2.rare <- rarefy_even_depth(ps2, sample.size = 4000, replace = TRUE, rngseed = 123 , trimOTUs = TRUE, verbose = TRUE) 
-ps3.rare <- rarefy_even_depth(ps3, sample.size = 4000, replace = TRUE, rngseed = 123 , trimOTUs = TRUE, verbose = TRUE) 
-ps4.rare <- rarefy_even_depth(ps4, sample.size = 4000, replace = TRUE, rngseed = 123 , trimOTUs = TRUE, verbose = TRUE) 
-ps5.rare <- rarefy_even_depth(ps5, sample.size = 4000, replace = TRUE, rngseed = 123 , trimOTUs = TRUE, verbose = TRUE) 
-ps6.rare <- rarefy_even_depth(ps6, sample.size = 4000, replace = TRUE, rngseed = 123 , trimOTUs = TRUE, verbose = TRUE) 
+ps1.rare <- rarefy_even_depth(ps1, sample.size = 3990, replace = TRUE, rngseed = 123 , trimOTUs = TRUE, verbose = TRUE) 
+ps2.rare <- rarefy_even_depth(ps2, sample.size = 3990, replace = TRUE, rngseed = 123 , trimOTUs = TRUE, verbose = TRUE) 
+ps3.rare <- rarefy_even_depth(ps3, sample.size = 3990, replace = TRUE, rngseed = 123 , trimOTUs = TRUE, verbose = TRUE) 
+ps4.rare <- rarefy_even_depth(ps4, sample.size = 3990, replace = TRUE, rngseed = 123 , trimOTUs = TRUE, verbose = TRUE) 
+ps5.rare <- rarefy_even_depth(ps5, sample.size = 3990, replace = TRUE, rngseed = 123 , trimOTUs = TRUE, verbose = TRUE) 
+ps6.rare <- rarefy_even_depth(ps6, sample.size = 3990, replace = TRUE, rngseed = 123 , trimOTUs = TRUE, verbose = TRUE) 
 
 ps1.rare #  27 taxa and 23 samples
 ps2.rare # 10 taxa and 6 samples
