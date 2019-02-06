@@ -294,3 +294,13 @@ ps5.rare # 18 taxa and 24 samples
 ps6.rare # 51 taxa and 18 samples
 ```
 
+
+BBBBBB
+USE CCA TRIPLOT TO SEE IF THERE'S ASSOCIATION BETWEEN METHOD AND TAXA
+
+AAAAAA
+Alpha could be more useful when using actual milk samples? 
+
+Percent recovery of GBS DNA with meconium extractions
+generated from various extraction kits. Data are mean ± S
+
