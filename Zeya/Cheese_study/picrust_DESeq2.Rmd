@@ -1,0 +1,740 @@
+---
+title: "picrust_phyloseq"
+author: "Zeya Zhengyao Xue"
+date: "October 5, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Setting up 
+```{r}
+library(phyloseq);packageVersion("phyloseq")
+library(biomformat);packageVersion("biomformat")
+library(DESeq2); packageVersion("DESeq2")
+library(ggplot2);packageVersion("ggplot2")
+library(reshape2)
+library(cowplot)
+library(plyr)
+library(dplyr)
+
+# Define project path
+path <- "G:/My Drive/UC_Davis/Marco_lab/milk_microbiota/Hilmar_weekly_samples/QIIME2/"
+# copy the .Rmd file to the path directory to generate html report
+
+set.seed(123) #  for reproducibility
+```
+
+## Define function to use DESeq2 for differential analysis between cheese outcome
+```{r}
+# calculate geometric means prior to estimate size factors
+gmMean = function(x, na.rm=TRUE){
+  exp(sum(log(x[x > 0]), na.rm=na.rm) / length(x))
+}
+
+# Differential abundance and generate diagnostic plots and write sig tables 
+## fold change is slits vs no slits
+## Uses default Benjamini-Hochberg pvalue adjust
+CheeseOutcomeDA <- function(ps, path.out) {
+  psdds <- phyloseq_to_deseq2(ps, ~ CheeseOutcome)
+  geoMeans <- apply(counts(psdds), 1, gmMean)
+  psdds <- estimateSizeFactors(psdds, geoMeans = geoMeans)
+  dds <- DESeq(psdds, test = "Wald", fitType = "local") 
+  plotDispEsts(dds, ylim = c(1e-6, 1e1)) #  need to inspect visually using local fit type
+  alpha <- 0.5 #  padj for indepenent filtering and expect FDR < alpha
+  res <- results(dds, alpha = alpha, 
+                 lfcThreshold = log2(1.2), 
+                 altHypothesis = "greaterAbs", 
+                 cooksCutoff = FALSE) #  turnoff outlier detection
+  mcols(res, use.names=TRUE)  
+  plotMA(res) # diagnostic description
+  hist(res$pvalue, breaks=20, col="grey" ) # diagnostic plot
+  sigtab = res[which(res$padj < alpha), ] # diagnostic plot
+  if (nrow(sigtab) == 0) {
+    print("There are no significant features whose padj < 0.5 and |lfc| > log2(1.2)")
+  } else {
+    sigtab <- cbind(as(sigtab, "data.frame"), as(tax_table(ps)[rownames(sigtab), ], "matrix"))
+    write.csv(sigtab, file.path(path.out))
+  }
+}
+
+
+# TimeSinceCleaning Differential abundance and generate diagnostic plots and write sig tables 
+TiSinCleaningDA <- function(ps, path.out) {
+  sample_data(ps)$TimeSinceCleaning <- factor(sample_data(ps)$TimeSinceCleaning)
+  
+  psdds <- phyloseq_to_deseq2(ps, design = ~ TimeSinceCleaning)
+  geoMeans <- apply(counts(psdds), 1, gmMean)
+  psdds <- estimateSizeFactors(psdds, geoMeans = geoMeans)
+  
+  dds <- DESeq(psdds, test = "Wald", fitType = "local") 
+  plotDispEsts(dds, ylim = c(1e-6, 1e2)) 
+  alpha <- 0.1 #  padj for indepenent filtering and expect FDR < alpha
+
+  res03 <- results(dds, contrast = c("TimeSinceCleaning", "0", "3"),
+                   alpha = alpha, lfcThreshold = log2(1.5), 
+                   altHypothesis = "greaterAbs")
+  res06 <- results(dds, contrast = c("TimeSinceCleaning", "0", "6"),
+                   alpha = alpha, lfcThreshold = log2(1.5), 
+                   altHypothesis = "greaterAbs")
+  res09 <- results(dds, contrast = c("TimeSinceCleaning", "0", "9"),
+                   alpha = alpha, lfcThreshold = log2(1.5), 
+                   altHypothesis = "greaterAbs")
+  res36 <- results(dds, contrast = c("TimeSinceCleaning", "3", "6"),
+                   alpha = alpha, lfcThreshold = log2(1.5), 
+                   altHypothesis = "greaterAbs")
+  res39 <- results(dds, contrast = c("TimeSinceCleaning", "3", "9"),
+                   alpha = alpha, lfcThreshold = log2(1.5), 
+                   altHypothesis = "greaterAbs")
+  res69 <- results(dds, contrast = c("TimeSinceCleaning", "6", "9"),
+                   alpha = alpha, lfcThreshold = log2(1.5), 
+                   altHypothesis = "greaterAbs")
+  
+  f <- function(res){
+    mcols(res, use.names = TRUE)
+    sigtab <- res[which(res$padj < alpha), ]
+  }
+  
+  f2 <- function(sigtab){
+    cbind(as(sigtab, "data.frame"), as(tax_table(ps)[rownames(sigtab), ], "matrix"))
+  }
+  
+  sigtab03 <- f(res03)
+  sigtab06 <- f(res06)
+  sigtab09 <- f(res09)
+  sigtab36 <- f(res36)
+  sigtab39 <- f(res39)
+  sigtab69 <- f(res69)
+  
+  if (nrow(sigtab03) > 0){
+    sigtab03 <- f2(sigtab03)
+    write.csv(sigtab03, file.path(path.out, "03.csv"))
+  }
+  if (nrow(sigtab06) > 0){
+    sigtab06 <- f2(sigtab06) 
+    write.csv(sigtab06, file.path(path.out, "06.csv"))
+  }
+  if (nrow(sigtab09) > 0){
+    sigtab09 <- f2(sigtab09) 
+    write.csv(sigtab09, file.path(path.out, "09.csv"))
+  }
+  if (nrow(sigtab36) > 0){
+   sigtab36 <- f2(sigtab36) 
+   write.csv(sigtab36, file.path(path.out, "36.csv"))
+  }
+  if (nrow(sigtab39) > 0){
+    sigtab39 <- f2(sigtab39) 
+    write.csv(sigtab39, file.path(path.out, "39.csv"))
+  }
+  if (nrow(sigtab69) > 0){
+    sigtab69 <- f2(sigtab69) 
+    write.csv(sigtab69, file.path(path.out, "69.csv"))
+  }
+}
+
+
+# DA function for milk type
+MilkDA <- function(ps, path.out) {
+  psdds <- phyloseq_to_deseq2(ps, design = ~ SampleType)
+  geoMeans <- apply(counts(psdds), 1, gmMean)
+  psdds <- estimateSizeFactors(psdds, geoMeans = geoMeans)
+  
+  dds <- DESeq(psdds, test = "Wald", fitType = "local") 
+  plotDispEsts(dds, ylim = c(1e-6, 1e2)) 
+  alpha <- 0.5 #  padj for indepenent filtering and expect FDR < alpha
+
+  res01 <- results(dds, contrast = c("SampleType", "Raw_milk", "HTST_feed"),
+                   alpha = alpha, lfcThreshold = 0, altHypothesis = "greaterAbs")
+  res02 <- results(dds, contrast = c("SampleType", "Raw_milk", "HTST_milk"),
+                   alpha = alpha, lfcThreshold = 0, altHypothesis = "greaterAbs")
+  res12 <- results(dds, contrast = c("SampleType", "HTST_feed", "HTST_milk"),
+                   alpha = alpha, lfcThreshold = 0, altHypothesis = "greaterAbs")
+  
+  f <- function(res){
+    mcols(res, use.names = TRUE)
+    sigtab <- res[which(res$padj < alpha), ]
+  }
+  
+  f2 <- function(sigtab){
+    cbind(as(sigtab, "data.frame"), as(tax_table(ps)[rownames(sigtab), ], "matrix"))
+  }
+  
+  sigtab01 <- f(res01)
+  sigtab02 <- f(res02)
+  sigtab12 <- f(res12)
+  
+  if (nrow(sigtab01) > 0){
+    sigtab01 <- f2(sigtab01)
+    write.csv(sigtab01, file.path(path.out, "01.csv"))
+  }
+  if (nrow(sigtab02) > 0){
+    sigtab02 <- f2(sigtab02) 
+    write.csv(sigtab02, file.path(path.out, "02.csv"))
+  }
+  if (nrow(sigtab12) > 0){
+    sigtab12 <- f2(sigtab12) 
+    write.csv(sigtab12, file.path(path.out, "12.csv"))
+  }
+}
+```
+
+
+## Subset and DESeq2 analysis of KEGG pathway level 
+The starting point is a picrust .biom file generated using Galaxy.
+```{r}
+# Read the sample information data frame  
+samdf <- read.csv(file.path(path, "mapping/Run1-5_samdf-mc2.csv"))
+rownames(samdf) <- samdf$SampleID
+# Read the function table 
+funtab = read_biom(file.path(path, "picrust/Predicted_Function.biom"))
+# Get taxonomy  
+taxtab = as.matrix(observation_metadata(funtab), rownames.force=TRUE) 
+taxtab = tax_table(taxtab)
+# Add taxonomy to FunTab
+funtab = as(biom_data(funtab), "matrix")
+funtab = otu_table(funtab, taxa_are_rows=TRUE)
+
+# Merge as one phyloseq object 
+ps <- phyloseq(otu_table(funtab,taxa_are_rows = FALSE),tax_table(taxtab), sample_data(samdf))
+saveRDS(ps, file.path(path, "picrust/ps.rds"))
+ps
+
+# Following Bletz et al. 2016: Pathways with < 10 counts were removed from the table.
+ps10 <- filter_taxa(ps, function(x) sum(x) > 10, TRUE)
+saveRDS(ps10, file.path(path, "picrust/ps10.rds"))
+ps10
+
+# 1 # HTST milk samples 
+ps.htst <- subset_samples(ps10, SampleType %in% "HTST_milk")
+saveRDS(ps.htst, file.path(path, "picrust/ps.htst.rds"))
+ps.htst
+# PMA 
+ps.htstY <- subset_samples(ps.htst, PMA %in% "Y")
+saveRDS(ps.htstY, file.path(path, "picrust/ps.htstY.rds"))
+ps.htstY
+CheeseOutcomeDA(ps.htstY, path.out = file.path(path, "picrust/deseq_table/sigtab.htstY.csv"))
+# no PMA 
+ps.htstN <- subset_samples(ps.htst, PMA %in% "N")
+saveRDS(ps.htstN, file.path(path, "picrust/ps.htstN.rds"))
+ps.htstN
+CheeseOutcomeDA(ps.htstN, path.out = file.path(path, "picrust/deseq_table/sigtab.htstN.csv"))
+
+# 2 # Feed milk samples
+ps.feed <- subset_samples(ps10, SampleType %in% "HTST_feed")
+saveRDS(ps.feed, file.path(path, "picrust/ps.feed.rds"))
+ps.feed
+# PMA 
+ps.feedY <- subset_samples(ps.feed, PMA %in% "Y")
+saveRDS(ps.feedY, file.path(path, "picrust/ps.feedY.rds"))
+ps.feedY
+CheeseOutcomeDA(ps.feedY, path.out = file.path(path, "picrust/deseq_table/sigtab.feedY.csv"))
+# no PMA 
+ps.feedN <- subset_samples(ps.feed, PMA %in% "N")
+saveRDS(ps.feedN, file.path(path, "picrust/ps.feedN.rds"))
+ps.feedN
+CheeseOutcomeDA(ps.feedN, path.out = file.path(path, "picrust/deseq_table/sigtab.feedN.csv"))
+
+# 3 # Raw milk samples
+ps.raw <- subset_samples(ps10, SampleType %in% "Raw_milk")
+saveRDS(ps.raw, file.path(path, "picrust/ps.raw.rds"))
+ps.raw
+# PMA 
+ps.rawY <- subset_samples(ps.raw, PMA %in% "Y")
+saveRDS(ps.rawY, file.path(path, "picrust/ps.rawY.rds"))
+ps.rawY
+CheeseOutcomeDA(ps.rawY, path.out = file.path(path, "picrust/deseq_table/sigtab.rawY.csv"))
+# no PMA 
+ps.rawN <- subset_samples(ps.raw, PMA %in% "N")
+saveRDS(ps.rawN, file.path(path, "picrust/ps.rawN.rds"))
+ps.rawN
+CheeseOutcomeDA(ps.rawN, path.out = file.path(path, "picrust/deseq_table/sigtab.rawN.csv"))
+
+# 4 # All Cheddar samples 
+ps.ched <- subset_samples(ps10, CheeseType %in% "Cheddar")
+ps.ched <- subset_samples(ps.ched, 
+                          SampleType %in% c("Cheese_0D","Cheese_30D","Cheese_90D","Cheese_120D"))
+saveRDS(ps.ched, file.path(path, "picrust/ps.ched.rds"))
+ps.ched
+# PMA 
+ps.chedY <- subset_samples(ps.ched, PMA %in% "Y")
+saveRDS(ps.chedY, file.path(path, "picrust/ps.chedY.rds"))
+ps.chedY
+CheeseOutcomeDA(ps.chedY, path.out = file.path(path, "picrust/deseq_table/sigtab.chedY.csv"))
+# no PMA 
+ps.chedN <- subset_samples(ps.ched, PMA %in% "N")
+saveRDS(ps.chedN, file.path(path, "picrust/ps.chedN.rds"))
+ps.chedN
+CheeseOutcomeDA(ps.chedN, path.out = file.path(path, "picrust/deseq_table/sigtab.chedN.csv"))
+
+# 5 # Cheedar 0 day 
+ps.ched0 <- subset_samples(ps.ched, SampleType %in% "Cheese_0D")
+saveRDS(ps.ched0, file.path(path, "picrust/ps.ched0.rds"))
+ps.ched0
+# PMA 
+ps.ched0Y <- subset_samples(ps.ched0, PMA %in% "Y")
+saveRDS(ps.ched0Y, file.path(path, "picrust/ps.ched0Y.rds"))
+ps.ched0Y
+CheeseOutcomeDA(ps.ched0Y, path.out = file.path(path, "picrust/deseq_table/sigtab.ched0Y.csv"))
+# no PMA 
+ps.ched0N <- subset_samples(ps.ched0, PMA %in% "N")
+saveRDS(ps.ched0N, file.path(path, "picrust/ps.ched0N.rds"))
+ps.ched0N
+CheeseOutcomeDA(ps.ched0N, path.out = file.path(path, "picrust/deseq_table/sigtab.ched0N.csv"))
+
+# 6 # Cheedar 30 day 
+ps.ched30 <- subset_samples(ps.ched, SampleType %in% "Cheese_30D")
+saveRDS(ps.ched30, file.path(path, "picrust/ps.ched30.rds"))
+ps.ched30
+# PMA 
+ps.ched30Y <- subset_samples(ps.ched30, PMA %in% "Y")
+saveRDS(ps.ched30Y, file.path(path, "picrust/ps.ched30Y.rds"))
+ps.ched30Y
+CheeseOutcomeDA(ps.ched30Y, path.out = file.path(path, "picrust/deseq_table/sigtab.ched30Y.csv"))
+# no PMA 
+ps.ched30N <- subset_samples(ps.ched30, PMA %in% "N")
+saveRDS(ps.ched30N, file.path(path, "picrust/ps.ched30N.rds"))
+ps.ched30N
+CheeseOutcomeDA(ps.ched30N, path.out = file.path(path, "picrust/deseq_table/sigtab.ched30N.csv"))
+
+# 7 # Cheedar 90 day 
+ps.ched90 <- subset_samples(ps.ched, SampleType %in% "Cheese_90D")
+saveRDS(ps.ched90, file.path(path, "picrust/ps.ched90.rds"))
+ps.ched90
+# PMA 
+ps.ched90Y <- subset_samples(ps.ched90, PMA %in% "Y")
+saveRDS(ps.ched90Y, file.path(path, "picrust/ps.ched90Y.rds"))
+ps.ched90Y
+CheeseOutcomeDA(ps.ched90Y, path.out = file.path(path, "picrust/deseq_table/sigtab.ched90Y.csv"))
+# no PMA 
+ps.ched90N <- subset_samples(ps.ched90, PMA %in% "N")
+saveRDS(ps.ched90N, file.path(path, "picrust/ps.ched90N.rds"))
+ps.ched90N
+CheeseOutcomeDA(ps.ched90N, path.out = file.path(path, "picrust/deseq_table/sigtab.ched90N.csv"))
+
+# 8 # Cheedar 120 day 
+ps.ched120 <- subset_samples(ps.ched, SampleType %in% "Cheese_120D")
+saveRDS(ps.ched120, file.path(path, "picrust/ps.ched120.rds"))
+ps.ched120
+# PMA 
+ps.ched120Y <- subset_samples(ps.ched120, PMA %in% "Y")
+saveRDS(ps.ched120Y, file.path(path, "picrust/ps.ched120Y.rds"))
+ps.ched120Y
+CheeseOutcomeDA(ps.ched120Y, path.out = file.path(path, "picrust/deseq_table/sigtab.ched120Y.csv"))
+# no PMA 
+ps.ched120N <- subset_samples(ps.ched120, PMA %in% "N")
+saveRDS(ps.ched120N, file.path(path, "picrust/ps.ched120N.rds"))
+ps.ched120N
+CheeseOutcomeDA(ps.ched120N, path.out = file.path(path, "picrust/deseq_table/sigtab.ched120N.csv"))
+
+# 9 # Subset to contain only paried sample
+samdf.4hr <- read.csv(file.path(path, "mapping/Run1-5_samdf-mc2_4hrTL.csv"))
+rownames(samdf.4hr) <- samdf.4hr$SampleID
+# Merge as a new phyloseq object
+tax <- tax_table(ps10)
+otu <- otu_table(ps10)
+ps.4hr <- phyloseq(otu_table(otu, taxa_are_rows = FALSE), tax_table(tax), 
+                   sample_data(samdf.4hr))
+saveRDS(ps.4hr, file.path(path, "picrust/ps.4hr.rds"))
+ps.4hr
+## HTST milk
+ps.4hr.htst <- subset_samples(ps.4hr, SampleType %in% "HTST_milk")
+saveRDS(ps.4hr.htst, file.path(path, "picrust/ps.4hr.htst.rds"))
+ps.4hr.htst
+### PMA
+ps.4hr.htstY <- subset_samples(ps.4hr.htst, PMA %in% "Y")
+saveRDS(ps.4hr.htstY, file.path(path, "picrust/ps.4hr.htstY.rds"))
+ps.4hr.htstY
+CheeseOutcomeDA(ps.4hr.htstY, path.out = file.path(path, "picrust/deseq_table/sigtab.4hr.htstY.csv"))
+### no PMA
+ps.4hr.htstN <- subset_samples(ps.4hr.htst, PMA %in% "N")
+saveRDS(ps.4hr.htstN, file.path(path, "picrust/ps.4hr.htstN.rds"))
+ps.4hr.htstN
+CheeseOutcomeDA(ps.4hr.htstN, path.out = file.path(path, "picrust/deseq_table/sigtab.4hr.htstN.csv"))
+
+
+```
+
+
+## Subset and DESeq2 analysis of KO 
+```{r}
+# Read the KO table 
+KOtab = read_biom(file.path(path, "picrust/PredictedKO.biom"))
+# Get taxonomy  
+taxtab.ko = as.matrix(observation_metadata(KOtab), rownames.force=TRUE) 
+taxtab.ko = tax_table(taxtab.ko)
+# Add taxonomy to KOtab
+KOtab = as(biom_data(KOtab), "matrix")
+KOtab = otu_table(KOtab, taxa_are_rows=TRUE)
+
+# Merge as one phyloseq object 
+psko <- phyloseq(otu_table(KOtab,taxa_are_rows = FALSE),tax_table(taxtab.ko), sample_data(samdf))
+saveRDS(psko, file.path(path, "picrust/psko.rds"))
+psko
+
+# Following Bletz et al. 2016: Pathways with < 10 counts were removed from the table.
+psko10 <- filter_taxa(psko, function(x) sum(x) > 10, TRUE)
+saveRDS(psko10, file.path(path, "picrust/psko10.rds"))
+psko10
+
+# 1 # HTST milk samples 
+psko.htst <- subset_samples(psko10, SampleType %in% "HTST_milk")
+saveRDS(psko.htst, file.path(path, "picrust/psko.htst.rds"))
+psko.htst
+# PMA 
+psko.htstY <- subset_samples(psko.htst, PMA %in% "Y")
+saveRDS(psko.htstY, file.path(path, "picrust/psko.htstY.rds"))
+psko.htstY
+CheeseOutcomeDA(psko.htstY, path.out = file.path(path, "picrust/deseq_table/kosigtab.htstY.csv"))
+# no PMA 
+psko.htstN <- subset_samples(psko.htst, PMA %in% "N")
+saveRDS(psko.htstN, file.path(path, "picrust/psko.htstN.rds"))
+psko.htstN
+CheeseOutcomeDA(psko.htstN, path.out = file.path(path, "picrust/deseq_table/kosigtab.htstN.csv"))
+
+# 2 # Feed milk samples
+psko.feed <- subset_samples(psko10, SampleType %in% "HTST_feed")
+saveRDS(psko.feed, file.path(path, "picrust/psko.feed.rds"))
+psko.feed
+# PMA 
+psko.feedY <- subset_samples(psko.feed, PMA %in% "Y")
+saveRDS(psko.feedY, file.path(path, "picrust/psko.feedY.rds"))
+psko.feedY
+CheeseOutcomeDA(psko.feedY, path.out = file.path(path, "picrust/deseq_table/kosigtab.feedY.csv"))
+# no PMA 
+psko.feedN <- subset_samples(psko.feed, PMA %in% "N")
+saveRDS(psko.feedN, file.path(path, "picrust/psko.feedN.rds"))
+psko.feedN
+CheeseOutcomeDA(psko.feedN, path.out = file.path(path, "picrust/deseq_table/kosigtab.feedN.csv"))
+
+# 3 # Raw milk samples
+psko.raw <- subset_samples(psko10, SampleType %in% "Raw_milk")
+saveRDS(psko.raw, file.path(path, "picrust/psko.raw.rds"))
+psko.raw
+# PMA 
+psko.rawY <- subset_samples(psko.raw, PMA %in% "Y")
+saveRDS(psko.rawY, file.path(path, "picrust/psko.rawY.rds"))
+psko.rawY
+CheeseOutcomeDA(psko.feedY, path.out = file.path(path, "picrust/deseq_table/kosigtab.rawY.csv"))
+# no PMA 
+psko.rawN <- subset_samples(psko.raw, PMA %in% "N")
+saveRDS(psko.rawN, file.path(path, "picrust/psko.rawN.rds"))
+psko.rawN
+CheeseOutcomeDA(psko.rawN, path.out = file.path(path, "picrust/deseq_table/kosigtab.rawN.csv"))
+
+# 4 # All Cheddar samples 
+psko.ched <- subset_samples(psko10, CheeseType %in% "Cheddar")
+psko.ched <- subset_samples(psko.ched, 
+                          SampleType %in% c("Cheese_0D","Cheese_30D","Cheese_90D","Cheese_120D"))
+saveRDS(psko.ched, file.path(path, "picrust/psko.ched.rds"))
+psko.ched
+# PMA 
+psko.chedY <- subset_samples(psko.ched, PMA %in% "Y")
+saveRDS(psko.chedY, file.path(path, "picrust/psko.chedY.rds"))
+psko.chedY
+CheeseOutcomeDA(psko.chedY, path.out = file.path(path, "picrust/deseq_table/kosigtab.chedY.csv"))
+# no PMA 
+psko.chedN <- subset_samples(psko.ched, PMA %in% "N")
+saveRDS(psko.chedN, file.path(path, "picrust/psko.chedN.rds"))
+psko.chedN
+CheeseOutcomeDA(psko.chedN, path.out = file.path(path, "picrust/deseq_table/kosigtab.chedN.csv"))
+
+# 5 # Cheedar 0 day 
+psko.ched0 <- subset_samples(psko.ched, SampleType %in% "Cheese_0D")
+saveRDS(psko.ched0, file.path(path, "picrust/psko.ched0.rds"))
+psko.ched0
+# PMA 
+psko.ched0Y <- subset_samples(psko.ched0, PMA %in% "Y")
+saveRDS(psko.ched0Y, file.path(path, "picrust/psko.ched0Y.rds"))
+psko.ched0Y
+CheeseOutcomeDA(psko.ched0Y, path.out = file.path(path, "picrust/deseq_table/kosigtab.ched0Y.csv"))
+# no PMA 
+psko.ched0N <- subset_samples(psko.ched0, PMA %in% "N")
+saveRDS(psko.ched0N, file.path(path, "picrust/psko.ched0N.rds"))
+psko.ched0N
+CheeseOutcomeDA(psko.ched0N, path.out = file.path(path, "picrust/deseq_table/kosigtab.ched0N.csv"))
+
+# 6 # Cheedar 30 day 
+psko.ched30 <- subset_samples(psko.ched, SampleType %in% "Cheese_30D")
+saveRDS(psko.ched30, file.path(path, "picrust/psko.ched30.rds"))
+psko.ched30
+# PMA 
+psko.ched30Y <- subset_samples(psko.ched30, PMA %in% "Y")
+saveRDS(psko.ched30Y, file.path(path, "picrust/psko.ched30Y.rds"))
+psko.ched30Y
+CheeseOutcomeDA(psko.ched30Y, path.out = file.path(path, "picrust/deseq_table/kosigtab.ched30Y.csv"))
+# no PMA 
+psko.ched30N <- subset_samples(psko.ched30, PMA %in% "N")
+saveRDS(psko.ched30N, file.path(path, "picrust/psko.ched30N.rds"))
+psko.ched30N
+CheeseOutcomeDAno(psko.ched30N, path.out = file.path(path, "picrust/deseq_table/kosigtab.ched30N.csv"))
+
+# 7 # Cheedar 90 day 
+psko.ched90 <- subset_samples(psko.ched, SampleType %in% "Cheese_90D")
+saveRDS(psko.ched90, file.path(path, "picrust/psko.ched90.rds"))
+psko.ched90
+# PMA 
+psko.ched90Y <- subset_samples(psko.ched90, PMA %in% "Y")
+saveRDS(psko.ched90Y, file.path(path, "picrust/psko.ched90Y.rds"))
+psko.ched90Y
+CheeseOutcomeDA(psko.ched90Y, path.out = file.path(path, "picrust/deseq_table/kosigtab.ched90Y.csv"))
+# no PMA 
+psko.ched90N <- subset_samples(psko.ched90, PMA %in% "N")
+saveRDS(psko.ched90N, file.path(path, "picrust/psko.ched90N.rds"))
+psko.ched90N
+CheeseOutcomeDA(psko.ched90N, path.out = file.path(path, "picrust/deseq_table/kosigtab.ched90N.csv"))
+
+# 8 # Cheedar 120 day 
+psko.ched120 <- subset_samples(psko.ched, SampleType %in% "Cheese_120D")
+saveRDS(psko.ched120, file.path(path, "picrust/psko.ched120.rds"))
+psko.ched120
+# PMA 
+psko.ched120Y <- subset_samples(psko.ched120, PMA %in% "Y")
+saveRDS(psko.ched120Y, file.path(path, "picrust/psko.ched120Y.rds"))
+psko.ched120Y
+CheeseOutcomeDA(psko.ched120Y, path.out = file.path(path, "picrust/deseq_table/kosigtab.ched120Y.csv"))
+# no PMA 
+psko.ched120N <- subset_samples(psko.ched120, PMA %in% "N")
+saveRDS(psko.ched120N, file.path(path, "picrust/psko.ched120N.rds"))
+psko.ched120N
+CheeseOutcomeDA(psko.ched120N, path.out = file.path(path, "picrust/deseq_table/kosigtab.ched120N.csv"))
+
+# 9 # Subset to contain only paried sample
+taxko <- tax_table(psko10)
+otuko <- otu_table(psko10)
+psko.4hr <- phyloseq(otu_table(otuko, taxa_are_rows = FALSE), tax_table(taxko), 
+                     sample_data(samdf.4hr))
+saveRDS(psko.4hr, file.path(path, "picrust/psko.4hr.rds"))
+psko.4hr
+## HTST milk
+psko.4hr.htst <- subset_samples(psko.4hr, SampleType %in% "HTST_milk")
+saveRDS(psko.4hr.htst, file.path(path, "picrust/psko.4hr.htst.rds"))
+psko.4hr.htst
+### PMA
+psko.4hr.htstY <- subset_samples(psko.4hr.htst, PMA %in% "Y")
+saveRDS(psko.4hr.htstY, file.path(path, "picrust/psko.4hr.htstY.rds"))
+psko.4hr.htstY
+CheeseOutcomeDA(psko.4hr.htstY, path.out = file.path(path, "picrust/deseq_table/sigtabko.4hr.htstY.csv"))
+### no PMA
+psko.4hr.htstN <- subset_samples(psko.4hr.htst, PMA %in% "N")
+saveRDS(psko.4hr.htstN, file.path(path, "picrust/psko.4hr.htstN.rds"))
+psko.4hr.htstN
+CheeseOutcomeDA(psko.4hr.htstN, path.out = file.path(path, "picrust/deseq_table/sigtabko.4hr.htstN.csv"))
+```
+
+## Make plots for sigtab.htstY
+```{r}
+df <- read.csv(file.path(path, "picrust/deseq_table/kosigtab.htstY.csv"))
+
+ggplot(df, aes(x = X, y = log2FoldChange))+
+  geom_bar(stat = "identity")+
+  labs(y = "Log2 Fold Change")+
+  coord_flip()+
+  theme_minimal()+
+  theme(axis.text.x = element_text(angle=90))
+```
+
+## pathway and KO DA based on Time Since Cleaning
+```{r}
+# Pathway level
+ps10.tsclean <- subset_samples(ps10, SampleType %in% c("HTST_milk","HTST_feed"))
+## Read in new sample information dataframe 
+sam.milk <- read.csv(file.path(path, "mapping/sam_milk_HTST0369.csv"))
+rownames(sam.milk) <- sam.milk$SampleID
+## Merge as a new phyloseq object
+ps10.tsclean <- phyloseq(otu_table(ps10.tsclean),
+                        tax_table(ps10.tsclean),
+                        sample_data(sam.milk))
+saveRDS(ps10.tsclean, file.path(path, "picrust/ps10.tsclean.rds"))
+ps10.tsclean
+
+# KO level 
+psko10.tsclean <- subset_samples(psko10, SampleType %in% c("HTST_milk","HTST_feed"))
+## Merge as a new phyloseq object
+psko10.tsclean <- phyloseq(otu_table(psko10.tsclean),
+                           tax_table(psko10.tsclean),
+                           sample_data(sam.milk))
+saveRDS(psko10.tsclean, file.path(path, "picrust/psko10.tsclean.rds"))
+psko10.tsclean
+
+# 10 # HTST milk samples that have information about TimeSinceCleaning
+ps.htst2 <- subset_samples(ps10.tsclean, SampleType %in% "HTST_milk")
+ps.htst2Y <- subset_samples(ps.htst2, PMA %in% "Y")
+TiSinCleaningDA(ps.htst2Y, 
+                path.out = file.path(path, "picrust/deseq_table_TiSinCleaning/htstY"))
+ps.htst2N <- subset_samples(ps.htst2, PMA %in% "N")
+TiSinCleaningDA(ps.htst2N, 
+                path.out = file.path(path, "picrust/deseq_table_TiSinCleaning/htstN"))
+
+psko.htst2 <- subset_samples(psko10.tsclean, SampleType %in% "HTST_milk")
+psko.htst2Y <- subset_samples(psko.htst2, PMA %in% "Y")
+TiSinCleaningDA(psko.htst2Y, 
+                path.out = file.path(path, "picrust/deseq_table_TiSinCleaning/kohtstY"))
+psko.htst2N <- subset_samples(psko.htst2, PMA %in% "N")
+TiSinCleaningDA(psko.htst2N, 
+                path.out = file.path(path, "picrust/deseq_table_TiSinCleaning/kohtstN"))
+
+# 11 # HTST feed samples that have information about TimeSinceCleaning
+ps.feed2 <- subset_samples(ps10.tsclean, SampleType %in% "HTST_feed")
+ps.feed2Y <- subset_samples(ps.feed2, PMA %in% "Y")
+TiSinCleaningDA(ps.feed2Y, 
+                path.out = file.path(path, "picrust/deseq_table_TiSinCleaning/feedY"))
+ps.feed2N <- subset_samples(ps.feed2, PMA %in% "N")
+TiSinCleaningDA(ps.feed2N, 
+                path.out = file.path(path, "picrust/deseq_table_TiSinCleaning/feedN"))
+
+psko.feed2 <- subset_samples(psko10.tsclean, SampleType %in% "HTST_feed")
+psko.feed2Y <- subset_samples(psko.feed2, PMA %in% "Y")
+TiSinCleaningDA(psko.feed2Y, 
+                path.out = file.path(path, "picrust/deseq_table_TiSinCleaning/kofeedY"))
+psko.feed2N <- subset_samples(psko.feed2, PMA %in% "N")
+TiSinCleaningDA(psko.feed2N, 
+                path.out = file.path(path, "picrust/deseq_table_TiSinCleaning/kofeedN"))
+
+```
+
+
+
+## Load in DESeq2 genenerated csv file and clean up to make line figures 
+```{r}
+# Define function to load and subset pathway or KO that are common between 06,
+# 09, 36 and 39 time. It seems that 03 and 69 are two groups: early and late
+SubComm <- function(a, b, c, d, path.out){
+  t06 <- read.csv(file.path(path, "picrust/deseq_table_TiSinCleaning", a))
+  t09 <- read.csv(file.path(path, "picrust/deseq_table_TiSinCleaning", b))
+  t36 <- read.csv(file.path(path, "picrust/deseq_table_TiSinCleaning", c))
+  t39 <- read.csv(file.path(path, "picrust/deseq_table_TiSinCleaning", d))
+  
+  # filter for adj < 0.2
+  t06 <- subset(t06, padj <0.2)
+  t09 <- subset(t09, padj <0.2)
+  t36 <- subset(t36, padj <0.2)
+  t39 <- subset(t39, padj <0.2)
+  
+  # List all the common entries in both the columns
+  tc1 <- merge(t06, t09, by="X") # table common 1
+  tc2 <- merge(t36, t39, by="X") # table common 2
+  tc <- merge(t36, t39, by="X")
+  
+  write.csv(tc, file.path(path, "picrust/deseq_table_TiSinCleaning", path.out),
+            row.names = FALSE)
+}
+
+# Define function for line plot
+LinePlot <- function(ps, x, w, h, path.out){
+  melt <- psmelt(ps)
+  agg <- ddply(melt, c("TimeSinceCleaning","SampleType","PMA", "KEGG_Pathways3", "KEGG_Pathways2", "KEGG_Pathways1"),
+               summarise,
+               N = length(Abundance),
+               mean = mean(Abundance),
+               sd = sd(Abundance),
+               se = sd / sqrt(N))
+  
+  pdf(path.out, width = w, height = h)
+  print(ggplot(subset(agg, KEGG_Pathways3 %in% x), aes(x = TimeSinceCleaning, y = mean, group = PMA,color = PMA)) +
+               geom_line(size = 0.9)+
+               geom_point(size = 1)+
+               geom_errorbar(aes(ymin = mean-se, ymax = mean+se),width = 0.1, position=position_dodge(0.05))+
+               facet_wrap(~ SampleType, scales = "fixed")+
+               ylab(x) +
+               theme(text = element_text(size = 15)))
+  dev.off()
+}
+
+
+# Define function for line plot 2 that only plots PMA treated only
+LinePlot2 <- function(ps, x, w, h, path.out){
+  melt <- psmelt(ps) 
+  agg <- ddply(melt, c("TimeSinceCleaning","SampleType","PMA", "KEGG_Pathways3", "KEGG_Pathways2", "KEGG_Pathways1"),
+               summarise,
+               N = length(Abundance),
+               mean = mean(Abundance),
+               sd = sd(Abundance),
+               se = sd / sqrt(N))
+  
+  pdf(path.out, width = w, height = h)
+  print(ggplot(subset(agg, KEGG_Pathways3 %in% x), aes(x = TimeSinceCleaning, y = mean, color = SampleType)) +
+          geom_line(size = 0.9)+
+          geom_point(size = 1)+
+          geom_errorbar(aes(ymin = mean-se, ymax = mean+se),width = 0.1, position=position_dodge(0.05))+
+          ylab(x) +
+          theme_bw() +
+          theme(text = element_text(size = 15)))
+  dev.off()
+}
+
+
+# 1 # HTST feed and HTST milk at Pathway level
+SubComm(a = "htstY/06.csv", b = "htstY/09.csv", 
+        c = "htstY/36.csv", d = "htstY/39.csv",
+        path.out = "htstY/common_pathways.csv")  # manually investigate file for useful info
+comm <- read.csv(file.path(path,"picrust/deseq_table_TiSinCleaning/htstY/common_pathways_man.csv"))
+# filter the phyloseq based on the common pathways
+ps10.tsclean.comm <- subset_taxa(ps10.tsclean, KEGG_Pathways3 %in% comm$X)
+ps10.tsclean.commY <- subset_samples(ps10.tsclean.comm, PMA == "Y")
+ps10.tsclean.commN <- subset_samples(ps10.tsclean.comm, PMA == "N")
+
+# loop to generate line figure for all the common pathways 
+for(i in 1:length(comm$X)){
+  LinePlot(ps10.tsclean.comm, x = comm$X[i], w = 4.5, h = 3.5,
+           path.out = file.path(path, "picrust/fig_TiSinCleaning", paste(comm$X[i],".pdf", sep ='')))
+}
+
+# Loop for all common pathways in HTST feed and milk ## PMA treated
+for(i in 1:length(comm$X)){
+  LinePlot2(ps10.tsclean.commY, x = comm$X[i], w = 4.5, h = 3.5, 
+            path.out = file.path(path, "picrust/fig_TiSinCleaning/Y", paste(comm$X[i], ".pdf", sep ='')))
+}
+# Loop for all common pathways in HTST feed and milk ## PMA UNtreated
+for(i in 1:length(comm$X)){
+  LinePlot2(ps10.tsclean.commN, x = comm$X[i], w = 4.5, h = 3.5, 
+            path.out = file.path(path, "picrust/fig_TiSinCleaning/N", paste(comm$X[i], ".pdf", sep ='')))
+}
+
+# Define ANOVA test for figures of each pathway 
+```{r}
+TiSiCleanANOVA <- function(ps, x, path.out){
+  agg <- psmelt(ps)
+  
+  fit <- aov(Abundance ~ TimeSinceCleaning, data = subset(agg, KEGG_Pathways3 %in% x))
+  y <- summary(fit)[[1]]
+  if (y$`Pr(>F)`[1] == "NaN"){  # if might be NaN value if taxa abudance is 0
+    print(paste(x, "abundance is 0", sep = ' '))
+  } else if (y$`Pr(>F)`[1] >= 0.08) { # Indicate if not significant
+    print(paste(x, "is not significant", sep = ' '))
+  } else if (y$`Pr(>F)`[1] < 0.08){ # If significant, move on to post hoc test
+    attach(subset(agg, KEGG_Pathways3 %in% x))
+    z <- pairwise.t.test(Abundance, TimeSinceCleaning, p.adjust.method = "none")[[3]]
+    detach()
+    write.csv(z, path.out)
+  }
+}
+
+# Loop ANOVA test for all taxa in HTST milk ## PMA treated
+ps10.tsclean.commYhtst <-  subset_samples(ps10.tsclean.commY, SampleType %in% "HTST_milk")
+for(i in 1:length(tax_table(ps10.tsclean.commYhtst)[,3])){
+  TiSiCleanANOVA(ps, x = tax_table(ps10.tsclean.commYhtst)[,3][i],
+                 path.out = file.path(path, "picrust/fig_TiSinCleaning/htstY/ANOVA", paste(tax_table(ps10.tsclean.commYhtst)[,3][i],".csv", sep ='')))
+}
+# Loop ANOVA test for all taxa in HTST milk ## PMA UNtreated
+ps10.tsclean.commNhtst <-  subset_samples(ps10.tsclean.commN, SampleType %in% "HTST_milk")
+for(i in 1:length(tax_table(ps10.tsclean.commNhtst)[,3])){
+  TiSiCleanANOVA(ps, x = tax_table(ps10.tsclean.commNhtst)[,3][i],
+                 path.out = file.path(path, "picrust/fig_TiSinCleaning/htstN/ANOVA", paste(tax_table(ps10.tsclean.commNhtst)[,3][i],".csv", sep ='')))
+}
+
+# Loop ANOVA test for all taxa in HTST feed ## PMA treated
+ps10.tsclean.commYfeed <-  subset_samples(ps10.tsclean.commY, SampleType %in% "HTST_feed")
+for(i in 1:length(tax_table(ps10.tsclean.commYfeed)[,3])){
+  TiSiCleanANOVA(ps, x = tax_table(ps10.tsclean.commYfeed)[,3][i],
+                 path.out = file.path(path, "picrust/fig_TiSinCleaning/feedY/ANOVA", paste(tax_table(ps10.tsclean.commYfeed)[,3][i],".csv", sep ='')))
+}
+# Loop ANOVA test for all taxa in HTST feed ## PMA UNtreated
+ps10.tsclean.commNfeed <-  subset_samples(ps10.tsclean.commN, SampleType %in% "HTST_feed")
+for(i in 1:length(tax_table(ps10.tsclean.commNfeed)[,3])){
+  TiSiCleanANOVA(ps, x = tax_table(ps10.tsclean.commNfeed)[,3][i],
+                 path.out = file.path(path, "picrust/fig_TiSinCleaning/feedN/ANOVA", paste(tax_table(ps10.tsclean.commNfeed)[,3][i],".csv", sep ='')))
+}
+```
+
