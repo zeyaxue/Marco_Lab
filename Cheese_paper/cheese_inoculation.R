@@ -1,8 +1,22 @@
+---
+title: "Pilot_cheese_inoculation"
+author: "Zeya Zhengyao Xue"
+date: "January 14, 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```
 library(ggplot2)
 library(reshape2)
 
 path <- "G:/My Drive/UC_Davis/Marco_lab/milk_microbiota/2017_Hilmar_sampling/isolate inoculation/"
+```
 
+This is for ploting of CFU and slit area only
 
 tab <- read.csv(file.path(path,"sample information sheet.csv"))
 
