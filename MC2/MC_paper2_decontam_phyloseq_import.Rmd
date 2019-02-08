@@ -15,6 +15,7 @@ taxonomy and tree as a 4-component phyloseq object.
 ## Setting up packages and working directory 
 ```{r}
 library(phyloseq);packageVersion("phyloseq")
+library(vegan);packageVersion("vegan")
 library(ggplot2);packageVersion("ggplot2")
 library(reshape2);packageVersion("reshape2")
 library(cowplot);packageVersion("cowplot")
@@ -219,13 +220,15 @@ AveFeatTab <- function(ps){
   df.cast
 }
 
+
 # 1. DNA extraction lysis method using the Total kit; BCMC1
 samdf_BCMC1_total_lyse <- read.csv(( "mapping/MC_paper2_samdf_BCMC1_total_lyse.csv"))
 rownames(samdf_BCMC1_total_lyse) <- samdf_BCMC1_total_lyse$SampleID
 ps1 <- phyloseq(sample_data(samdf_BCMC1_total_lyse), otu_table(ps.Phy.REC),
                 tax_table(ps.Phy.REC), phy_tree(ps.Phy.REC))
 ps1 # 91 taxa and 23 samples
-write.csv(AveFeatTab(ps1), ( "feature_table/FeatTab_BCMC1_total_lyseAVE.csv"))
+write.csv(AveFeatTab(ps1), file.path( "feature_table/FeatTab_BCMC1_total_lyseAVE.csv"))
+
 
 # 2. DNA extraction kit with MoBio
 samdf_BCMC1_MoBio <- read.csv(( "mapping/MC_paper2_samdf_BCMC1_MoBio.csv"))
@@ -292,6 +295,18 @@ ps3.rare # 55 taxa and 29 samples
 ps4.rare # 61 taxa and 15 samples
 ps5.rare # 18 taxa and 24 samples
 ps6.rare # 51 taxa and 18 samples
+
+# Define function to get distance matrix 
+# I have to use distance() from vegan packages due to in compatibility 
+# https://github.com/joey711/phyloseq/issues/918
+DistTab <- function(ps){
+  df <- psmelt(ps)
+  df.cast <- dcast(df, For_AVE + SampleID ~ REC, value.var = "Abundance")
+  df.cast <- df.cast[,-1]
+  row.names(df.cast) <- df.cast[,1]
+  df.cast <- df.cast[,-1]
+  dist <- vegdist(df.cast, method = "bray")
+}
 ```
 
 
