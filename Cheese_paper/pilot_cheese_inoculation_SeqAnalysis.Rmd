@@ -45,6 +45,7 @@ TaxTab <- TaxTab[,-1]
 TaxTab <- as.matrix.data.frame(TaxTab)
 
 # Read in metadata file
+# In the samdf file, L.fermentum R2 was removed due to potential contamination from 
 samdf <- read.csv(file.path(path,"Jan/samdf_Jan_2019.csv"))
 rownames(samdf) <- samdf$SampleID
 
@@ -142,52 +143,11 @@ ps.Phy.rare #173 taxa and 30 samples  # no OTU were exclude
 
 
 ## Divide the ps object for milk and cheese
-### For taxonomy and beta (?) analysis based on "ps.Phy.REC"
+### For taxonomy and beta (?) analysis based on "ps.Phy.glom"
 ### For alpha and beta (?) analysis based on "ps.xxxx.rare"
 ```{r}
-# Clean up the taxonomy level
-#make the deepest taxonomic identification in TaxTab as the recommened taxonomy (REC)
-RECps <- function(x, ps) {
-  TaxTab2 <- as.data.frame(x)
-  
-  list.g <- as.character(TaxTab2$Genus)
-  list.f <- as.character(TaxTab2$Family)
-  list.o <- as.character(TaxTab2$Order)
-  list.c <- as.character(TaxTab2$Class)
-  list.p <- as.character(TaxTab2$Phylum)
-  list.k <- as.character(TaxTab2$Kingdom)
-  list.REC <- character(length(list.g))
-  
-  for(i in 1:dim(TaxTab2)[1]){
-    G = which(TaxTab2$Genus[i] == "")
-    F = which(TaxTab2$Family[i] == "")
-    O = which(TaxTab2$Order[i] == "")
-    C = which(TaxTab2$Class[i] == "")
-    P = which(TaxTab2$Phylum[i] == "")
-    K = which(TaxTab2$Kingdom[i] == "")
-    if(length(G) == 0){
-      list.REC[i] <- list.g[i]
-    } else if(length(F) == 0){
-      list.REC[i] <- list.f[i]
-    } else if(length(O) == 0){
-      list.REC[i] <- list.o[i]
-    } else if(length(C) == 0){
-      list.REC[i] <- list.c[i]
-    } else if(length(P) == 0){
-      list.REC[i] <- list.p[i]
-    } else if(length(K) == 0){
-      list.REC[i] <- list.k[i]
-    } else
-      list.REC[i] <- "meow"
-  }
-  
-  TaxTab2$REC <- list.REC
-  TaxTab2$REC <- factor(TaxTab2$REC)
-  merge_phyloseq(ps, TaxTab2 %>% as.matrix() %>% tax_table())
-}
 ps.Phy.glom <- tax_glom(ps.Phy05, taxrank = "Genus", NArm = FALSE)
-ps.Phy.REC <- RECps(TaxTab, ps.Phy.glom)
-ps.Phy.REC # 83 taxa and 30 samples
+ps.Phy.glom # 83 taxa and 29 samples
 
 
 # Subset to contain milk samples 
