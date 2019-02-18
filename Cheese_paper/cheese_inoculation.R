@@ -16,21 +16,21 @@ library(reshape2)
 library(PMCMR)
 library(stringr)
 
-path <- "~/Google Drive File Stream/My Drive/UC_Davis/Marco_lab/milk_microbiota/2017_Hilmar_sampling/isolate inoculation/Low_CFU_inoculation/"
-```
+path <- "~/Google Drive File Stream/My Drive/UC_Davis/Marco_lab/milk_microbiota/2017_Hilmar_sampling/isolate inoculation/High_CFU_milk_inoculation//"
+ ```
 
 This is for ploting of CFU and slit area only
 
 ```{r}
-tab <- read.csv(file.path(path,"sample information sheet_lowCFU.csv"))
+tab <- read.csv(file.path(path,"sample information sheet.csv"))
 
-tab.milk <- subset(tab, Species %in% c( "milk_no_slits", "milk_slits", "saline")) 
+tab.milk <- subset(tab, Species %in% c( "milk_no_slits", "milk_slits", "Saline")) 
 tab.milk <- subset(tab.milk, Aging_Time %in% c("0D", "11D"))
 
-tab.iso_<- subset(tab, Species %in% c("Leuconostoc_lactis", "Leuconostoc_mesenteroides",
+tab.iso <- subset(tab, Species %in% c("Leuconostoc_lactis", "Leuconostoc_mesenteroides",
                                       "Lactobacillus_fermentum", 
                                       "Lactobacillus_plantarum", "Saline"))
-tab.iso <- subset(tab.iso, Aging_Time %in% c("Inoculation", "0D", "11D"))
+tab.iso <- subset(tab.iso, Aging_Time %in% c("Inoculation", "0D", "5D"))
 
 tab.LABr <- subset(tab.iso, Rifampicin %in% c("R", "NC"))
 tab.LAB <- subset(tab.iso, Rifampicin %in%  c("WT", "NC"))
@@ -61,7 +61,7 @@ CFUoverT <- function(x, path.out, w, h) {
   dev.off()
 }
 
-CFUoverT(tab, path.out = file.path(path, "fig/30C_aging_isolates.pdf"), w = 11, h = 6)
+CFUoverT(tab.LAB, path.out = file.path(path, "fig/30C_aging_isolates.pdf"), w = 11, h = 6)
 CFUoverT(tab.LABr, path.out = file.path(path, "fig/30C_aging_isolatesR.pdf"), w = 11, h = 7)
 CFUoverT(tab.milk, path.out = file.path(path, "fig/30C_aging_milk.pdf"), w = 8.65, h = 7)
 
