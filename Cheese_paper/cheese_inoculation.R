@@ -63,7 +63,7 @@ CFUoverT <- function(x, path.out, w, h) {
 
 CFUoverT(tab.LAB, path.out = file.path(path, "fig/30C_aging_isolates.pdf"), w = 11, h = 6)
 CFUoverT(tab.LABr, path.out = file.path(path, "fig/30C_aging_isolatesR.pdf"), w = 11, h = 7)
-CFUoverT(tab.milk, path.out = file.path(path, "fig/30C_aging_milk.pdf"), w = 8.65, h = 7)
+CFUoverT(tab.milk, path.out = file.path(path, "fig/30C_aging_milk.pdf"), w = 7, h = 7)
 
 # KW for CFU count 
 TotalCFUKW <- function(x, y, path.out){
@@ -129,8 +129,9 @@ tab.area$Species <- factor(tab.area$Species, levels = c("Leuconostoc mesenteroid
                                           "Leuconostoc lactis", 
                                           "Lactobacillus fermentum",
                                           "Lactobacillus plantarum",
-                                          "Saline",
-                                          "milk_no_slits", "milk_slits"))
+                                           "milk_slits",
+                                          "milk_no_slits",
+                                          "Saline"))
 
 # milk inoculated samples 
 tab.arem <- subset(tab.area, Species %in% c("Saline", "milk_no_slits", "milk_slits"))
