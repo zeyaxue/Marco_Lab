@@ -2,11 +2,12 @@
 title: "MC_paper2_phyloseq_import"
 author: "Zeya Zhengyao Xue"
 date: "January 14, 2019"
-output: html_document
+output: rmarkdown::github_document
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(fig.path = "figs/")
 ```
 
 This file follows the analysis in QIIME2, which imports mapping file, feature table,
@@ -212,55 +213,60 @@ ps.Phy.REC <- RECps(TaxTab, ps.Phy.glom)
 ps.Phy.REC # 100 taxa and 212 samples
 
 
-# Define function to get the average value of the feature table 
+# Define function to get the average and raw value of the feature table 
 AveFeatTab <- function(ps){
   df <- psmelt(ps)
   df.cast <- dcast(df, REC ~ For_AVE, mean, value.var = "Abundance")
   df.cast[, -1] <- lapply( df.cast[ , -1], function(x) x/sum(x, na.rm=TRUE) )
   df.cast
 }
+FeatTab <- function(ps){
+  df <- psmelt(ps)
+  df.cast <- dcast(df, For_AVE + SampleID ~ REC, value.var = "Abundance")
+  df.cast
+}
 
 
 # 1. DNA extraction lysis method using the Total kit; BCMC1
-samdf_BCMC1_total_lyse <- read.csv(( "mapping/MC_paper2_samdf_BCMC1_total_lyse.csv"))
+samdf_BCMC1_total_lyse <- read.csv(file.path(path, "mapping/MC_paper2_samdf_BCMC1_total_lyse.csv"))
 rownames(samdf_BCMC1_total_lyse) <- samdf_BCMC1_total_lyse$SampleID
 ps1 <- phyloseq(sample_data(samdf_BCMC1_total_lyse), otu_table(ps.Phy.REC),
                 tax_table(ps.Phy.REC), phy_tree(ps.Phy.REC))
 ps1 # 91 taxa and 23 samples
-write.csv(AveFeatTab(ps1), file.path( "feature_table/FeatTab_BCMC1_total_lyseAVE.csv"))
+write.csv(AveFeatTab(ps1), file.path(path, "feature_table/FeatTab_BCMC1_total_lyseAVE.csv"))
 
 
 # 2. DNA extraction kit with MoBio
-samdf_BCMC1_MoBio <- read.csv(( "mapping/MC_paper2_samdf_BCMC1_MoBio.csv"))
+samdf_BCMC1_MoBio <- read.csv(file.path(path, "mapping/MC_paper2_samdf_BCMC1_MoBio.csv"))
 rownames(samdf_BCMC1_MoBio) <- samdf_BCMC1_MoBio$SampleID
 ps2 <- phyloseq(sample_data(samdf_BCMC1_MoBio), otu_table(ps.Phy.REC),
                 tax_table(ps.Phy.REC), phy_tree(ps.Phy.REC))
 ps2 # 91 taxa and 6 samples
-write.csv(AveFeatTab(ps2), ( "feature_table/FeatTab_BCMC1_MoBioAVE.csv"))
+write.csv(AveFeatTab(ps2), file.path(path, "feature_table/FeatTab_BCMC1_MoBioAVE.csv"))
 
 # 3. DNA extraction kit choice on 10 ml UHT milk; BCMC2
-samdf_BCMC2_kit_10ml <- read.csv(( "mapping/MC_paper2_samdf_BCMC2_kit_10ml.csv"))
+samdf_BCMC2_kit_10ml <- read.csv(file.path(path, "mapping/MC_paper2_samdf_BCMC2_kit_10ml.csv"))
 rownames(samdf_BCMC2_kit_10ml) <- samdf_BCMC2_kit_10ml$SampleID
 ps3 <- phyloseq(sample_data(samdf_BCMC2_kit_10ml), otu_table(ps.Phy.REC),
                 tax_table(ps.Phy.REC), phy_tree(ps.Phy.REC))
 ps3 # 91 taxa and 30 samples
-write.csv(AveFeatTab(ps3), ( "feature_table/FeatTab_BCMC2_kit_10mlAVE.csv"))
+write.csv(AveFeatTab(ps3), file.path(path, "feature_table/FeatTab_BCMC2_kit_10mlAVE.csv"))
 
 # 4. PMA treatment
-samdf_PMA <- read.csv(( "mapping/MC_paper2_samdf_PMA.csv"))
+samdf_PMA <- read.csv(file.path(path, "mapping/MC_paper2_samdf_PMA.csv"))
 rownames(samdf_PMA) <- samdf_PMA$SampleID
 ps4 <- phyloseq(sample_data(samdf_PMA), otu_table(ps.Phy.REC),
                 tax_table(ps.Phy.REC), phy_tree(ps.Phy.REC))
 ps4 # 91 taxa and 15 samples
-write.csv(AveFeatTab(ps4), ( "feature_table/FeatTab_PMA.csv"))
+write.csv(AveFeatTab(ps4), file.path(path, "feature_table/FeatTab_PMA.csv"))
 
 # 5. Sample storage
-samdf_sample_storage <- read.csv(( "mapping/MC_paper2_samdf_sample_storage.csv"))
+samdf_sample_storage <- read.csv(file.path(path, "mapping/MC_paper2_samdf_sample_storage.csv"))
 rownames(samdf_sample_storage) <- samdf_sample_storage$SampleID
 ps5 <- phyloseq(sample_data(samdf_sample_storage), otu_table(ps.Phy.REC),
                 tax_table(ps.Phy.REC), phy_tree(ps.Phy.REC))
 ps5 # 91 taxa and 24 samples
-write.csv(AveFeatTab(ps5), ( "feature_table/FeatTab_sample_storage.csv"))
+write.csv(AveFeatTab(ps5), file.path(path, "feature_table/FeatTab_sample_storage.csv"))
 
 # 6. Sample Volume
 samdf_total_vol <- read.csv(file.path(path, "mapping/MC_paper2_samdf_total_vol.csv"))
@@ -268,7 +274,7 @@ rownames(samdf_total_vol) <- samdf_total_vol$SampleID
 ps6 <- phyloseq(sample_data(samdf_total_vol), otu_table(ps.Phy.REC),
                 tax_table(ps.Phy.REC), phy_tree(ps.Phy.REC))
 ps6 # 91 taxa and 18 samples
-write.csv(AveFeatTab(ps6), ( "feature_table/FeatTab_total_vol.csv"))
+write.csv(AveFeatTab(ps6), file.path(path, "feature_table/FeatTab_total_vol.csv"))
 
 # 7. phase 3 kit, cleanup and lysing method 
 samdf_phase3 <- read.csv(file.path(path, "mapping/phase3_samdf.csv"))
@@ -277,6 +283,20 @@ ps7 <- phyloseq(sample_data(samdf_phase3), otu_table(ps.Phy.REC),
                 tax_table(ps.Phy.REC), phy_tree(ps.Phy.REC))
 ps7 # 100 taxa and 51 samples
 write.csv(AveFeatTab(ps7), file.path(path, ("feature_table/FeatTab_phase3.csv")))
+
+
+# create ps list with all phyloseq objects
+psList <- list(ps1, ps2, ps3, ps4, ps5, ps6, ps7)
+names(psList) <- c(1:7)
+
+# use the function to write feature table (not average) list and write out csv
+FeatTab.list <- lapply(psList, FeatTab)
+mapply(write.csv, FeatTab.list, file = paste0(path, "feature_table/FeatTab_", names(FeatTab.list), ".csv"))
+```
+
+#### Taxonomy plot
+```{r}
+
 ```
 
 
@@ -288,6 +308,7 @@ ps3.rare <- rarefy_even_depth(ps3, sample.size = 3990, replace = TRUE, rngseed =
 ps4.rare <- rarefy_even_depth(ps4, sample.size = 3990, replace = TRUE, rngseed = 123 , trimOTUs = TRUE, verbose = TRUE) 
 ps5.rare <- rarefy_even_depth(ps5, sample.size = 3990, replace = TRUE, rngseed = 123 , trimOTUs = TRUE, verbose = TRUE) 
 ps6.rare <- rarefy_even_depth(ps6, sample.size = 3990, replace = TRUE, rngseed = 123 , trimOTUs = TRUE, verbose = TRUE) 
+ps7.rare <- rarefy_even_depth(ps7, sample.size = 3990, replace = TRUE, rngseed = 123 , trimOTUs = TRUE, verbose = TRUE) 
 
 ps1.rare #  27 taxa and 23 samples
 ps2.rare # 10 taxa and 6 samples
@@ -295,18 +316,59 @@ ps3.rare # 55 taxa and 29 samples
 ps4.rare # 61 taxa and 15 samples
 ps5.rare # 18 taxa and 24 samples
 ps6.rare # 51 taxa and 18 samples
+ps7.rare # 39 taxa and 51 samples
+```
 
+
+#### Beta diversity 
+```{r}
 # Define function to get distance matrix 
 # I have to use distance() from vegan packages due to in compatibility 
 # https://github.com/joey711/phyloseq/issues/918
-DistTab <- function(ps){
+DistTab <- function(ps, DistMethod){
   df <- psmelt(ps)
   df.cast <- dcast(df, For_AVE + SampleID ~ REC, value.var = "Abundance")
   df.cast <- df.cast[,-1]
   row.names(df.cast) <- df.cast[,1]
   df.cast <- df.cast[,-1]
-  dist <- vegdist(df.cast, method = "bray")
+  dist <- vegdist(df.cast, method = DistMethod) %>% as.matrix()
 }
+
+# create ps list with all phyloseq objects
+psList.rare <- list(ps1.rare, ps2.rare, ps3.rare, ps4.rare, ps5.rare, ps6.rare, ps7.rare)
+names(psList.rare) <- c(1:7)
+
+# use the function to write bray distance list and write out as csv files
+BrayList <- lapply(psList.rare, DistTab, DistMethod = "bray")
+mapply(write.csv, BrayList, file = paste0(path, "distance/bray_", names(psList.rare), ".csv"))
+
+# write out weighted list as well
+WeightList <- lapply(psList.rare, UniFrac, weighted = TRUE)
+WeightList <- lapply(WeightList, as.matrix)
+mapply(write.csv, WeightList, file = paste0(path, "distance/weighted_", names(psList.rare), ".csv"))
+```
+```{r}
+# Define function to make box plot and add p-values to the plot 
+
+
+
+
+# Global test
+compare_means(len ~ dose,  data = ToothGrowth, method = "anova")
+compare_means(len ~ supp, data = ToothGrowth, 
+              group.by = "dose")
+# Default method = "kruskal.test" for multiple groups
+ggboxplot(ToothGrowth, x = "dose", y = "len",
+          color = "dose", palette = "jco")+stat_compare_means()
+# Change method to anova
+ggboxplot(ToothGrowth, x = "dose", y = "len",
+          color = "dose", palette = "jco")+
+  stat_compare_means(method = "anova")
+
+
+# Import organized and subsetted (only extraction) distance csv file for making bar plots
+Bray.ext <- read.csv(file.path(path, "distance/organized_distance_extraction_bray.csv"))
+
 ```
 
 
