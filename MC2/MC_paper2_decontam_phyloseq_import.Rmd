@@ -18,6 +18,7 @@ taxonomy and tree as a 4-component phyloseq object.
 library(phyloseq);packageVersion("phyloseq")
 library(vegan);packageVersion("vegan")
 library(ggplot2);packageVersion("ggplot2")
+library(ggpubr); packageVersion("ggpubr") #  ggplot2 based publication ready fig
 library(reshape2);packageVersion("reshape2")
 library(cowplot);packageVersion("cowplot")
 library(plyr)
@@ -166,7 +167,7 @@ ps.Phy.rare # 197 taxa and 203 samples
 
 ## Divide the ps object for different dataset 
 ### For taxonomy analysis based on "ps.Phy.REC"
-```{r}
+```{r include=FALSE}
 # Clean up the taxonomy level
 #make the deepest taxonomic identification in TaxTab as the recommened taxonomy (REC)
 RECps <- function(x, ps) {
@@ -296,12 +297,51 @@ mapply(write.csv, FeatTab.list, file = paste0(path, "feature_table/FeatTab_", na
 
 #### Taxonomy plot
 ```{r}
+TaxBar <- function(ps, var1, w, h, path.out){
+  ExpTaxa <- c("Bacillaceae","Bacillus","Corynebacterium","Clostridiaceae",
+               "Clostridium","Enterococcus","Escherichia","Lactococcus",
+               "Pseudomonas","Staphylococcus","Streptococcus") 
+  
+  ps <-  ps %>% transform_sample_counts(function(x) x/sum(x) )  
+  TaxTab <- tax_table(ps) %>% as.data.frame()
+  taxa_names(ps) <- TaxTab$REC 
+  allTaxa <- taxa_names(ps)
+  ps.other <- prune_taxa(allTaxa[!(allTaxa %in% ExpTaxa)], ps)
+  taxa.other <- ps.other@tax_table[,8] %>% as.character() # 8 for REC level 
+  
+  # change the taxa that are not the expected taxa to "Other" 
+  TaxTab2 <- psmelt(ps)
+  # merge/average per Sample and CheeseOutcome
+  TaxTab2_agg <- aggregate(Abundance ~ TaxTab2[[var1]] + REC,
+                           data = TaxTab2,
+                           mean)
+  colnames(TaxTab2_agg)[1] <- var1
+  TaxTab2_agg$REC <- as.character(TaxTab2_agg$REC)
+  TaxTab2_agg[TaxTab2_agg$REC %in% taxa.other,]$REC <- "Other"
+  
+  # Set colors for plotting
+  mycol = c("#a6cee3","#1f78b4","#b2df8a","#33a02c","#fb9a99","#e31a1c",
+            "#fdbf6f","#ff7f00","#cab2d6","#6a3d9a","#ffff99","#b15928")
+  TaxTab2_agg$REC = factor(TaxTab2_agg$REC, levels = c(ExpTaxa, "Other"))
+  
+  pdf(path.out, width = w, height = h)
+  (ggplot(TaxTab2_agg, aes(x = get(var1), y = Abundance, fill = REC)) +
+    #facet_wrap(~ TaxTab2[[var2]], scales = "free") +
+    geom_bar(stat = "identity") + 
+    scale_fill_manual(values = mycol)+
+    theme_bw(base_size = 15)+
+    guides(fill = guide_legend(reverse = FALSE, keywidth = 1, keyheight = 1)) +
+    ylab("Relative proportion")) %>% print() 
+  dev.off()
+}
 
+TaxBar(ps7, var1 = "SampleID", 
+       path.out = file.path(path,"feature_table/test.pdf"), w = 9, h = 8)
 ```
 
 
 ### For alpha and beta div based on ps.Phy.rare
-```{r}
+```{r include=FALSE}
 ps1.rare <- rarefy_even_depth(ps1, sample.size = 3990, replace = TRUE, rngseed = 123 , trimOTUs = TRUE, verbose = TRUE) 
 ps2.rare <- rarefy_even_depth(ps2, sample.size = 3990, replace = TRUE, rngseed = 123 , trimOTUs = TRUE, verbose = TRUE) 
 ps3.rare <- rarefy_even_depth(ps3, sample.size = 3990, replace = TRUE, rngseed = 123 , trimOTUs = TRUE, verbose = TRUE) 
@@ -321,7 +361,7 @@ ps7.rare # 39 taxa and 51 samples
 
 
 #### Beta diversity 
-```{r}
+```{r include=FALSE}
 # Define function to get distance matrix 
 # I have to use distance() from vegan packages due to in compatibility 
 # https://github.com/joey711/phyloseq/issues/918
@@ -349,26 +389,48 @@ mapply(write.csv, WeightList, file = paste0(path, "distance/weighted_", names(ps
 ```
 ```{r}
 # Define function to make box plot and add p-values to the plot 
-
-
-
-
-# Global test
-compare_means(len ~ dose,  data = ToothGrowth, method = "anova")
-compare_means(len ~ supp, data = ToothGrowth, 
-              group.by = "dose")
-# Default method = "kruskal.test" for multiple groups
-ggboxplot(ToothGrowth, x = "dose", y = "len",
-          color = "dose", palette = "jco")+stat_compare_means()
-# Change method to anova
-ggboxplot(ToothGrowth, x = "dose", y = "len",
-          color = "dose", palette = "jco")+
-  stat_compare_means(method = "anova")
+## based on the package called "ggpubr"
+DistBox <- function(df, DistMethod, path.out, w, h) {
+  df$Description <- factor(df$Description, 
+                         levels = c("10TB", "10TV", "10TC",
+                                    "10CB", "10CV", "10CC",
+                                    "10UB", "10UV", "10UC",
+                                    "M4W","M4R","ML4W","ML4R","MVW","MVR","MLVW","MLVR",
+                                    "P4W","P4R","PL4W","PL4R","PVW","PVR","PLVW","PLVR"))
+df$Kit <- factor(df$Kit, levels = c("Total","Core","Ultra2",
+                                    "Total_phase3", "Total_ProteinaseK"))
+df$Lysis <- factor(df$Lysis, 
+                   levels = c("Bead beat: 2min x 6.5m/s", "Vortex: 15min",
+                              "Chemical: 1hr", "Bead beat: 10s x 4m/s",
+                              "Chemical + Bead beat: 1hr + 10s x 4m/s",
+                              "Vortex: 30s", "Chemical + Vortex: 1hr + 30s "))
+  
+  pdf(path.out, w, h )
+  (ggboxplot(df, x = "Description", y = "ave", ylab = DistMethod,
+             fill = "Lysis", palette = "Set3",
+             short.panel.labs = FALSE, 
+             font.label = list(size = 18, face = "plain"),
+             ggtheme = theme_bw()) + 
+     stat_compare_means(method = "t.test", ref.group = "10TB",
+                        hide.ns = TRUE,  label = "p.signif")) %>% print
+  dev.off()
+  
+  # ns: p > 0.05
+  # *: p <= 0.05
+  # **: p <= 0.01
+  # ***: p <= 0.001
+  # ****: p <= 0.0001
+}
 
 
 # Import organized and subsetted (only extraction) distance csv file for making bar plots
 Bray.ext <- read.csv(file.path(path, "distance/organized_distance_extraction_bray.csv"))
+DistBox(Bray.ext, DistMethod = "Bray-Curtis dissimilarity",
+        path.out = file.path(path,"distance/Bray.ext.pdf"), w = 8, h = 4.5)
 
+weighted.ext <- read.csv(file.path(path, "distance/organized_distance_extraction_weighted.csv"))
+DistBox(weighted.ext, DistMethod = "Weighted UniFrac distance",
+        path.out = file.path(path,"distance/Weigted.ext.pdf"), w = 8, h = 4.5)
 ```
 
 
