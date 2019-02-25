@@ -16,6 +16,7 @@ This is the file to analysis pilot cheese project, including
 ## Setting up packages and working directory 
 ```{r}
 library(phyloseq);packageVersion("phyloseq")
+library(tidyr)
 library(ggplot2)
 library(reshape2)
 library(plyr)
@@ -29,8 +30,9 @@ library(DESeq2);packageVersion("DESeq2")
 path <- "G:/My Drive/UC_Davis/Marco_lab/milk_microbiota/2017_Hilmar_sampling/Sequencing/QIIME2/"
 ```
 
+
 ## Import QIIME2 output and make phyloseq object
-```{r}
+```{r include=FALSE}
 # Transpose the QIIME2 output in excel
 SeqTab <- read.table(file.path(path,"Jan/feature-table-mc2.txt"), header = TRUE, stringsAsFactors = FALSE)
 colnames(SeqTab) <- gsub("X","",colnames(SeqTab))
@@ -40,7 +42,18 @@ SeqTab <- as.matrix.data.frame(SeqTab)
 
 # Parse out taxonomic assignment in excel and remove confidence column
 TaxTab <- read.table(file.path(path,"Jan/taxonomy-mc2.tsv"), header = TRUE, sep = '\t', na.strings = NA)
-rownames(TaxTab) <- TaxTab$FeatureID
+tax_col <- c("Kingdom", "Phylum", "Class", "Order", "Family", "Genus", "Species")
+TaxTab <- separate(data = TaxTab, col = "Taxon", into = tax_col, sep = "; ", remove = TRUE, fill = "right")
+# format taxon columns to remove preceding taxon letter (" p__, o__"")
+TaxTab$Kingdom <- substring(TaxTab$Kingdom, 4)  # 4th letter start to keep
+TaxTab$Phylum <- substring(TaxTab$Phylum, 4)
+TaxTab$Class <- substring(TaxTab$Class, 4)
+TaxTab$Order <- substring(TaxTab$Order, 4)
+TaxTab$Family <- substring(TaxTab$Family, 4)
+TaxTab$Genus <- substring(TaxTab$Genus, 4)
+TaxTab$Species <- substring(TaxTab$Species, 4)
+# organized as a matrix for phyloseq import
+rownames(TaxTab) <- TaxTab$Feature.ID
 TaxTab <- TaxTab[,-1]
 TaxTab <- as.matrix.data.frame(TaxTab)
 
@@ -54,7 +67,7 @@ tree <- read_tree(file.path(path, "Jan/tree.nwk"))
 
 ### Merge as one phyloseq object
 ps <- phyloseq(otu_table(SeqTab,taxa_are_rows = TRUE), tax_table(TaxTab), sample_data(samdf), phy_tree(tree))
-ps # 282 taxa and 30 samples
+ps # 282 taxa and 29 samples
 ```
 
 ## Filter ASVs based on taxonomy and abundance 
