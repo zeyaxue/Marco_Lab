@@ -297,7 +297,7 @@ mapply(write.csv, FeatTab.list, file = paste0(path, "feature_table/FeatTab_", na
 
 #### Taxonomy plot
 ```{r}
-TaxBar <- function(ps, var1, var2, lvl, lvl2, w, h, path.out){
+TaxBar <- function(ps, var1, var2, lvl = NULL, lvl2 = NULL, w, h, path.out){
   ExpTaxa <- c("Bacillaceae","Bacillus","Corynebacterium","Clostridiaceae",
                "Clostridium","Enterococcus","Escherichia","Lactococcus",
                "Pseudomonas","Staphylococcus","Streptococcus") 
@@ -326,8 +326,8 @@ TaxBar <- function(ps, var1, var2, lvl, lvl2, w, h, path.out){
   
   # Set orders for taxonomy and sampleID
   TaxTab2_agg$REC = factor(TaxTab2_agg$REC, levels = c(ExpTaxa, "Other"))
-  TaxTab2_agg[[var1]] <- factor(TaxTab2_agg[[var1]], levels = lvl)
-  TaxTab2_agg[[var2]] <- factor(TaxTab2_agg[[var2]], levels = lvl2)
+  if (!is.null(lvl)) TaxTab2_agg[[var1]] <- factor(TaxTab2_agg[[var1]], levels = lvl)
+  if (!is.null(lvl2)) TaxTab2_agg[[var2]] <- factor(TaxTab2_agg[[var2]], levels = lvl2)
   
   pdf(path.out, width = w, height = h)
   p <- ggplot(TaxTab2_agg, aes(x = get(var1), y = Abundance, fill = REC)) +
@@ -366,6 +366,29 @@ TaxBar(ps7, var1 = "SampleID", var2 = "Lysis", lvl = lvl.ID$V1,
                 "Chemical + Bead beat: 1hr + 10s x 4m/s",
                 "Vortex: 30s", "Chemical + Vortex: 1hr + 30s "),
        path.out = file.path(path,"feature_table/ps7_SampleID_Lysis.pdf"), w = 9, h = 5)
+
+
+# Plot for sample storage conditions (ps5)
+TaxBar(subset_samples(ps5, For_AVE %in% c("Glycerol","PBS2","Expected2")),  # subset to include only BCMC2 samples 
+       var1 = "SampleID", var2 = "For_AVE",
+       lvl = c("Theo2.1","Theo2.2","Theo2.3",
+               "MC.PBS.1","MC.PBS.2","MC.PBS.3",
+               "MC.25.glycerol.1","MC.25.glycerol.2","MC.25.glycerol.3"), 
+       lvl2 = c("Expected2","PBS2", "Glycerol"),
+       path.out = file.path(path, "feature_table/ps5_SampleID_For_AVE.pdf"), 5, 5)
+
+# Plot for milk volumne collection (ps6)
+TaxBar(subset_samples(ps6, SampleID != "Theo2.2" & SampleID != "Theo2.3" &  
+                        # subset to contain only one expected value
+                        SampleID != "10TB.1" & SampleID != "10TB.2" & SampleID != "10TB.3"),
+                        # subset to include only one set of 10ml samples
+       var1 = "SampleID", var2 = "For_AVE",
+       lvl = c("Theo2.1","MC.30ml.UHT.1","MC.30ml.UHT.2","MC.30ml.UHT.3",
+               "MC.10ml.UHT.1","MC.10ml.UHT.2","MC.10ml.UHT.3",
+               "MC.1ml.UHT.1","MC.1ml.UHT.2","MC.1ml.UHT.3","200TB.1","200TB.2","200TB.3"),
+       lvl2 = c("Expected","30ml","10ml","1ml","200uL"),
+       path.out = file.path(path, "feature_table/ps6_SampleID_For_AVE.pdf"),7.5,5)
+
 ```
 
 
@@ -391,7 +414,7 @@ ps7.rare # 39 taxa and 51 samples
 
 #### Beta diversity 
 ```{r include=FALSE}
-# Define function to get distance matrix 
+# Define function to get distance matrix (not include unifrac)
 # I have to use distance() from vegan packages due to in compatibility 
 # https://github.com/joey711/phyloseq/issues/918
 DistTab <- function(ps, DistMethod){
@@ -415,7 +438,27 @@ mapply(write.csv, BrayList, file = paste0(path, "distance/bray_", names(psList.r
 WeightList <- lapply(psList.rare, UniFrac, weighted = TRUE)
 WeightList <- lapply(WeightList, as.matrix)
 mapply(write.csv, WeightList, file = paste0(path, "distance/weighted_", names(psList.rare), ".csv"))
+
+
+# Define function to draw cluster dendrogram
+DistDendro <- function(dist, ClusterMethod, path.out, w, h){
+  pdf(path.out, w, h)
+  hclust(as.dist(dist), method = ClusterMethod) %>% plot() %>% print()
+  dev.off()
+}
+
+
+# dendrogram for ps5.rare
+Bray5 <- DistTab(subset_samples(ps5.rare, For_AVE %in% c("Glycerol","PBS2","Expected2")), "bray")
+DistDendro(dist = Bray5, ClusterMethod = "average",
+           path.out = file.path(path, "distance/UPGMA_bray.pdf"), w = 7, h = 4.5)
+DistDendro(dist = UniFrac(subset_samples(ps5.rare, For_AVE %in% c("Glycerol","PBS2","Expected2")), weighted = TRUE),
+           ClusterMethod = "average",
+           path.out = file.path(path, "distance/UPGMA_weighted.pdf"), w = 7, h = 4.5)
+
 ```
+
+
 ```{r}
 # Define function to make box plot and add p-values to the plot 
 ## based on the package called "ggpubr"
@@ -426,9 +469,9 @@ DistBox <- function(df, DistMethod, path.out, w, h) {
                                     "10UB", "10UV", "10UC",
                                     "M4W","M4R","ML4W","ML4R","MVW","MVR","MLVW","MLVR",
                                     "P4W","P4R","PL4W","PL4R","PVW","PVR","PLVW","PLVR"))
-df$Kit <- factor(df$Kit, levels = c("Total","Core","Ultra2",
+  df$Kit <- factor(df$Kit, levels = c("Total","Core","Ultra2",
                                     "Total_phase3", "Total_ProteinaseK"))
-df$Lysis <- factor(df$Lysis, 
+  df$Lysis <- factor(df$Lysis, 
                    levels = c("Bead beat: 2min x 6.5m/s", "Vortex: 15min",
                               "Chemical: 1hr", "Bead beat: 10s x 4m/s",
                               "Chemical + Bead beat: 1hr + 10s x 4m/s",
@@ -462,12 +505,91 @@ DistBox(weighted.ext, DistMethod = "Weighted UniFrac distance",
         path.out = file.path(path,"distance/Weigted.ext.pdf"), w = 8, h = 4.5)
 ```
 
+```{r}
+# Define function to plot 2D beta diversity dot plot
+BetaPlot <- function(ps, ClusterMethod, DistMethod, var1, w, h, path.out){
+  ps.ord <- ordinate(ps, method = ClusterMethod, distance = DistMethod)
+  
+  pdf(path.out, w, h)
+  print(plot_ordination(ps, ps.ord, color = var1) + 
+          geom_point(size=3)+ 
+          scale_color_brewer(palette="Paired")+
+          ggtitle("")+
+          ylab("NMDS2")+ 
+          xlab("NMDS1")+
+          theme_bw(base_size = 15))
+  dev.off()
+}
 
-BBBBBB
-USE CCA TRIPLOT TO SEE IF THERE'S ASSOCIATION BETWEEN METHOD AND TAXA
 
-AAAAAA
-Alpha could be more useful when using actual milk samples? 
+# ps6 (sample volume)
+BetaPlot(subset_samples(ps6.rare, SampleID != "10TB.1" & SampleID != "10TB.2" & SampleID != "10TB.3"),
+         ClusterMethod = "NMDS", DistMethod = "bray", var1 = "For_AVE",
+         path.out = file.path(path, "beta/ps6_NMDS_bray.pdf"), 5, 3.6)
+
+# ps 4 (PMA)
+BetaPlot(ps4.rare, ClusterMethod = "NMDS", DistMethod = "bray", var1 = "For_AVE",
+         path.out = file.path(path, "beta/ps4_NMDS_bray.pdf"), 5, 3.6)
+
+```
+
+
+#### Alpha diversity
+```{r}
+# Define function that plots out alpha box plot as well as p values
+AlphaBox <- function(ps, alpha_measures, var1, var, lvl, path.out, w, h){
+  df <- estimate_richness(ps, split = TRUE, measures = alpha_measures) 
+  row.names(df) <- gsub("X","",row.names(df) )
+  # add sample metadata information
+  df <- merge(df, data.frame(sample_data(ps)), by.x = 'row.names', by.y = 'row.names')
+  df <- df[, -1]
+  # Melt dataframe for plotting figures
+  dfm <- melt(df, id.vars = c("SampleID", var),
+              variable.name = "measure", value.name = "value")
+  dfm[[var1]] <- factor(dfm[[var1]], levels = lvl)
+  
+  pdf(path.out, w, h)
+  p<- ggboxplot(dfm, x = var1, y = "value", add = "jitter", palette = "Set3",
+                font.label = list(size = 18, face = "plain"), ggtheme = theme_bw())+
+    stat_compare_means(method = "t.test", ref.group = "Expected", 
+                       hide.ns = TRUE,  label = "p.signif")
+
+  facet(p, facet.by = "measure", scales = "free") %>% print()
+  dev.off()
+}
+
+# Alpha box plot on ps6 (sample volume)
+AlphaBox(subset_samples(ps6.rare, SampleID != "10TB.1" & SampleID != "10TB.2" & SampleID != "10TB.3"),
+         # subset to include only one set of 10ml samples 
+         alpha_measures = c("Observed", "Shannon"),
+         var1 = "For_AVE", var = c("KIT","For_AVE","STORAGE","MATRIX","PMA",
+                                   "SampleOrCtrl","LYSING","Chemical_time",
+                                   "Bead_beat_speed_time","vortex_time","Description"),
+         lvl = c("Expected","30ml","10ml","1ml","200uL"),
+         path.out = file.path(path, "alpha/ps6_ForAVE.pdf"), 4.5, 2.3)
+
+# Alpha box plot on ps 4 (PMA)
+AlphaBox(ps4.rare, alpha_measures = c("Observed", "Shannon"),
+         var1 = "For_AVE", var = c("KIT","For_AVE","VOL","STORAGE","MATRIX","PMA",
+                                   "SampleOrCtrl","LYSING","Chemical_time","Bead_beat_speed_time","vortex_time","Description"),
+         lvl = c("Expected","Untreated","Live","Half","Dead"),
+         path.out = file.path(path, "alpha/ps4_ForAVE.pdf"), 4.5, 2.3)
+
+```
+
+
+
+## qPCR results 
+### PMA on single bacterial strain or gDNA 
+```{r}
+# PMA on E.coli gDNA 
+PMA.conc <- read.csv(file.path(path, "qPCR/10min_conc.csv"))
+gghistogram(PMA.conc, x = "Ct_diff",
+            add = "mean", rug = TRUE, color = "Treatment", fill = "Treatment",
+            palette = c("#00AFBB", "#E7B800"))
+
+```
+
 
 Percent recovery of GBS DNA with meconium extractions
 generated from various extraction kits. Data are mean ± S
