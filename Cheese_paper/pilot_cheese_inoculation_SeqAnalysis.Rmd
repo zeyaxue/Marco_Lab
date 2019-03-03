@@ -16,6 +16,7 @@ This is the file to analysis pilot cheese project, including
 ## Setting up packages and working directory 
 ```{r}
 library(phyloseq);packageVersion("phyloseq")
+library(tidyr)
 library(ggplot2)
 library(reshape2)
 library(plyr)
@@ -29,6 +30,7 @@ library(DESeq2);packageVersion("DESeq2")
 path <- "G:/My Drive/UC_Davis/Marco_lab/milk_microbiota/2017_Hilmar_sampling/Sequencing/QIIME2/"
 ```
 
+
 ## Import QIIME2 output and make phyloseq object
 ```{r}
 # Transpose the QIIME2 output in excel
@@ -40,7 +42,18 @@ SeqTab <- as.matrix.data.frame(SeqTab)
 
 # Parse out taxonomic assignment in excel and remove confidence column
 TaxTab <- read.table(file.path(path,"Jan/taxonomy-mc2.tsv"), header = TRUE, sep = '\t', na.strings = NA)
-rownames(TaxTab) <- TaxTab$FeatureID
+tax_col <- c("Kingdom", "Phylum", "Class", "Order", "Family", "Genus", "Species")
+TaxTab <- separate(data = TaxTab, col = "Taxon", into = tax_col, sep = "; ", remove = TRUE, fill = "right")
+# format taxon columns to remove preceding taxon letter (" p__, o__"")
+TaxTab$Kingdom <- substring(TaxTab$Kingdom, 4)  # 4th letter start to keep
+TaxTab$Phylum <- substring(TaxTab$Phylum, 4)
+TaxTab$Class <- substring(TaxTab$Class, 4)
+TaxTab$Order <- substring(TaxTab$Order, 4)
+TaxTab$Family <- substring(TaxTab$Family, 4)
+TaxTab$Genus <- substring(TaxTab$Genus, 4)
+TaxTab$Species <- substring(TaxTab$Species, 4)
+# organized as a matrix for phyloseq import
+rownames(TaxTab) <- TaxTab$Feature.ID
 TaxTab <- TaxTab[,-1]
 TaxTab <- as.matrix.data.frame(TaxTab)
 
@@ -54,7 +67,7 @@ tree <- read_tree(file.path(path, "Jan/tree.nwk"))
 
 ### Merge as one phyloseq object
 ps <- phyloseq(otu_table(SeqTab,taxa_are_rows = TRUE), tax_table(TaxTab), sample_data(samdf), phy_tree(tree))
-ps # 282 taxa and 30 samples
+ps # 282 taxa and 29 samples
 ```
 
 ## Filter ASVs based on taxonomy and abundance 
@@ -65,7 +78,7 @@ rank_names(ps)
 table(tax_table(ps)[, "Phylum"], exclude = NULL)
 # remove asv that was not assigned at phylum level
 ps.Phy <- subset_taxa(ps, !is.na(Phylum) & !Phylum %in% c(""))
-ps.Phy #  279 taxa and 30 samples 
+ps.Phy #  279 taxa and 29 samples 
 # Explore abundance to decide filter threshold
 ## Compute prevalence of each feature, store as data.frame
 prevdf <- apply(X = otu_table(ps.Phy),
@@ -86,7 +99,7 @@ ggplot(prevdf, aes(TotalAbundance, Prevalence / nsamples(ps.Phy),color=Phylum)) 
 x = taxa_sums(ps.Phy)
 keepTaxa = which((x / sum(x)) > 0.00005)
 ps.Phy05 <- prune_taxa(names(keepTaxa), ps.Phy)
-ps.Phy05 #173 taxa and 30 samples
+ps.Phy05 # 175 taxa and 29 samples
 ```
 
 ## Determine rarefaction level for Alpha and Beta analysis later on
@@ -138,7 +151,7 @@ write.csv(sample_sums(ps.Phy05), file.path(path, "Jan/library_size_ps.Phy05.csv"
 # to keep the sample with the fewest reads
 ps.Phy.rare <- rarefy_even_depth(ps.Phy05, sample.size = 6100, replace = TRUE, 
                                  rngseed = 123 , trimOTUs = TRUE, verbose = TRUE) 
-ps.Phy.rare #173 taxa and 30 samples  # no OTU were exclude 
+ps.Phy.rare #  175 taxa and 29 samples  # no OTU were exclude 
 ```
 
 
@@ -146,23 +159,24 @@ ps.Phy.rare #173 taxa and 30 samples  # no OTU were exclude
 ### For taxonomy and beta (?) analysis based on "ps.Phy.glom"
 ### For alpha and beta (?) analysis based on "ps.xxxx.rare"
 ```{r}
+# Clean up the taxonomy level
 ps.Phy.glom <- tax_glom(ps.Phy05, taxrank = "Genus", NArm = FALSE)
-ps.Phy.glom # 83 taxa and 29 samples
+ps.Phy.glom # 89 taxa and 29 samples 
 
 
 # Subset to contain milk samples 
-ps.milk <- subset_samples(ps.Phy.REC, SampleType %in% c("HTST_feed", "HTST_milk"))
-ps.milk # 83 taxa and 18 samples
+ps.milk <- subset_samples(ps.Phy.glom, SampleType %in% c("HTST_feed", "HTST_milk"))
+ps.milk #  89 taxa and 18 samples 
 ps.milk.rare <- rarefy_even_depth(ps.milk, sample.size = 6100, replace = TRUE, 
                                  rngseed = 123 , trimOTUs = TRUE, verbose = TRUE) 
-ps.milk.rare # 83 taxa and 18 samples  # no OTU were exclude 
+ps.milk.rare # 89 taxa and 18 sampless  
 
 # Subset to contain cheese samples
-ps.cheese <- subset_samples(ps.Phy.REC, SampleType %in% "Pilot_cheese_5D")
-ps.cheese # 83 taxa and 12 samples
+ps.cheese <- subset_samples(ps.Phy.glom, SampleType %in% "Pilot_cheese_5D")
+ps.cheese #  89 taxa and 11 samples 
 ps.cheese.rare <- rarefy_even_depth(ps.cheese, sample.size = 6100, replace = TRUE, 
                                  rngseed = 123 , trimOTUs = TRUE, verbose = TRUE) 
-ps.cheese.rare # 14 taxa and 12 samples   # 69 OTU were exclude 
+ps.cheese.rare #  14 taxa and 11 samples   # 71 OTU were excluded 
 ```
 
 
@@ -174,51 +188,72 @@ no slits samples from the same cheese study 2
 ```{r}
 # Define function to make Bar plots 
 #### Bar plot #####
-SlitBar <- function(ps, taxa, path.out, w, h, x){  
-  # create dataframe from phyloseq object
-  df <- psmelt(ps)
-  # merge/average per isolate species
-  df <- aggregate(Abundance ~ sample_Species + REC, data = df, mean)
+SlitBar <- function(ps, var1, var2, taxa, path.out, w, h, x){  
+  ps <- ps %>% tax_glom(taxrank = "Genus") %>% transform_sample_counts(function(x) x/sum(x) ) 
   
-  # Filter to keep the taxa that I am interested in
   TaxTab <- tax_table(ps) %>% as.data.frame()
-  taxa_names(ps) <- TaxTab$REC
+  taxa_names(ps) <- TaxTab$Genus 
   allTaxa <- taxa_names(ps)
-  ps.notaxa <- prune_taxa(allTaxa[!(allTaxa %in% taxa)], ps)
-  taxa.filt <- ps.notaxa@tax_table[,8] %>% as.character() # 8 for REC level 
+  ps.other <- prune_taxa(allTaxa[!(allTaxa %in% taxa)], ps)
+  taxa.other <- ps.other@tax_table[,6] %>% as.character() # 6 for Genus level 
   
-  # change the taxa that are not within the 13 common taxa to "Other" 
+  # change the taxa that are not the expected taxa to "Other" 
   TaxTab2 <- psmelt(ps)
-  # merge/average per SampleType and CheeseOutcome
-  TaxTab2_agg <- ddply(TaxTab2, c("SampleType", "sample_Species", "REC"),
-                       summarise,
-                       mean = mean(Abundance))
-  TaxTab2_agg$REC <- as.character(TaxTab2_agg$REC)
-  TaxTab2_agg[TaxTab2_agg$REC %in% taxa.filt,]$REC <- "Other"
+  # merge/average per Sample and CheeseOutcome
+  TaxTab2_agg <- aggregate(Abundance ~ TaxTab2[[var1]] + TaxTab2[[var2]] + Genus,
+                           data = TaxTab2,
+                           mean)
+  colnames(TaxTab2_agg)[1] <- var1
+  colnames(TaxTab2_agg)[2] <- var2
+  TaxTab2_agg$Genus <- as.character(TaxTab2_agg$Genus)
+  TaxTab2_agg[TaxTab2_agg$Genus %in% taxa.other,]$Genus <- "Other"
   
   # Set colors for plotting
   mycol = c("#A6CEE3", "#438EC0", "#63A8A0", "#98D277", "#3BA432", "#F16667", 
             "#E62F27", "#F9A963", "#FE982C", "#ED8F47", "#C3AAD2", "#7D54A5", 
             "#B9A499", "#EAD27A", "#B15928")
-  TaxTab2_agg$REC = factor(TaxTab2_agg$REC, levels = taxa)
+  TaxTab2_agg$Genus <- factor(TaxTab2_agg$Genus, levels = taxa)
+  TaxTab2_agg[[var1]] <- factor(TaxTab2_agg[[var1]])
+  TaxTab2_agg[[var2]] <- factor(TaxTab2_agg[[var2]])
   
   pdf(path.out, w, h)
-  print(ggplot(TaxTab2_agg, aes(x = sample_Species, y = mean, fill = REC)) +
+  p <- ggplot(TaxTab2_agg, aes(x = get(var1), y = Abundance, fill = Genus)) +
     geom_bar(position = "fill",stat = "identity") + 
     scale_fill_manual(values = mycol)+
     theme_bw(base_size = 20) +
+    facet_grid(~ get(var2), scales = "free_x")+
     # Remove x axis title
-    theme(axis.title.x = element_blank(), text = element_text(size = 16)) + 
+    theme(axis.title.x = element_blank(), axis.text.x = element_text(angle = 90, hjust = 1),
+          text = element_text(size = 16)) + 
     guides(fill = guide_legend(reverse = FALSE, keywidth = 1, keyheight = 1)) +
-    ylab("Relative abundance"))
+    ylab("Relative abundance")
+  
+  # convert ggplot object to grob object
+  gp <- ggplotGrob(p)
+  # optional: take a look at the grob object's layout 
+  # gtable::gtable_show_layout(gp)
+  # get gtable columns corresponding to the facets 
+  facet.columns <- gp$layout$l[grepl("panel", gp$layout$name)]
+  # get the number of unique x-axis values per facet (1 & 3, in this case)
+  x.var <- sapply(ggplot_build(p)$layout$panel_scales_x, 
+                  function(l) length(l$range$range))
+  # change the relative widths of the facet columns based on how many unique 
+  # x-axis values are in each facet
+  gp$widths[facet.columns] <- gp$widths[facet.columns] * x.var
+  # plot result
+  grid::grid.draw(gp)
   dev.off()
 }
 
 
-taxa15 <- c("Acinetobacter", "Bacillus", "Corynebacterium", "Clostridium",
+comm14 <- c("Acinetobacter", "Bacillus", "Corynebacterium", "Clostridium",
             "Enterococcus", "Lactobacillus", "Lactococcus", "Macrococcus",
             "Mycoplasma", "Pseudomonas", "Staphylococcus", "Streptococcus",
             "Thermus", "Turicibacter", "Other")
+SlitBar(ps.milk, var1 = "SampleID", var2 = "SampleType",
+        comm14, path.out = file.path(path, "figs/SampleType_SampleID.pdf"), 6, 4.5)
+
+
 ```
 
 
