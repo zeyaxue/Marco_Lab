@@ -285,17 +285,23 @@ ps7 <- phyloseq(sample_data(samdf_phase3), otu_table(ps.Phy.REC),
 ps7 # 100 taxa and 51 samples
 write.csv(AveFeatTab(ps7), file.path(path, ("feature_table/FeatTab_phase3.csv")))
 
+# 8. UHT milk negative control
+samdf_UHT <- read.csv(file.path(path, "mapping/MC_paper2_mapping_UHT.csv"))
+rownames(samdf_UHT) <- samdf_UHT$SampleID
+ps8 <- phyloseq(sample_data(samdf_UHT), otu_table(ps.Phy.REC),
+                tax_table(ps.Phy.REC), phy_tree(ps.Phy.REC))
 
 # create ps list with all phyloseq objects
-psList <- list(ps1, ps2, ps3, ps4, ps5, ps6, ps7)
-names(psList) <- c(1:7)
+psList <- list(ps1, ps2, ps3, ps4, ps5, ps6, ps7, ps8)
+names(psList) <- c(1:8)
+psList <- lapply(psList, transform_sample_counts, function(x) x/sum(x))
 
 # use the function to write feature table (not average) list and write out csv
 FeatTab.list <- lapply(psList, FeatTab)
 mapply(write.csv, FeatTab.list, file = paste0(path, "feature_table/FeatTab_", names(FeatTab.list), ".csv"))
 ```
 
-#### Taxonomy plot
+#### Taxonomy plot for individual values
 ```{r}
 TaxBar <- function(ps, var1, var2, lvl = NULL, lvl2 = NULL, w, h, path.out){
   ExpTaxa <- c("Bacillaceae","Bacillus","Corynebacterium","Clostridiaceae",
@@ -388,6 +394,20 @@ TaxBar(subset_samples(ps6, SampleID != "Theo2.2" & SampleID != "Theo2.3" &
                "MC.1ml.UHT.1","MC.1ml.UHT.2","MC.1ml.UHT.3","200TB.1","200TB.2","200TB.3"),
        lvl2 = c("Expected","30ml","10ml","1ml","200uL"),
        path.out = file.path(path, "feature_table/ps6_SampleID_For_AVE.pdf"),7.5,5)
+
+# Plot for PMA (ps4)
+TaxBar(subset_samples(ps4, SampleID != "Theo2.2" & SampleID != "Theo2.3"), 
+       var1 = "SampleID", var2 = "For_AVE",
+       lvl = c("Theo2.1", "MC.50.control.1","MC.live.control.1","MC.dead.control.1",
+               "MC.live.1","Mc.live.2","MC.live.3","MC.50.1","MC.50.2","MC.50.3",
+               "MC.dead.1","MC.dead.2","MC.dead.3"),
+       lvl2 = c("Expected","Untreated","Live","Half","Dead"),
+       path.out = file.path(path, "feature_table/ps4_SampleID_For_AVE.pdf"),7,5)
+
+```
+
+#### Taxonomy plot for average values
+```{r}
 
 ```
 
@@ -608,9 +628,29 @@ print(ggboxplot(subset(PMA.T, PerOf_untreated != "NA"),
                 palette = "jco", ggtheme = theme_bw()) +
         facet_wrap(~Species, scales = "free_x"))
 dev.off()
+
+# PMA on MC 
+PMC.mc <- read.csv(file.path(path,"qPCR/MC_total.csv"))
+PMC.mc$Cell_state <- factor(PMC.mc$Cell_state, levels = c("Live", "Half", "Dead"))
+
+pdf(file.path(path, "qPCR/PMC.mc.pdf"), 3.2, 3)
+print(ggboxplot(subset(PMC.mc, PerOf_untreated != "NA"), 
+                x = "Cell_state", y = "PerOf_untreated", color = "Cell_state",
+                font.label = list(size = 18, face = "plain"), 
+                palette = "jco", ggtheme = theme_bw()) +
+        stat_compare_means(method = "kruskal.test", hide.ns = TRUE,  label = "p.signif"))
+dev.off()
 ```
+
+
+## Use decontam package to see if by removing the UHT taxa, the vol will be better
+```{r}
+ps.Phy05
+```
+
 
 
 Percent recovery of GBS DNA with meconium extractions
 generated from various extraction kits. Data are mean ± S
+
 
