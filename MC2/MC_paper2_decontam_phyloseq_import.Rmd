@@ -24,7 +24,7 @@ library(cowplot);packageVersion("cowplot")
 library(plyr)
 library(dplyr)
 
-path <- "~/Google Drive File Stream/My Drive/UC_Davis/Marco_lab/milk_microbiota/Mock_community/MC_paper2_QIIME2/"
+path <- "G:/My Drive/UC_Davis/Marco_lab/milk_microbiota/Mock_community/MC_paper2_QIIME2/"
 ```
 
 ## Import QIIME2 output and make phyloseq object
@@ -643,9 +643,135 @@ dev.off()
 ```
 
 
-## Use decontam package to see if by removing the UHT taxa, the vol will be better
+## Use decontam package to see if by removing the UHT taxa, the vol (ps6) will be better
 ```{r}
-ps.Phy05
+# Read in ps.Phy05 (not glom at any taxonomy level) to subset vol samples 
+samdf6d <- read.csv(file.path(path, "mapping/MC_paper2_samdf_total_vol_decontam.csv"))
+rownames(samdf6d) <- samdf6d$SampleID
+ps6d <- phyloseq(sample_data(samdf6d), otu_table(ps.Phy05),
+                 tax_table(ps.Phy05), phy_tree(ps.Phy05))
+ps6d # 197 taxa and 22 samples 
+
+# Inspect library sizes
+## add a colum for read counts/library size
+samdf6d$LibrarySize <- sample_sums(ps6d)
+## sort by the library size in increasing order
+samdf6d <- samdf6d[order(samdf6d$LibrarySize),]
+samdf6d$Index <- seq(nrow(samdf6d))
+ggplot(samdf6d, aes(x=Index, y=LibrarySize, color=SampleOrCtrl))+geom_point()
+
+# Identify contaminants using the prevalance pooled method
+## sort the rownames of seq feature table
+SeqTab6d <- otu_table(ps6d) %>% data.frame() %>% t()
+rownames(SeqTab6d) <- gsub("X","", row.names(SeqTab6d))
+SeqTab6d <- SeqTab6d[order(row.names(SeqTab6d)),]
+## sort the sample metadata file 
+samdf6d <- samdf6d[order(row.names(samdf6d)),]
+## check to see if the row names of these two matrices match 
+identical(row.names(SeqTab6d), row.names(samdf6d)) 
+## define negative control samples
+is.neg <- samdf6d$SampleOrCtrl %in% "Ctrl"
+samdf6d$is.neg <- is.neg
+
+
+# Find a suitable p value based on ASV number
+library(decontam);packageVersion("decontam")
+decontam.pool <- isContaminant(seqtab = SeqTab6d, neg = is.neg, 
+                               method = "prevalence", threshold = 0.1,
+                               normalize = TRUE)
+table(decontam.pool$contaminant)
+threshs <- seq(0, 1, length.out = 101)
+## merge p values as dataframe with taxTab output
+pval <- data.frame(id=row.names(decontam.pool), pval.po=decontam.pool$p)
+row.names(pval) <- pval$id
+pval <- pval[order(pval$id),]
+TaxTab6d <- tax_table(ps6d) %>% data.frame()
+TaxTab6d$Id <- row.names(TaxTab6d)
+TaxTab6d <- TaxTab6d[order(row.names(TaxTab6d)),]
+identical(row.names(pval),row.names(TaxTab6d))
+TaxTab6d <- merge(TaxTab6d, pval, by.x = 'Id', by.y = 'id', all.x = TRUE, sort=FALSE)
+## get p-values and define group
+p.pool <- data.frame(x= 1:dim(TaxTab6d)[1])
+p.pool$pval <- TaxTab6d$pval.po
+p.pool$Method <- "pool"
+p.pool <- p.pool[,-1]
+## visualize the threshold results
+ggplot(p.pool, aes(pval, fill=Method))+ geom_histogram()
+
+# Find a suitable p value based on reads number
+## get total read number 
+totSeqTab <- sum(SeqTab6d)
+p.reads <- data.frame(pool=sapply(threshs, function(t) sum(SeqTab6d[,decontam.pool$p<t],
+                                                           na.rm=TRUE)/totSeqTab),
+                      threshold=threshs)
+mp.reads <- melt(p.reads, id.vars="threshold", value.name="Fraction.reads", 
+                 variable.name="Method") #m prefix for melt
+ggplot(data=mp.reads, aes(x=threshold, y=Fraction.reads, color=Method)) + 
+  geom_line() + geom_point() + xlim(0,1) + ylim(0,1) +
+  scale_color_manual(values=c("pool"="black")) +
+  theme_bw() + 
+  xlab("P-value Threshold") + 
+  ylab("Reads IDed as Contaminants\n(Proportion)") #f prefix for figure
+
+# Identify contaminants using the prevalance pooled method with p=0.25
+decontam.p.25 <- isContaminant(seqtab = SeqTab6d, neg = is.neg, 
+                               method = "prevalence",threshold = 0.25, normalize = TRUE)
+table(decontam.p.25$contaminant)
+
+# Make phyloseq object of presence-absence in negative controls
+ps.neg <- prune_samples(sample_data(ps6d)$SampleOrCtrl %in% c("Ctrl"), ps6d)
+ps.neg.presence <- transform_sample_counts(ps.neg, function(abund) 1*(abund>0))
+# Make phyloseq object of presence-absence in true positive samples
+ps.pos <- prune_samples(sample_data(ps6d)$SampleOrCtrl %in% c("Sample"), ps6d)
+ps.pos.presence <- transform_sample_counts(ps.pos, function(abund) 1*(abund>0))
+# Make data.frame of prevalence in positive and negative samples
+df.pres <- data.frame(prevalence.pos=taxa_sums(ps.pos.presence),
+                      prevalence.neg=taxa_sums(ps.neg.presence),
+                      contam.prev=decontam.p.25$contaminant)
+ggplot(data=df.pres, aes(x=prevalence.neg, y=prevalence.pos, color=contam.prev))+
+  geom_point()
+
+# Remove identified contaminants
+rm <- subset(decontam.p.25, p < 0.25) %>% row.names()
+SeqTab6d.25 <- select(as.data.frame(SeqTab6d),-one_of(rm))
+
+# Merge as a phyloseq object after decontam 
+ps6d.25 <- phyloseq(sample_data(samdf_total_vol), 
+                    otu_table(SeqTab6d.25, taxa_are_rows = FALSE),
+                    tax_table(ps6d), phy_tree(ps6d))
+ps6d.25 # 150 taxa and 22 samples 
+ps6d.25 <- tax_glom(ps6d.25, taxrank = "Genus", NArm = FALSE)
+ps6d.25 <- RECps(TaxTab, ps6d.25)
+ps6d.25 # 80 taxa and 18 samples
+
+# individual sample taxa plot
+TaxBar(subset_samples(ps6d.25, SampleID != "Theo2.2" & SampleID != "Theo2.3" &  
+                        # subset to contain only one expected value
+                        SampleID != "10TB.1" & SampleID != "10TB.2" & SampleID != "10TB.3"),
+                        # subset to include only one set of 10ml samples
+       var1 = "SampleID", var2 = "For_AVE",
+       lvl = c("Theo2.1","MC.30ml.UHT.1","MC.30ml.UHT.2","MC.30ml.UHT.3",
+               "MC.10ml.UHT.1","MC.10ml.UHT.2","MC.10ml.UHT.3",
+               "MC.1ml.UHT.1","MC.1ml.UHT.2","MC.1ml.UHT.3","200TB.1","200TB.2","200TB.3"),
+       lvl2 = c("Expected","30ml","10ml","1ml","200uL"),
+       path.out = file.path(path, "feature_table/ps6d.25_SampleID_For_AVE.pdf"),7.5,5)
+```
+At the end, the decontam package did not remove much of the contaminant, unexpected
+taxa. Therefore, I decided to take a closer look by manually examine the taxtab.
+Also, I want to find out if, for example, the Bacillus in MC is the same ASV as 
+in UHT. If not, I may be able to perform manual filtering.
+
+## Manual filtering to see if by removing the UHT taxa, the vol (ps6) will be better
+```{r}
+# write out featuretab
+transform_sample_counts(ps6d, function(x) x/sum(x)) %>% psmelt() %>% 
+  dcast(For_AVE + SampleID ~ OTU, value.var = "Abundance") %>% 
+  write.csv(file.path(path, "feature_table/FeatTab_6d_ASV.csv"))
+# write out taxtab
+(ps6d@tax_table) %>% 
+  write.csv(file.path(path, "tax_table/TaxTab_6d_ASV.csv"))
+
+# Yes there are some OTU overlap. Can not remove
 ```
 
 
