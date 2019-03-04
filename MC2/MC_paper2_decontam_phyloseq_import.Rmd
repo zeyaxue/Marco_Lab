@@ -587,7 +587,27 @@ PMA.conc <- read.csv(file.path(path, "qPCR/10min_conc.csv"))
 gghistogram(PMA.conc, x = "Ct_diff",
             add = "mean", rug = TRUE, color = "Treatment", fill = "Treatment",
             palette = c("#00AFBB", "#E7B800"))
+pdf(file.path(path, "qPCR/10min_conc.pdf"), 3.2, 3)
+print(ggboxplot(PMA.conc, x = "Treatment", y = "Ct_diff",
+                font.label = list(size = 18, face = "plain"), 
+                ggtheme = theme_bw()) +
+        stat_compare_means(method = "kruskal", hide.ns = TRUE, label = "p.signif"))
+dev.off()
 
+# PMA on 3 species strain 
+PMA.T <- read.csv(file.path(path, "qPCR/50uM_time.csv"))
+PMA.T$Cell_state <- factor(PMA.T$Cell_state, levels = c("Live", "Half", "Dead"))
+## make a df to p value annotation
+df.anno = compare_means(PerOf_untreated ~ Treatment, method = "kruskal.test",
+                        group.by = "Species", data = PMA.T) %>% mutate(y_pos = 40)
+
+pdf(file.path(path, "qPCR/50uM_time.pdf"), 6, 3)
+print(ggboxplot(subset(PMA.T, PerOf_untreated != "NA"), 
+                x = "Treatment", y = "PerOf_untreated", color = "Cell_state",
+                font.label = list(size = 18, face = "plain"), 
+                palette = "jco", ggtheme = theme_bw()) +
+        facet_wrap(~Species, scales = "free_x"))
+dev.off()
 ```
 
 
