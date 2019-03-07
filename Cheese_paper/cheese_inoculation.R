@@ -17,9 +17,9 @@ library(PMCMR)
 library(stringr)
 
 path <- "~/Google Drive File Stream/My Drive/UC_Davis/Marco_lab/milk_microbiota/2017_Hilmar_sampling/isolate inoculation/High_CFU_milk_inoculation//"
- ```
+```
 
-This is for ploting of CFU and slit area only
+This file  is for ploting of CFU and slit area only.
 
 ```{r}
 tab <- read.csv(file.path(path,"sample information sheet.csv"))
