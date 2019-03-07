@@ -209,7 +209,7 @@ RECps <- function(x, ps) {
   merge_phyloseq(ps, TaxTab2 %>% as.matrix() %>% tax_table())
 }
 
-ps.Phy.glom <- tax_glom(ps.Phy05, taxrank = "Genus", NArm = FALSE)
+ps.Phy.glom <- tax_glom(ps.Phy05, taxrank = "REC", NArm = FALSE)
 ps.Phy.REC <- RECps(TaxTab, ps.Phy.glom)
 ps.Phy.REC # 100 taxa and 212 samples
 
