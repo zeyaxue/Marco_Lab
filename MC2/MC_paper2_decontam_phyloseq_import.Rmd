@@ -27,6 +27,7 @@ library(dplyr)
 path <- "G:/My Drive/UC_Davis/Marco_lab/milk_microbiota/Mock_community/MC_paper2_QIIME2/"
 ```
 
+
 ## Import QIIME2 output and make phyloseq object
 2/5/19: add Phase 3 results and import as the same ps object
 ```{r}
@@ -48,6 +49,7 @@ tree <- read_tree(file.path(path,"5file-tree.nwk"))
 
 # Parse out taxonomic assignment in excel and remove confidence column
 # keep only taxa included in the "feature-table-mc2.csv" file
+# Species column removed
 TaxTab <- read.table(file.path(path,"5file-taxonomy-mc2.tsv"), header = TRUE, sep = '\t', na.strings = NA)
 rownames(TaxTab) <- TaxTab$FeatureID
 TaxTab <- TaxTab[,-1]
@@ -62,19 +64,6 @@ ps <- filter_taxa(ps, function (x) {sum(x > 0) > 1}, prune=TRUE)
 ps # 1049 taxa and 212 samples
 write.csv(ps@otu_table, file.path(path,"feature_table/5file-feature-table-mc2.csv"))
 ```
-
-## Inspect Library Sizes
-```{r}
-#add a colum for read counts/library size
-samdf$LibrarySize <- sample_sums(ps)
-#sort by the library size in increasing order
-samdf <- samdf[order(samdf$LibrarySize),]
-samdf$Index <- seq(nrow(samdf))
-ggplot(samdf, aes(x=Index, y=LibrarySize, color=SampleOrCtrl))+geom_point()
-```
-As expected, some of the UHT_NC had pretty high read coverage.
-Also, I decided to not do decontam with the MC data because I know already which
-taxa are contamination and which taxa are expected.
 
 
 ## Filter ASVs based on taxonomy and abundance 
@@ -114,23 +103,9 @@ ps.Phy05 # 197 taxa and 212 samples
 ## Determine rarefaction level for Alpha and Beta analysis later on
 ```{r}
 set.seed(123)
-# Define function to calculate alpha diversity and rarefaction levels
-calculate_rarefaction_curves <- function(psdata, measures, depths) {
-  estimate_rarified_richness <- function(psdata, measures, depth) {
-    if(max(sample_sums(psdata)) < depth) return()
-    psdata <- prune_samples(sample_sums(psdata) >= depth, psdata)
-    rarified_psdata <- rarefy_even_depth(psdata, depth, verbose = FALSE)
-    alpha_diversity <- estimate_richness(rarified_psdata, measures = measures)
-    # as.matrix forces the use of melt.array, which includes the Sample names (rownames)
-    molten_alpha_diversity <- melt(as.matrix(alpha_diversity), varnames = c("SampleID", 'measures'), value.name = 'Alpha_diversity')
-    molten_alpha_diversity
-  }
-  names(depths) <- depths # this enables automatic addition of the Depth to the output by ldply
-  rarefaction_curve_data <- ldply(depths, estimate_rarified_richness, psdata = psdata, measures = measures, .id = 'Depth', .progress = ifelse(interactive(), 'text', 'none'))
-  #convert Depth from factor to numeric
-  rarefaction_curve_data$Depth <- as.numeric(levels(rarefaction_curve_data$Depth))[rarefaction_curve_data$Depth]
-  rarefaction_curve_data
-}
+# Read in function to calculate alpha diversity and rarefaction levels
+calculate_rarefaction_curves <-dget(file.path("D:/src/Marco_Lab/Cheese1_R/FUN_calculate_rarefaction.R"))
+
 rarefaction_curve_data <- calculate_rarefaction_curves(ps.Phy05, c("Observed", "Shannon","Simpson"), 
                                                        rep(c(1, 2500, 5000, 7500, 10000), each = 10))
 rarefaction_curve_data$SampleID <- gsub("X","",rarefaction_curve_data$SampleID)
@@ -160,59 +135,18 @@ write.csv(sample_sums(ps.Phy05), file.path(path, "mapping/library_size_ps.Phy05_
 
 # The diversity leveled out after 2500 seqs per sample, rarefy at 3990
 # to keep the sample with the fewest reads that is no a NC (MC.50.2)
-ps.Phy.rare <- rarefy_even_depth(ps.Phy05, sample.size = 3990, replace = TRUE, 
-                                 rngseed = 123 , trimOTUs = TRUE, verbose = TRUE) 
-ps.Phy.rare # 197 taxa and 203 samples
 ```
 
 ## Divide the ps object for different dataset 
-### For taxonomy analysis based on "ps.Phy.REC"
+### For taxonomy analysis based on "ps.REC.glom"
 ```{r include=FALSE}
 # Clean up the taxonomy level
 #make the deepest taxonomic identification in TaxTab as the recommened taxonomy (REC)
-RECps <- function(x, ps) {
-  TaxTab2 <- as.data.frame(x)
-  
-  list.g <- as.character(TaxTab2$Genus)
-  list.f <- as.character(TaxTab2$Family)
-  list.o <- as.character(TaxTab2$Order)
-  list.c <- as.character(TaxTab2$Class)
-  list.p <- as.character(TaxTab2$Phylum)
-  list.k <- as.character(TaxTab2$Kingdom)
-  list.REC <- character(length(list.g))
-  
-  for(i in 1:dim(TaxTab2)[1]){
-    G = which(TaxTab2$Genus[i] == "")
-    F = which(TaxTab2$Family[i] == "")
-    O = which(TaxTab2$Order[i] == "")
-    C = which(TaxTab2$Class[i] == "")
-    P = which(TaxTab2$Phylum[i] == "")
-    K = which(TaxTab2$Kingdom[i] == "")
-    if(length(G) == 0){
-      list.REC[i] <- list.g[i]
-    } else if(length(F) == 0){
-      list.REC[i] <- list.f[i]
-    } else if(length(O) == 0){
-      list.REC[i] <- list.o[i]
-    } else if(length(C) == 0){
-      list.REC[i] <- list.c[i]
-    } else if(length(P) == 0){
-      list.REC[i] <- list.p[i]
-    } else if(length(K) == 0){
-      list.REC[i] <- list.k[i]
-    } else
-      list.REC[i] <- "meow"
-  }
-  
-  TaxTab2$REC <- list.REC
-  TaxTab2$REC <- factor(TaxTab2$REC)
-  merge_phyloseq(ps, TaxTab2 %>% as.matrix() %>% tax_table())
-}
-
-ps.Phy.glom <- tax_glom(ps.Phy05, taxrank = "REC", NArm = FALSE)
-ps.Phy.REC <- RECps(TaxTab, ps.Phy.glom)
-ps.Phy.REC # 100 taxa and 212 samples
-
+RECps <- dget("D:/src/Marco_Lab/Cheese1_R/FUN_RECps.R") # Read in RECps function
+ps.Phy.REC <- RECps(ps.Phy05@tax_table, ps.Phy05)
+ps.Phy.REC # 197 taxa and 212 samples
+ps.REC.glom <- tax_glom(ps.Phy.REC, taxrank = "REC", NArm = FALSE)
+ps.REC.glom #  100 taxa and 212 samples
 
 # Define function to get the average and raw value of the feature table 
 AveFeatTab <- function(ps){
@@ -229,75 +163,57 @@ FeatTab <- function(ps){
 
 
 # 1. DNA extraction lysis method using the Total kit; BCMC1
-samdf_BCMC1_total_lyse <- read.csv(file.path(path, "mapping/MC_paper2_samdf_BCMC1_total_lyse.csv"))
-rownames(samdf_BCMC1_total_lyse) <- samdf_BCMC1_total_lyse$SampleID
-ps1 <- phyloseq(sample_data(samdf_BCMC1_total_lyse), otu_table(ps.Phy.REC),
-                tax_table(ps.Phy.REC), phy_tree(ps.Phy.REC))
-ps1 # 91 taxa and 23 samples
-write.csv(AveFeatTab(ps1), file.path(path, "feature_table/FeatTab_BCMC1_total_lyseAVE.csv"))
-
+samdf1 <- read.csv(file.path(path, "mapping/MC_paper2_samdf_BCMC1_total_lyse.csv"))
+row.names(samdf1) <- samdf1$SampleID
 
 # 2. DNA extraction kit with MoBio
-samdf_BCMC1_MoBio <- read.csv(file.path(path, "mapping/MC_paper2_samdf_BCMC1_MoBio.csv"))
-rownames(samdf_BCMC1_MoBio) <- samdf_BCMC1_MoBio$SampleID
-ps2 <- phyloseq(sample_data(samdf_BCMC1_MoBio), otu_table(ps.Phy.REC),
-                tax_table(ps.Phy.REC), phy_tree(ps.Phy.REC))
-ps2 # 91 taxa and 6 samples
-write.csv(AveFeatTab(ps2), file.path(path, "feature_table/FeatTab_BCMC1_MoBioAVE.csv"))
+samdf2 <- read.csv(file.path(path, "mapping/MC_paper2_samdf_BCMC1_MoBio.csv"))
+row.names(samdf2) <- samdf2$SampleID
 
 # 3. DNA extraction kit choice on 10 ml UHT milk; BCMC2
-samdf_BCMC2_kit_10ml <- read.csv(file.path(path, "mapping/MC_paper2_samdf_BCMC2_kit_10ml.csv"))
-rownames(samdf_BCMC2_kit_10ml) <- samdf_BCMC2_kit_10ml$SampleID
-ps3 <- phyloseq(sample_data(samdf_BCMC2_kit_10ml), otu_table(ps.Phy.REC),
-                tax_table(ps.Phy.REC), phy_tree(ps.Phy.REC))
-ps3 # 91 taxa and 30 samples
-write.csv(AveFeatTab(ps3), file.path(path, "feature_table/FeatTab_BCMC2_kit_10mlAVE.csv"))
+samdf3 <- read.csv(file.path(path, "mapping/MC_paper2_samdf_BCMC2_kit_10ml.csv"))
+row.names(samdf3) <- samdf3$SampleID
 
 # 4. PMA treatment
-samdf_PMA <- read.csv(file.path(path, "mapping/MC_paper2_samdf_PMA.csv"))
-rownames(samdf_PMA) <- samdf_PMA$SampleID
-ps4 <- phyloseq(sample_data(samdf_PMA), otu_table(ps.Phy.REC),
-                tax_table(ps.Phy.REC), phy_tree(ps.Phy.REC))
-ps4 # 91 taxa and 15 samples
-write.csv(AveFeatTab(ps4), file.path(path, "feature_table/FeatTab_PMA.csv"))
+samdf4 <- read.csv(file.path(path, "mapping/MC_paper2_samdf_PMA.csv"))
+row.names(samdf4) <- samdf4$SampleID
 
 # 5. Sample storage
-samdf_sample_storage <- read.csv(file.path(path, "mapping/MC_paper2_samdf_sample_storage.csv"))
-rownames(samdf_sample_storage) <- samdf_sample_storage$SampleID
-ps5 <- phyloseq(sample_data(samdf_sample_storage), otu_table(ps.Phy.REC),
-                tax_table(ps.Phy.REC), phy_tree(ps.Phy.REC))
-ps5 # 91 taxa and 24 samples
-write.csv(AveFeatTab(ps5), file.path(path, "feature_table/FeatTab_sample_storage.csv"))
+samdf5 <- read.csv(file.path(path, "mapping/MC_paper2_samdf_sample_storage.csv"))
+row.names(samdf5) <- samdf5$SampleID
 
 # 6. Sample Volume
-samdf_total_vol <- read.csv(file.path(path, "mapping/MC_paper2_samdf_total_vol.csv"))
-rownames(samdf_total_vol) <- samdf_total_vol$SampleID
-ps6 <- phyloseq(sample_data(samdf_total_vol), otu_table(ps.Phy.REC),
-                tax_table(ps.Phy.REC), phy_tree(ps.Phy.REC))
-ps6 # 91 taxa and 18 samples
-write.csv(AveFeatTab(ps6), file.path(path, "feature_table/FeatTab_total_vol.csv"))
+samdf6 <- read.csv(file.path(path, "mapping/MC_paper2_samdf_total_vol.csv"))
+row.names(samdf6) <- samdf6$SampleID
 
 # 7. phase 3 kit, cleanup and lysing method 
-samdf_phase3 <- read.csv(file.path(path, "mapping/phase3_samdf.csv"))
-rownames(samdf_phase3) <- samdf_phase3$SampleID
-ps7 <- phyloseq(sample_data(samdf_phase3), otu_table(ps.Phy.REC),
-                tax_table(ps.Phy.REC), phy_tree(ps.Phy.REC))
-ps7 # 100 taxa and 51 samples
-write.csv(AveFeatTab(ps7), file.path(path, ("feature_table/FeatTab_phase3.csv")))
+samdf7 <- read.csv(file.path(path, "mapping/phase3_samdf.csv"))
+row.names(samdf7) <- samdf7$SampleID
 
 # 8. UHT milk negative control
-samdf_UHT <- read.csv(file.path(path, "mapping/MC_paper2_mapping_UHT.csv"))
-rownames(samdf_UHT) <- samdf_UHT$SampleID
-ps8 <- phyloseq(sample_data(samdf_UHT), otu_table(ps.Phy.REC),
-                tax_table(ps.Phy.REC), phy_tree(ps.Phy.REC))
+samdf8 <- read.csv(file.path(path, "mapping/MC_paper2_mapping_UHT.csv"))
+row.names(samdf8) <- samdf8$SampleID
 
-# create ps list with all phyloseq objects
-psList <- list(ps1, ps2, ps3, ps4, ps5, ps6, ps7, ps8)
-names(psList) <- c(1:8)
-psList <- lapply(psList, transform_sample_counts, function(x) x/sum(x))
+# create ps list with all phyloseq objects and transform to relative proportions
+## create samdf list with all samdf data frames
+samdfList <- list(samdf1, samdf2, samdf3, samdf4, samdf5, samdf6, samdf7, samdf8)
+names(samdfList) <- c(1:8)
+## Update the sample data of the phyloseq objects (to include For_AVE column)
+psList <- list()
+for (i in 1:8){
+  psList[[i]] <- phyloseq(sample_data(samdfList[[i]]), otu_table(ps.REC.glom),
+                          tax_table(ps.REC.glom), phy_tree(ps.REC.glom))
+  print(psList[[i]] )
+}
 
-# use the function to write feature table (not average) list and write out csv
+# use the function to write feature table lists and write out csv
+AveFeatTab.list <- lapply(psList, AveFeatTab)
+names(AveFeatTab.list) <- c(1:8)
+mapply(write.csv, AveFeatTab.list, 
+       file = paste0(path, "feature_table/AveFeatTab_", names(AveFeatTab.list), ".csv"))
+
 FeatTab.list <- lapply(psList, FeatTab)
+names(FeatTab.list) <- c(1:8)
 mapply(write.csv, FeatTab.list, file = paste0(path, "feature_table/FeatTab_", names(FeatTab.list), ".csv"))
 ```
 
@@ -313,7 +229,7 @@ TaxBar <- function(ps, var1, var2, lvl = NULL, lvl2 = NULL, w, h, path.out){
   taxa_names(ps) <- TaxTab$REC 
   allTaxa <- taxa_names(ps)
   ps.other <- prune_taxa(allTaxa[!(allTaxa %in% ExpTaxa)], ps)
-  taxa.other <- ps.other@tax_table[,8] %>% as.character() # 8 for REC level 
+  taxa.other <- ps.other@tax_table[,7] %>% as.character() # 7 for REC level 
   
   # change the taxa that are not the expected taxa to "Other" 
   TaxTab2 <- psmelt(ps)
@@ -364,9 +280,9 @@ TaxBar <- function(ps, var1, var2, lvl = NULL, lvl2 = NULL, w, h, path.out){
 # Read in sample ID order 
 lvl.ID <- read.csv(file.path(path, "mapping/phase3_sample_orders.csv"), header = FALSE) 
 lvl.ID$V1 <- as.character(lvl.ID$V1)
-TaxBar(ps7, var1 = "SampleID", var2 = "Kit", lvl = lvl.ID$V1,
+TaxBar(psList[[7]], var1 = "SampleID", var2 = "Kit", lvl = lvl.ID$V1,
        path.out = file.path(path,"feature_table/ps7_SampleID_Kit.pdf"), w = 9, h = 5)
-TaxBar(ps7, var1 = "SampleID", var2 = "Lysis", lvl = lvl.ID$V1, 
+TaxBar(psList[[7]], var1 = "SampleID", var2 = "Lysis", lvl = lvl.ID$V1, 
        lvl2 = c("Expected", "Bead beat: 2min x 6.5m/s", "Vortex: 15min", 
                 "Chemical: 1hr", "Bead beat: 10s x 4m/s",
                 "Chemical + Bead beat: 1hr + 10s x 4m/s",
@@ -375,7 +291,8 @@ TaxBar(ps7, var1 = "SampleID", var2 = "Lysis", lvl = lvl.ID$V1,
 
 
 # Plot for sample storage conditions (ps5)
-TaxBar(subset_samples(ps5, For_AVE %in% c("Glycerol","PBS2","Expected2")),  # subset to include only BCMC2 samples 
+TaxBar(subset_samples(psList[[5]], For_AVE %in% c("Glycerol","PBS2","Expected2")),  
+       # subset to include only BCMC2 samples 
        var1 = "SampleID", var2 = "For_AVE",
        lvl = c("Theo2.1","Theo2.2","Theo2.3",
                "MC.PBS.1","MC.PBS.2","MC.PBS.3",
@@ -384,7 +301,7 @@ TaxBar(subset_samples(ps5, For_AVE %in% c("Glycerol","PBS2","Expected2")),  # su
        path.out = file.path(path, "feature_table/ps5_SampleID_For_AVE.pdf"), 5, 5)
 
 # Plot for milk volumne collection (ps6)
-TaxBar(subset_samples(ps6, SampleID != "Theo2.2" & SampleID != "Theo2.3" &  
+TaxBar(subset_samples(psList[[6]], SampleID != "Theo2.2" & SampleID != "Theo2.3" &  
                         # subset to contain only one expected value
                         SampleID != "10TB.1" & SampleID != "10TB.2" & SampleID != "10TB.3"),
                         # subset to include only one set of 10ml samples
@@ -396,7 +313,7 @@ TaxBar(subset_samples(ps6, SampleID != "Theo2.2" & SampleID != "Theo2.3" &
        path.out = file.path(path, "feature_table/ps6_SampleID_For_AVE.pdf"),7.5,5)
 
 # Plot for PMA (ps4)
-TaxBar(subset_samples(ps4, SampleID != "Theo2.2" & SampleID != "Theo2.3"), 
+TaxBar(subset_samples(psList[[4]], SampleID != "Theo2.2" & SampleID != "Theo2.3"), 
        var1 = "SampleID", var2 = "For_AVE",
        lvl = c("Theo2.1", "MC.50.control.1","MC.live.control.1","MC.dead.control.1",
                "MC.live.1","Mc.live.2","MC.live.3","MC.50.1","MC.50.2","MC.50.3",
@@ -412,74 +329,44 @@ TaxBar(subset_samples(ps4, SampleID != "Theo2.2" & SampleID != "Theo2.3"),
 ```
 
 
-### For alpha and beta div based on ps.Phy.rare
+### For alpha and beta div based on ps.REC.glom after rarefaction (ps.REC.glom.rare)
+I did not use ps.Phy05 for beta because the expected ASV is not the same as the actual sequenced ASV. If use ps.Phy05, the Bray distance of samples from expected would all be 1 (doesn't share any common species). The assumption is that the taxa assignment is accurate until Genus. Therefore, for alpha diversity, I would also use ps.REC.glom to keep until Genus level.
 ```{r include=FALSE}
-ps1.rare <- rarefy_even_depth(ps1, sample.size = 3990, replace = TRUE, rngseed = 123 , trimOTUs = TRUE, verbose = TRUE) 
-ps2.rare <- rarefy_even_depth(ps2, sample.size = 3990, replace = TRUE, rngseed = 123 , trimOTUs = TRUE, verbose = TRUE) 
-ps3.rare <- rarefy_even_depth(ps3, sample.size = 3990, replace = TRUE, rngseed = 123 , trimOTUs = TRUE, verbose = TRUE) 
-ps4.rare <- rarefy_even_depth(ps4, sample.size = 3990, replace = TRUE, rngseed = 123 , trimOTUs = TRUE, verbose = TRUE) 
-ps5.rare <- rarefy_even_depth(ps5, sample.size = 3990, replace = TRUE, rngseed = 123 , trimOTUs = TRUE, verbose = TRUE) 
-ps6.rare <- rarefy_even_depth(ps6, sample.size = 3990, replace = TRUE, rngseed = 123 , trimOTUs = TRUE, verbose = TRUE) 
-ps7.rare <- rarefy_even_depth(ps7, sample.size = 3990, replace = TRUE, rngseed = 123 , trimOTUs = TRUE, verbose = TRUE) 
+ps.glom.rare <-  rarefy_even_depth(ps.REC.glom, sample.size = 3990, 
+                                   replace = TRUE, rngseed = 123 , 
+                                   trimOTUs = TRUE, verbose = TRUE)
+# Divide the phyloseq objects up 
+psList.rare <- list()
+for (i in 1:8){
+  psList.rare[[i]] <- phyloseq(sample_data(samdfList[[i]]), otu_table(ps.glom.rare),
+                               tax_table(ps.glom.rare), phy_tree(ps.glom.rare))
+  print(psList.rare[[i]] )
+}
 
-ps1.rare #  27 taxa and 23 samples
-ps2.rare # 10 taxa and 6 samples
-ps3.rare # 55 taxa and 29 samples
-ps4.rare # 61 taxa and 15 samples
-ps5.rare # 18 taxa and 24 samples
-ps6.rare # 51 taxa and 18 samples
-ps7.rare # 39 taxa and 51 samples
-```
-
-
-#### Beta diversity 
-```{r include=FALSE}
 # Define function to get distance matrix (not include unifrac)
 # I have to use distance() from vegan packages due to in compatibility 
 # https://github.com/joey711/phyloseq/issues/918
 DistTab <- function(ps, DistMethod){
   df <- psmelt(ps)
-  df.cast <- dcast(df, For_AVE + SampleID ~ REC, value.var = "Abundance")
+  df.cast <- dcast(df, For_AVE + SampleID ~ OTU, value.var = "Abundance")
   df.cast <- df.cast[,-1]
   row.names(df.cast) <- df.cast[,1]
   df.cast <- df.cast[,-1]
   dist <- vegdist(df.cast, method = DistMethod) %>% as.matrix()
 }
 
-# create ps list with all phyloseq objects
-psList.rare <- list(ps1.rare, ps2.rare, ps3.rare, ps4.rare, ps5.rare, ps6.rare, ps7.rare)
-names(psList.rare) <- c(1:7)
 
 # use the function to write bray distance list and write out as csv files
 BrayList <- lapply(psList.rare, DistTab, DistMethod = "bray")
-mapply(write.csv, BrayList, file = paste0(path, "distance/bray_", names(psList.rare), ".csv"))
+names(BrayList) <- c(1:8)
+mapply(write.csv, BrayList, file = paste0(path, "distance/bray_", names(BrayList), ".csv"))
 
 # write out weighted list as well
 WeightList <- lapply(psList.rare, UniFrac, weighted = TRUE)
 WeightList <- lapply(WeightList, as.matrix)
-mapply(write.csv, WeightList, file = paste0(path, "distance/weighted_", names(psList.rare), ".csv"))
+names(WeightList) <- c(1:8)
+mapply(write.csv, WeightList, file = paste0(path, "distance/weighted_", names(WeightList), ".csv"))
 
-
-# Define function to draw cluster dendrogram
-DistDendro <- function(dist, ClusterMethod, path.out, w, h){
-  pdf(path.out, w, h)
-  hclust(as.dist(dist), method = ClusterMethod) %>% plot() %>% print()
-  dev.off()
-}
-
-
-# dendrogram for ps5.rare
-Bray5 <- DistTab(subset_samples(ps5.rare, For_AVE %in% c("Glycerol","PBS2","Expected2")), "bray")
-DistDendro(dist = Bray5, ClusterMethod = "average",
-           path.out = file.path(path, "distance/UPGMA_bray.pdf"), w = 7, h = 4.5)
-DistDendro(dist = UniFrac(subset_samples(ps5.rare, For_AVE %in% c("Glycerol","PBS2","Expected2")), weighted = TRUE),
-           ClusterMethod = "average",
-           path.out = file.path(path, "distance/UPGMA_weighted.pdf"), w = 7, h = 4.5)
-
-```
-
-
-```{r}
 # Define function to make box plot and add p-values to the plot 
 ## based on the package called "ggpubr"
 DistBox <- function(df, DistMethod, path.out, w, h) {
@@ -514,7 +401,6 @@ DistBox <- function(df, DistMethod, path.out, w, h) {
   # ****: p <= 0.0001
 }
 
-
 # Import organized and subsetted (only extraction) distance csv file for making bar plots
 Bray.ext <- read.csv(file.path(path, "distance/organized_distance_extraction_bray.csv"))
 DistBox(Bray.ext, DistMethod = "Bray-Curtis dissimilarity",
@@ -523,9 +409,29 @@ DistBox(Bray.ext, DistMethod = "Bray-Curtis dissimilarity",
 weighted.ext <- read.csv(file.path(path, "distance/organized_distance_extraction_weighted.csv"))
 DistBox(weighted.ext, DistMethod = "Weighted UniFrac distance",
         path.out = file.path(path,"distance/Weigted.ext.pdf"), w = 8, h = 4.5)
-```
 
-```{r}
+
+
+# Define function to draw cluster dendrogram
+DistDendro <- function(dist, ClusterMethod, path.out, w, h){
+  pdf(path.out, w, h)
+  hclust(as.dist(dist), method = ClusterMethod) %>% plot() %>% print()
+  dev.off()
+}
+
+
+# dendrogram for ps5.rare
+Bray5 <- DistTab(subset_samples(psList.rare[[5]], For_AVE %in% c("Glycerol","PBS2","Expected2")),
+                 "bray")
+DistDendro(dist = Bray5, ClusterMethod = "average",
+           path.out = file.path(path, "distance/UPGMA_bray.pdf"), w = 7, h = 4.5)
+Wuf5 <- UniFrac(subset_samples(psList.rare[[5]], For_AVE %in% c("Glycerol","PBS2","Expected2")),
+                weighted = TRUE)
+DistDendro(dist = Wuf5, ClusterMethod = "average",
+           path.out = file.path(path, "distance/UPGMA_weighted.pdf"), w = 7, h = 4.5)
+
+
+
 # Define function to plot 2D beta diversity dot plot
 BetaPlot <- function(ps, ClusterMethod, DistMethod, var1, w, h, path.out){
   ps.ord <- ordinate(ps, method = ClusterMethod, distance = DistMethod)
@@ -543,12 +449,12 @@ BetaPlot <- function(ps, ClusterMethod, DistMethod, var1, w, h, path.out){
 
 
 # ps6 (sample volume)
-BetaPlot(subset_samples(ps6.rare, SampleID != "10TB.1" & SampleID != "10TB.2" & SampleID != "10TB.3"),
+BetaPlot(subset_samples(psList.rare[[6]], SampleID != "10TB.1" & SampleID != "10TB.2" & SampleID != "10TB.3"),
          ClusterMethod = "NMDS", DistMethod = "bray", var1 = "For_AVE",
          path.out = file.path(path, "beta/ps6_NMDS_bray.pdf"), 5, 3.6)
 
 # ps 4 (PMA)
-BetaPlot(ps4.rare, ClusterMethod = "NMDS", DistMethod = "bray", var1 = "For_AVE",
+BetaPlot(psList.rare[[4]], ClusterMethod = "NMDS", DistMethod = "bray", var1 = "For_AVE",
          path.out = file.path(path, "beta/ps4_NMDS_bray.pdf"), 5, 3.6)
 
 ```
@@ -579,7 +485,7 @@ AlphaBox <- function(ps, alpha_measures, var1, var, lvl, path.out, w, h){
 }
 
 # Alpha box plot on ps6 (sample volume)
-AlphaBox(subset_samples(ps6.rare, SampleID != "10TB.1" & SampleID != "10TB.2" & SampleID != "10TB.3"),
+AlphaBox(subset_samples(psList.rare[[6]], SampleID != "10TB.1" & SampleID != "10TB.2" & SampleID != "10TB.3"),
          # subset to include only one set of 10ml samples 
          alpha_measures = c("Observed", "Shannon"),
          var1 = "For_AVE", var = c("KIT","For_AVE","STORAGE","MATRIX","PMA",
@@ -589,14 +495,14 @@ AlphaBox(subset_samples(ps6.rare, SampleID != "10TB.1" & SampleID != "10TB.2" & 
          path.out = file.path(path, "alpha/ps6_ForAVE.pdf"), 4.5, 2.3)
 
 # Alpha box plot on ps 4 (PMA)
-AlphaBox(ps4.rare, alpha_measures = c("Observed", "Shannon"),
+AlphaBox(psList.rare[[4]], alpha_measures = c("Observed", "Shannon"),
          var1 = "For_AVE", var = c("KIT","For_AVE","VOL","STORAGE","MATRIX","PMA",
-                                   "SampleOrCtrl","LYSING","Chemical_time","Bead_beat_speed_time","vortex_time","Description"),
+                                   "SampleOrCtrl","LYSING","Chemical_time",
+                                   "Bead_beat_speed_time","vortex_time","Description"),
          lvl = c("Expected","Untreated","Live","Half","Dead"),
          path.out = file.path(path, "alpha/ps4_ForAVE.pdf"), 4.5, 2.3)
 
 ```
-
 
 
 ## qPCR results 
@@ -644,7 +550,7 @@ dev.off()
 
 
 ## Use decontam package to see if by removing the UHT taxa, the vol (ps6) will be better
-```{r}
+```{r eval=FALSE, include=FALSE}
 # Read in ps.Phy05 (not glom at any taxonomy level) to subset vol samples 
 samdf6d <- read.csv(file.path(path, "mapping/MC_paper2_samdf_total_vol_decontam.csv"))
 rownames(samdf6d) <- samdf6d$SampleID
@@ -762,7 +668,7 @@ Also, I want to find out if, for example, the Bacillus in MC is the same ASV as
 in UHT. If not, I may be able to perform manual filtering.
 
 ## Manual filtering to see if by removing the UHT taxa, the vol (ps6) will be better
-```{r}
+```{r eval=FALSE, include=FALSE}
 # write out featuretab
 transform_sample_counts(ps6d, function(x) x/sum(x)) %>% psmelt() %>% 
   dcast(For_AVE + SampleID ~ OTU, value.var = "Abundance") %>% 
