@@ -156,27 +156,32 @@ ps.Phy.rare #  175 taxa and 29 samples  # no OTU were exclude
 
 
 ## Divide the ps object for milk and cheese
-### For taxonomy and beta (?) analysis based on "ps.Phy.glom"
-### For alpha and beta (?) analysis based on "ps.xxxx.rare"
+### For taxonomy analysis based on "ps.Phy.glom"
+### For alpha and beta analysis based on "ps.xxxx.rare"
 ```{r}
 # Clean up the taxonomy level
-ps.Phy.glom <- tax_glom(ps.Phy05, taxrank = "Genus", NArm = FALSE)
-ps.Phy.glom # 89 taxa and 29 samples 
-
+## If set at "REC" level, won't glom
+ps.Phy.glom <- tax_glom(ps.Phy05, taxrank = "Genus", NArm = FALSE) 
+ps.Phy.glom # 89 taxa and 29 samples
+RECps <- dget("D:/src/Marco_Lab/Cheese1_R/FUN_RECps.R")
+ps.Phy.REC <- RECps(TaxTab, ps.Phy.glom)
+ps.Phy.REC # 89 taxa and 29 samples
 
 # Subset to contain milk samples 
-ps.milk <- subset_samples(ps.Phy.glom, SampleType %in% c("HTST_feed", "HTST_milk"))
+ps.milk <- subset_samples(ps.Phy.REC, SampleType %in% c("HTST_feed", "HTST_milk"))
 ps.milk #  89 taxa and 18 samples 
 ps.milk.rare <- rarefy_even_depth(ps.milk, sample.size = 6100, replace = TRUE, 
                                  rngseed = 123 , trimOTUs = TRUE, verbose = TRUE) 
 ps.milk.rare # 89 taxa and 18 sampless  
 
-# Subset to contain cheese samples
-ps.cheese <- subset_samples(ps.Phy.glom, SampleType %in% "Pilot_cheese_5D")
+# Subset to contain cheese samples ()
+ps.cheese <- subset_samples(ps.Phy.REC, SampleType %in% "Pilot_cheese_5D")
 ps.cheese #  89 taxa and 11 samples 
-ps.cheese.rare <- rarefy_even_depth(ps.cheese, sample.size = 6100, replace = TRUE, 
-                                 rngseed = 123 , trimOTUs = TRUE, verbose = TRUE) 
+ps.cheese.rare <- rarefy_even_depth(ps.cheese, sample.size = 6100, replace = TRUE,
+                                    rngseed = 123 , trimOTUs = TRUE, verbose = TRUE) 
 ps.cheese.rare #  14 taxa and 11 samples   # 71 OTU were excluded 
+ps.cheese.rarenoL <- subset_taxa(ps.cheese.rare, !Genus %in% "Lactococcus")
+ps.cheese.rarenoL # 13 taxa and 11 samples
 ```
 
 
@@ -188,11 +193,11 @@ no slits samples from the same cheese study 2
 ```{r}
 # Define function to make Bar plots 
 #### Bar plot #####
-SlitBar <- function(ps, var1, var2, taxa, path.out, w, h, x){  
-  ps <- ps %>% tax_glom(taxrank = "Genus") %>% transform_sample_counts(function(x) x/sum(x) ) 
+SlitBar <- function(ps, var1, var2, taxa, mycol, path.out, w, h, x){  
+  ps <- ps %>% transform_sample_counts(function(x) x/sum(x) ) 
   
   TaxTab <- tax_table(ps) %>% as.data.frame()
-  taxa_names(ps) <- TaxTab$Genus 
+  taxa_names(ps) <- TaxTab$REC
   allTaxa <- taxa_names(ps)
   ps.other <- prune_taxa(allTaxa[!(allTaxa %in% taxa)], ps)
   taxa.other <- ps.other@tax_table[,6] %>% as.character() # 6 for Genus level 
@@ -200,25 +205,21 @@ SlitBar <- function(ps, var1, var2, taxa, path.out, w, h, x){
   # change the taxa that are not the expected taxa to "Other" 
   TaxTab2 <- psmelt(ps)
   # merge/average per Sample and CheeseOutcome
-  TaxTab2_agg <- aggregate(Abundance ~ TaxTab2[[var1]] + TaxTab2[[var2]] + Genus,
+  TaxTab2_agg <- aggregate(Abundance ~ TaxTab2[[var1]] + TaxTab2[[var2]] + REC,
                            data = TaxTab2,
                            mean)
   colnames(TaxTab2_agg)[1] <- var1
   colnames(TaxTab2_agg)[2] <- var2
-  TaxTab2_agg$Genus <- as.character(TaxTab2_agg$Genus)
-  TaxTab2_agg[TaxTab2_agg$Genus %in% taxa.other,]$Genus <- "Other"
+  TaxTab2_agg$REC <- as.character(TaxTab2_agg$REC)
+  TaxTab2_agg[TaxTab2_agg$REC %in% taxa.other,]$REC <- "Other"
   
-  # Set colors for plotting
-  mycol = c("#A6CEE3", "#438EC0", "#63A8A0", "#98D277", "#3BA432", "#F16667", 
-            "#E62F27", "#F9A963", "#FE982C", "#ED8F47", "#C3AAD2", "#7D54A5", 
-            "#B9A499", "#EAD27A", "#B15928")
-  TaxTab2_agg$Genus <- factor(TaxTab2_agg$Genus, levels = taxa)
+  TaxTab2_agg$REC <- factor(TaxTab2_agg$REC, levels = taxa)
   TaxTab2_agg[[var1]] <- factor(TaxTab2_agg[[var1]])
   TaxTab2_agg[[var2]] <- factor(TaxTab2_agg[[var2]])
   
   pdf(path.out, w, h)
-  p <- ggplot(TaxTab2_agg, aes(x = get(var1), y = Abundance, fill = Genus)) +
-    geom_bar(position = "fill",stat = "identity") + 
+  p <- ggplot(TaxTab2_agg, aes(x = get(var1), y = Abundance, fill = REC)) +
+    geom_bar(stat = "identity") + 
     scale_fill_manual(values = mycol)+
     theme_bw(base_size = 20) +
     facet_grid(~ get(var2), scales = "free_x")+
@@ -246,56 +247,34 @@ SlitBar <- function(ps, var1, var2, taxa, path.out, w, h, x){
 }
 
 
-comm14 <- c("Acinetobacter", "Bacillus", "Corynebacterium", "Clostridium",
-            "Enterococcus", "Lactobacillus", "Lactococcus", "Macrococcus",
+comm15 <- c("Acinetobacter", "Bacillus", "Corynebacterium", "Clostridium",
+            "Enterococcus", "Leuconostoc",  "Lactobacillus", "Lactococcus", "Macrococcus",
             "Mycoplasma", "Pseudomonas", "Staphylococcus", "Streptococcus",
             "Thermus", "Turicibacter", "Other")
+col15 = c("#A6CEE3", "#438EC0", "#63A8A0", "#98D277", "#3BA432", "#B89B74",
+          "#F16667", "#E62F27", "#F9A963", "#FE982C", "#ED8F47", "#C3AAD2",  
+          "#7D54A5", "#B9A499", "#EAD27A", "#B15928")
 SlitBar(ps.milk, var1 = "SampleID", var2 = "SampleType",
-        comm14, path.out = file.path(path, "figs/SampleType_SampleID.pdf"), 6, 4.5)
+        taxa = comm15, mycol = col15, 
+        path.out = file.path(path, "figs/milk_SampleType_SampleID.pdf"), 6, 4.5)
+SlitBar(ps.cheese, var1 = "Bacterial_isolate", var2 = "SampleType",
+        taxa = comm15, mycol = col15,
+        path.out = file.path(path, "figs/cheese_Bacterial_isolate_SampleType.pdf"), 6, 9)
+
+
+# comm14 doesn't have Lactococcus 
+comm14 <- c("Acinetobacter", "Bacillus", "Corynebacterium", "Clostridium",
+            "Enterococcus", "Leuconostoc", "Lactobacillus", "Macrococcus",
+            "Mycoplasma", "Pseudomonas", "Staphylococcus", "Streptococcus",
+            "Thermus", "Turicibacter", "Other")
+col14 = c("#A6CEE3", "#438EC0", "#63A8A0", "#98D277", "#3BA432",
+          "#F16667", "#E62F27", "#F9A963", "#FE982C", "#ED8F47", "#C3AAD2",
+          "#7D54A5", "#B9A499", "#EAD27A", "#B15928")
+SlitBar(ps.cheese, var1 = "Bacterial_isolate", var2 = "SampleType",
+        taxa = comm14, mycol = col14,
+        path.out = file.path(path, "figs/cheese_Bacterial_isolate_SampleType.pdf"), 6, 9)
 
 
 ```
 
-
-
-
-
-
-
-```{r}
-ChouBar <- function(ps, taxa, samType, w, h, path.out){
-  ps <- ps %>% tax_glom(taxrank = "Genus") #%>%transform_sample_counts(function(x) x/sum(x) ) 
-  TaxTab <- tax_table(ps) %>% as.data.frame()
-  taxa_names(ps) <- TaxTab$Genus
-  allTaxa <- taxa_names(ps)
-  ps.notaxa <- prune_taxa(allTaxa[!(allTaxa %in% taxa)], ps)
-  taxa.filt <- ps.notaxa@tax_table[,6] %>% as.character() #6 for genus level 
-  
-  # change the taxa that are not within the 13 common taxa to "Other" 
-  TaxTab2 <- psmelt(ps)
-  # merge/average per SampleType and CheeseOutcome
-  TaxTab2_agg <- ddply(TaxTab2, c("SampleType", "sample_Species", "Genus"),
-                       summarise,
-                       mean = mean(Abundance))
-  TaxTab2_agg$Genus <- as.character(TaxTab2_agg$Genus)
-  TaxTab2_agg[TaxTab2_agg$Genus %in% taxa.filt,]$Genus <- "Other"
-  #Set colors for plotting
-  mycol = c("#A6CEE3", "#438EC0", "#63A8A0", "#98D277", "#3BA432", "#F16667", 
-            "#E62F27", "#F9A963", "#FE982C", "#ED8F47", "#C3AAD2", "#7D54A5", 
-            "#B9A499", "#EAD27A", "#B15928")
-  TaxTab2_agg$Genus = factor(TaxTab2_agg$Genus, levels = taxa)
-  
-  pdf(path.out, width = w, height = h)
-  (ggplot(TaxTab2_agg, aes(x = sample_Species, y = mean, fill = Genus)) +
-    facet_wrap(~ SampleType) +
-    geom_bar(position = "fill",stat = "identity") + 
-    scale_fill_manual(values = mycol)+
-    theme_bw() +
-    # Remove x axis title
-    theme(axis.title.x = element_blank(), text = element_text(size = 16)) + 
-    guides(fill = guide_legend(reverse = FALSE, keywidth = 1, keyheight = 1)) +
-    ylab("Log cells/ml")) %>% print() 
-  dev.off()
-}
-```
 
