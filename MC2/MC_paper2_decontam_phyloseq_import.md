@@ -37,6 +37,16 @@ library(ggplot2);packageVersion("ggplot2")
     ## [1] '3.1.0'
 
 ``` r
+library(ggpubr); packageVersion("ggpubr") #  ggplot2 based publication ready fig
+```
+
+    ## Warning: package 'ggpubr' was built under R version 3.4.4
+
+    ## Loading required package: magrittr
+
+    ## [1] '0.2'
+
+``` r
 library(reshape2);packageVersion("reshape2")
 ```
 
@@ -53,6 +63,10 @@ library(cowplot);packageVersion("cowplot")
     ## 
     ## Attaching package: 'cowplot'
 
+    ## The following object is masked from 'package:ggpubr':
+    ## 
+    ##     get_legend
+
     ## The following object is masked from 'package:ggplot2':
     ## 
     ##     ggsave
@@ -61,6 +75,16 @@ library(cowplot);packageVersion("cowplot")
 
 ``` r
 library(plyr)
+```
+
+    ## 
+    ## Attaching package: 'plyr'
+
+    ## The following object is masked from 'package:ggpubr':
+    ## 
+    ##     mutate
+
+``` r
 library(dplyr)
 ```
 
@@ -110,6 +134,7 @@ tree <- read_tree(file.path(path,"5file-tree.nwk"))
 
 # Parse out taxonomic assignment in excel and remove confidence column
 # keep only taxa included in the "feature-table-mc2.csv" file
+# Species column removed
 TaxTab <- read.table(file.path(path,"5file-taxonomy-mc2.tsv"), header = TRUE, sep = '\t', na.strings = NA)
 rownames(TaxTab) <- TaxTab$FeatureID
 TaxTab <- TaxTab[,-1]
@@ -123,7 +148,7 @@ ps # 1052 taxa and 212 samples
     ## phyloseq-class experiment-level object
     ## otu_table()   OTU Table:         [ 1052 taxa and 212 samples ]
     ## sample_data() Sample Data:       [ 212 samples by 14 sample variables ]
-    ## tax_table()   Taxonomy Table:    [ 1052 taxa by 7 taxonomic ranks ]
+    ## tax_table()   Taxonomy Table:    [ 1052 taxa by 6 taxonomic ranks ]
     ## phy_tree()    Phylogenetic Tree: [ 1052 tips and 1050 internal nodes ]
 
 ``` r
@@ -135,26 +160,12 @@ ps # 1049 taxa and 212 samples
     ## phyloseq-class experiment-level object
     ## otu_table()   OTU Table:         [ 1049 taxa and 212 samples ]
     ## sample_data() Sample Data:       [ 212 samples by 14 sample variables ]
-    ## tax_table()   Taxonomy Table:    [ 1049 taxa by 7 taxonomic ranks ]
+    ## tax_table()   Taxonomy Table:    [ 1049 taxa by 6 taxonomic ranks ]
     ## phy_tree()    Phylogenetic Tree: [ 1049 tips and 1047 internal nodes ]
 
 ``` r
 write.csv(ps@otu_table, file.path(path,"feature_table/5file-feature-table-mc2.csv"))
 ```
-
-Inspect Library Sizes
----------------------
-
-``` r
-#add a colum for read counts/library size
-samdf$LibrarySize <- sample_sums(ps)
-#sort by the library size in increasing order
-samdf <- samdf[order(samdf$LibrarySize),]
-samdf$Index <- seq(nrow(samdf))
-ggplot(samdf, aes(x=Index, y=LibrarySize, color=SampleOrCtrl))+geom_point()
-```
-
-![](figs/unnamed-chunk-3-1.png) As expected, some of the UHT\_NC had pretty high read coverage. Also, I decided to not do decontam with the MC data because I know already which taxa are contamination and which taxa are expected.
 
 Filter ASVs based on taxonomy and abundance
 -------------------------------------------
@@ -164,7 +175,7 @@ Filter ASVs based on taxonomy and abundance
 rank_names(ps)
 ```
 
-    ## [1] "Kingdom" "Phylum"  "Class"   "Order"   "Family"  "Genus"   "Species"
+    ## [1] "Kingdom" "Phylum"  "Class"   "Order"   "Family"  "Genus"
 
 ``` r
 # Create table, number of features for each phylum
@@ -190,7 +201,7 @@ ps.Phy # 1013 taxa and 212 samples
     ## phyloseq-class experiment-level object
     ## otu_table()   OTU Table:         [ 1013 taxa and 212 samples ]
     ## sample_data() Sample Data:       [ 212 samples by 14 sample variables ]
-    ## tax_table()   Taxonomy Table:    [ 1013 taxa by 7 taxonomic ranks ]
+    ## tax_table()   Taxonomy Table:    [ 1013 taxa by 6 taxonomic ranks ]
     ## phy_tree()    Phylogenetic Tree: [ 1013 tips and 1011 internal nodes ]
 
 ``` r
@@ -211,7 +222,7 @@ ggplot(prevdf, aes(TotalAbundance, Prevalence / nsamples(ps.Phy),color=Phylum)) 
   facet_wrap(~Phylum) + theme(legend.position="none")
 ```
 
-![](figs/unnamed-chunk-4-1.png)
+![](figs/unnamed-chunk-3-1.png)
 
 ``` r
 # Most bacteria are in the Actinobacteria, Bacteroidetes, Firmircutes and Proteobacteria
@@ -227,7 +238,7 @@ ps.Phy05 # 197 taxa and 212 samples
     ## phyloseq-class experiment-level object
     ## otu_table()   OTU Table:         [ 197 taxa and 212 samples ]
     ## sample_data() Sample Data:       [ 212 samples by 14 sample variables ]
-    ## tax_table()   Taxonomy Table:    [ 197 taxa by 7 taxonomic ranks ]
+    ## tax_table()   Taxonomy Table:    [ 197 taxa by 6 taxonomic ranks ]
     ## phy_tree()    Phylogenetic Tree: [ 197 tips and 196 internal nodes ]
 
 Determine rarefaction level for Alpha and Beta analysis later on
@@ -235,23 +246,9 @@ Determine rarefaction level for Alpha and Beta analysis later on
 
 ``` r
 set.seed(123)
-# Define function to calculate alpha diversity and rarefaction levels
-calculate_rarefaction_curves <- function(psdata, measures, depths) {
-  estimate_rarified_richness <- function(psdata, measures, depth) {
-    if(max(sample_sums(psdata)) < depth) return()
-    psdata <- prune_samples(sample_sums(psdata) >= depth, psdata)
-    rarified_psdata <- rarefy_even_depth(psdata, depth, verbose = FALSE)
-    alpha_diversity <- estimate_richness(rarified_psdata, measures = measures)
-    # as.matrix forces the use of melt.array, which includes the Sample names (rownames)
-    molten_alpha_diversity <- melt(as.matrix(alpha_diversity), varnames = c("SampleID", 'measures'), value.name = 'Alpha_diversity')
-    molten_alpha_diversity
-  }
-  names(depths) <- depths # this enables automatic addition of the Depth to the output by ldply
-  rarefaction_curve_data <- ldply(depths, estimate_rarified_richness, psdata = psdata, measures = measures, .id = 'Depth', .progress = ifelse(interactive(), 'text', 'none'))
-  #convert Depth from factor to numeric
-  rarefaction_curve_data$Depth <- as.numeric(levels(rarefaction_curve_data$Depth))[rarefaction_curve_data$Depth]
-  rarefaction_curve_data
-}
+# Read in function to calculate alpha diversity and rarefaction levels
+calculate_rarefaction_curves <-dget(file.path("~/src/Marco_Lab/FUN_calculate_rarefaction.R"))
+
 rarefaction_curve_data <- calculate_rarefaction_curves(ps.Phy05, c("Observed", "Shannon","Simpson"), 
                                                        rep(c(1, 2500, 5000, 7500, 10000), each = 10))
 rarefaction_curve_data$SampleID <- gsub("X","",rarefaction_curve_data$SampleID)
@@ -285,7 +282,7 @@ ggplot(rarefaction_curve_data_summary_verbose, aes(x = Depth, y = Alpha_diversit
   facet_wrap(facets = ~ measures, scales = "free")
 ```
 
-![](figs/unnamed-chunk-5-1.png)
+![](figs/unnamed-chunk-4-1.png)
 
 ``` r
 # export the library size to a csv file
@@ -293,540 +290,276 @@ write.csv(sample_sums(ps.Phy05), file.path(path, "mapping/library_size_ps.Phy05_
 
 # The diversity leveled out after 2500 seqs per sample, rarefy at 3990
 # to keep the sample with the fewest reads that is no a NC (MC.50.2)
-ps.Phy.rare <- rarefy_even_depth(ps.Phy05, sample.size = 3990, replace = TRUE, 
-                                 rngseed = 123 , trimOTUs = TRUE, verbose = TRUE) 
 ```
-
-    ## `set.seed(123)` was used to initialize repeatable random subsampling.
-
-    ## Please record this for your records so others can reproduce.
-
-    ## Try `set.seed(123); .Random.seed` for the full vector
-
-    ## ...
-
-    ## 9 samples removedbecause they contained fewer reads than `sample.size`.
-
-    ## Up to first five removed samples are:
-
-    ## milliQ.110CB.NC10TB.NC10TC.NC10UB.1  
-
-    ## ...
-
-``` r
-ps.Phy.rare # 197 taxa and 203 samples
-```
-
-    ## phyloseq-class experiment-level object
-    ## otu_table()   OTU Table:         [ 197 taxa and 203 samples ]
-    ## sample_data() Sample Data:       [ 203 samples by 14 sample variables ]
-    ## tax_table()   Taxonomy Table:    [ 197 taxa by 7 taxonomic ranks ]
-    ## phy_tree()    Phylogenetic Tree: [ 197 tips and 196 internal nodes ]
 
 Divide the ps object for different dataset
 ------------------------------------------
 
-### For taxonomy analysis based on "ps.Phy.REC"
+### For taxonomy analysis based on "ps.REC.glom"
+
+#### Taxonomy plot for individual values
 
 ``` r
-# Clean up the taxonomy level
-#make the deepest taxonomic identification in TaxTab as the recommened taxonomy (REC)
-RECps <- function(x, ps) {
-  TaxTab2 <- as.data.frame(x)
+TaxBar <- function(ps, var1, var2, lvl = NULL, lvl2 = NULL, w, h, path.out){
+  ExpTaxa <- c("Bacillaceae","Bacillus","Corynebacterium","Clostridiaceae",
+               "Clostridium","Enterococcus","Escherichia","Lactococcus",
+               "Pseudomonas","Staphylococcus","Streptococcus") 
   
-  list.g <- as.character(TaxTab2$Genus)
-  list.f <- as.character(TaxTab2$Family)
-  list.o <- as.character(TaxTab2$Order)
-  list.c <- as.character(TaxTab2$Class)
-  list.p <- as.character(TaxTab2$Phylum)
-  list.k <- as.character(TaxTab2$Kingdom)
-  list.REC <- character(length(list.g))
+  ps <-  ps %>% transform_sample_counts(function(x) x/sum(x) )  
+  TaxTab <- tax_table(ps) %>% as.data.frame()
+  taxa_names(ps) <- TaxTab$REC 
+  allTaxa <- taxa_names(ps)
+  ps.other <- prune_taxa(allTaxa[!(allTaxa %in% ExpTaxa)], ps)
+  taxa.other <- ps.other@tax_table[,7] %>% as.character() # 7 for REC level 
   
-  for(i in 1:dim(TaxTab2)[1]){
-    G = which(TaxTab2$Genus[i] == "")
-    F = which(TaxTab2$Family[i] == "")
-    O = which(TaxTab2$Order[i] == "")
-    C = which(TaxTab2$Class[i] == "")
-    P = which(TaxTab2$Phylum[i] == "")
-    K = which(TaxTab2$Kingdom[i] == "")
-    if(length(G) == 0){
-      list.REC[i] <- list.g[i]
-    } else if(length(F) == 0){
-      list.REC[i] <- list.f[i]
-    } else if(length(O) == 0){
-      list.REC[i] <- list.o[i]
-    } else if(length(C) == 0){
-      list.REC[i] <- list.c[i]
-    } else if(length(P) == 0){
-      list.REC[i] <- list.p[i]
-    } else if(length(K) == 0){
-      list.REC[i] <- list.k[i]
-    } else
-      list.REC[i] <- "meow"
-  }
+  # change the taxa that are not the expected taxa to "Other" 
+  TaxTab2 <- psmelt(ps)
+  # merge/average per Sample and CheeseOutcome
+  TaxTab2_agg <- aggregate(Abundance ~ TaxTab2[[var1]] + TaxTab2[[var2]] + REC,
+                           data = TaxTab2,
+                           mean)
+  colnames(TaxTab2_agg)[1] <- var1
+  colnames(TaxTab2_agg)[2] <- var2
+  TaxTab2_agg$REC <- as.character(TaxTab2_agg$REC)
+  TaxTab2_agg[TaxTab2_agg$REC %in% taxa.other,]$REC <- "Other"
   
-  TaxTab2$REC <- list.REC
-  TaxTab2$REC <- factor(TaxTab2$REC)
-  merge_phyloseq(ps, TaxTab2 %>% as.matrix() %>% tax_table())
+  # Set colors for plotting
+  mycol = c("#a6cee3","#1f78b4","#b2df8a","#33a02c","#fb9a99","#e31a1c",
+            "#fdbf6f","#ff7f00","#cab2d6","#6a3d9a","#ffff99","#b15928")
+  
+  # Set orders for taxonomy and sampleID
+  TaxTab2_agg$REC = factor(TaxTab2_agg$REC, levels = c(ExpTaxa, "Other"))
+  if (!is.null(lvl)) TaxTab2_agg[[var1]] <- factor(TaxTab2_agg[[var1]], levels = lvl)
+  if (!is.null(lvl2)) TaxTab2_agg[[var2]] <- factor(TaxTab2_agg[[var2]], levels = lvl2)
+  
+  pdf(path.out, width = w, height = h)
+  p <- ggplot(TaxTab2_agg, aes(x = get(var1), y = Abundance, fill = REC)) +
+    facet_grid(. ~ get(var2), scales = "free_x") + 
+    geom_bar(stat = "identity") + 
+    scale_fill_manual(values = mycol)+
+    theme_bw(base_size = 15)+
+    guides(fill = guide_legend(reverse = FALSE, keywidth = 1, keyheight = 1)) +
+    ylab("Relative proportion")
+  
+  # convert ggplot object to grob object
+  gp <- ggplotGrob(p)
+  # optional: take a look at the grob object's layout 
+  # gtable::gtable_show_layout(gp)
+  # get gtable columns corresponding to the facets 
+  facet.columns <- gp$layout$l[grepl("panel", gp$layout$name)]
+  # get the number of unique x-axis values per facet (1 & 3, in this case)
+  x.var <- sapply(ggplot_build(p)$layout$panel_scales_x, 
+                  function(l) length(l$range$range))
+  # change the relative widths of the facet columns based on how many unique 
+  # x-axis values are in each facet
+  gp$widths[facet.columns] <- gp$widths[facet.columns] * x.var
+  # plot result
+  grid::grid.draw(gp)
+  dev.off()
 }
 
-ps.Phy.glom <- tax_glom(ps.Phy05, taxrank = "Genus", NArm = FALSE)
-ps.Phy.REC <- RECps(TaxTab, ps.Phy.glom)
-ps.Phy.REC # 100 taxa and 212 samples
+# Read in sample ID order 
+lvl.ID <- read.csv(file.path(path, "mapping/phase3_sample_orders.csv"), header = FALSE) 
+lvl.ID$V1 <- as.character(lvl.ID$V1)
+TaxBar(psList[[7]], var1 = "SampleID", var2 = "Kit", lvl = lvl.ID$V1,
+       path.out = file.path(path,"feature_table/ps7_SampleID_Kit.pdf"), w = 9, h = 5)
 ```
 
-    ## phyloseq-class experiment-level object
-    ## otu_table()   OTU Table:         [ 100 taxa and 212 samples ]
-    ## sample_data() Sample Data:       [ 212 samples by 14 sample variables ]
-    ## tax_table()   Taxonomy Table:    [ 100 taxa by 8 taxonomic ranks ]
-    ## phy_tree()    Phylogenetic Tree: [ 100 tips and 99 internal nodes ]
+    ## quartz_off_screen 
+    ##                 2
 
 ``` r
-# Define function to get the average and raw value of the feature table 
-AveFeatTab <- function(ps){
-  df <- psmelt(ps)
-  df.cast <- dcast(df, REC ~ For_AVE, mean, value.var = "Abundance")
-  df.cast[, -1] <- lapply( df.cast[ , -1], function(x) x/sum(x, na.rm=TRUE) )
-  df.cast
-}
-FeatTab <- function(ps){
-  df <- psmelt(ps)
-  df.cast <- dcast(df, For_AVE + SampleID ~ REC, value.var = "Abundance")
-  df.cast
-}
-
-
-# 1. DNA extraction lysis method using the Total kit; BCMC1
-samdf_BCMC1_total_lyse <- read.csv(file.path(path, "mapping/MC_paper2_samdf_BCMC1_total_lyse.csv"))
-rownames(samdf_BCMC1_total_lyse) <- samdf_BCMC1_total_lyse$SampleID
-ps1 <- phyloseq(sample_data(samdf_BCMC1_total_lyse), otu_table(ps.Phy.REC),
-                tax_table(ps.Phy.REC), phy_tree(ps.Phy.REC))
-ps1 # 91 taxa and 23 samples
+TaxBar(psList[[7]], var1 = "SampleID", var2 = "Lysis", lvl = lvl.ID$V1, 
+       lvl2 = c("Expected", "Bead beat: 2min x 6.5m/s", "Vortex: 15min", 
+                "Chemical: 1hr", "Bead beat: 10s x 4m/s",
+                "Chemical + Bead beat: 1hr + 10s x 4m/s",
+                "Vortex: 30s", "Chemical + Vortex: 1hr + 30s "),
+       path.out = file.path(path,"feature_table/ps7_SampleID_Lysis.pdf"), w = 9, h = 5)
 ```
 
-    ## phyloseq-class experiment-level object
-    ## otu_table()   OTU Table:         [ 100 taxa and 23 samples ]
-    ## sample_data() Sample Data:       [ 23 samples by 13 sample variables ]
-    ## tax_table()   Taxonomy Table:    [ 100 taxa by 8 taxonomic ranks ]
-    ## phy_tree()    Phylogenetic Tree: [ 100 tips and 99 internal nodes ]
+    ## quartz_off_screen 
+    ##                 2
 
 ``` r
-write.csv(AveFeatTab(ps1), file.path(path, "feature_table/FeatTab_BCMC1_total_lyseAVE.csv"))
-
-
-# 2. DNA extraction kit with MoBio
-samdf_BCMC1_MoBio <- read.csv(file.path(path, "mapping/MC_paper2_samdf_BCMC1_MoBio.csv"))
-rownames(samdf_BCMC1_MoBio) <- samdf_BCMC1_MoBio$SampleID
-ps2 <- phyloseq(sample_data(samdf_BCMC1_MoBio), otu_table(ps.Phy.REC),
-                tax_table(ps.Phy.REC), phy_tree(ps.Phy.REC))
-ps2 # 91 taxa and 6 samples
+# Plot for sample storage conditions (ps5)
+TaxBar(subset_samples(psList[[5]], For_AVE %in% c("Glycerol","PBS2","Expected2")),  
+       # subset to include only BCMC2 samples 
+       var1 = "SampleID", var2 = "For_AVE",
+       lvl = c("Theo2.1","Theo2.2","Theo2.3",
+               "MC.PBS.1","MC.PBS.2","MC.PBS.3",
+               "MC.25.glycerol.1","MC.25.glycerol.2","MC.25.glycerol.3"), 
+       lvl2 = c("Expected2","PBS2", "Glycerol"),
+       path.out = file.path(path, "feature_table/ps5_SampleID_For_AVE.pdf"), 5, 5)
 ```
 
-    ## phyloseq-class experiment-level object
-    ## otu_table()   OTU Table:         [ 100 taxa and 6 samples ]
-    ## sample_data() Sample Data:       [ 6 samples by 13 sample variables ]
-    ## tax_table()   Taxonomy Table:    [ 100 taxa by 8 taxonomic ranks ]
-    ## phy_tree()    Phylogenetic Tree: [ 100 tips and 99 internal nodes ]
+    ## quartz_off_screen 
+    ##                 2
 
 ``` r
-write.csv(AveFeatTab(ps2), file.path(path, "feature_table/FeatTab_BCMC1_MoBioAVE.csv"))
-
-# 3. DNA extraction kit choice on 10 ml UHT milk; BCMC2
-samdf_BCMC2_kit_10ml <- read.csv(file.path(path, "mapping/MC_paper2_samdf_BCMC2_kit_10ml.csv"))
-rownames(samdf_BCMC2_kit_10ml) <- samdf_BCMC2_kit_10ml$SampleID
-ps3 <- phyloseq(sample_data(samdf_BCMC2_kit_10ml), otu_table(ps.Phy.REC),
-                tax_table(ps.Phy.REC), phy_tree(ps.Phy.REC))
-ps3 # 91 taxa and 30 samples
+# Plot for milk volumne collection (ps6)
+TaxBar(subset_samples(psList[[6]], SampleID != "Theo2.2" & SampleID != "Theo2.3" &  
+                        # subset to contain only one expected value
+                        SampleID != "10TB.1" & SampleID != "10TB.2" & SampleID != "10TB.3"),
+                        # subset to include only one set of 10ml samples
+       var1 = "SampleID", var2 = "For_AVE",
+       lvl = c("Theo2.1","MC.30ml.UHT.1","MC.30ml.UHT.2","MC.30ml.UHT.3",
+               "MC.10ml.UHT.1","MC.10ml.UHT.2","MC.10ml.UHT.3",
+               "MC.1ml.UHT.1","MC.1ml.UHT.2","MC.1ml.UHT.3","200TB.1","200TB.2","200TB.3"),
+       lvl2 = c("Expected","30ml","10ml","1ml","200uL"),
+       path.out = file.path(path, "feature_table/ps6_SampleID_For_AVE.pdf"),7.5,5)
 ```
 
-    ## phyloseq-class experiment-level object
-    ## otu_table()   OTU Table:         [ 100 taxa and 30 samples ]
-    ## sample_data() Sample Data:       [ 30 samples by 13 sample variables ]
-    ## tax_table()   Taxonomy Table:    [ 100 taxa by 8 taxonomic ranks ]
-    ## phy_tree()    Phylogenetic Tree: [ 100 tips and 99 internal nodes ]
+    ## quartz_off_screen 
+    ##                 2
 
 ``` r
-write.csv(AveFeatTab(ps3), file.path(path, "feature_table/FeatTab_BCMC2_kit_10mlAVE.csv"))
-
-# 4. PMA treatment
-samdf_PMA <- read.csv(file.path(path, "mapping/MC_paper2_samdf_PMA.csv"))
-rownames(samdf_PMA) <- samdf_PMA$SampleID
-ps4 <- phyloseq(sample_data(samdf_PMA), otu_table(ps.Phy.REC),
-                tax_table(ps.Phy.REC), phy_tree(ps.Phy.REC))
-ps4 # 91 taxa and 15 samples
+# Plot for PMA (ps4)
+TaxBar(subset_samples(psList[[4]], SampleID != "Theo2.2" & SampleID != "Theo2.3"), 
+       var1 = "SampleID", var2 = "For_AVE",
+       lvl = c("Theo2.1", "MC.50.control.1","MC.live.control.1","MC.dead.control.1",
+               "MC.live.1","Mc.live.2","MC.live.3","MC.50.1","MC.50.2","MC.50.3",
+               "MC.dead.1","MC.dead.2","MC.dead.3"),
+       lvl2 = c("Expected","Untreated","Live","Half","Dead"),
+       path.out = file.path(path, "feature_table/ps4_SampleID_For_AVE.pdf"),7,5)
 ```
 
-    ## phyloseq-class experiment-level object
-    ## otu_table()   OTU Table:         [ 100 taxa and 15 samples ]
-    ## sample_data() Sample Data:       [ 15 samples by 13 sample variables ]
-    ## tax_table()   Taxonomy Table:    [ 100 taxa by 8 taxonomic ranks ]
-    ## phy_tree()    Phylogenetic Tree: [ 100 tips and 99 internal nodes ]
+    ## quartz_off_screen 
+    ##                 2
+
+#### Taxonomy plot for average values
+
+### For alpha and beta div based on ps.REC.glom after rarefaction (ps.REC.glom.rare)
+
+I did not use ps.Phy05 for beta because the expected ASV is not the same as the actual sequenced ASV. If use ps.Phy05, the Bray distance of samples from expected would all be 1 (doesn't share any common species). The assumption is that the taxa assignment is accurate until Genus. Therefore, for alpha diversity, I would also use ps.REC.glom to keep until Genus level.
+
+#### Alpha diversity
 
 ``` r
-write.csv(AveFeatTab(ps4), file.path(path, "feature_table/FeatTab_PMA.csv"))
-
-# 5. Sample storage
-samdf_sample_storage <- read.csv(file.path(path, "mapping/MC_paper2_samdf_sample_storage.csv"))
-rownames(samdf_sample_storage) <- samdf_sample_storage$SampleID
-ps5 <- phyloseq(sample_data(samdf_sample_storage), otu_table(ps.Phy.REC),
-                tax_table(ps.Phy.REC), phy_tree(ps.Phy.REC))
-ps5 # 91 taxa and 24 samples
-```
-
-    ## phyloseq-class experiment-level object
-    ## otu_table()   OTU Table:         [ 100 taxa and 24 samples ]
-    ## sample_data() Sample Data:       [ 24 samples by 13 sample variables ]
-    ## tax_table()   Taxonomy Table:    [ 100 taxa by 8 taxonomic ranks ]
-    ## phy_tree()    Phylogenetic Tree: [ 100 tips and 99 internal nodes ]
-
-``` r
-write.csv(AveFeatTab(ps5), file.path(path, "feature_table/FeatTab_sample_storage.csv"))
-
-# 6. Sample Volume
-samdf_total_vol <- read.csv(file.path(path, "mapping/MC_paper2_samdf_total_vol.csv"))
-rownames(samdf_total_vol) <- samdf_total_vol$SampleID
-ps6 <- phyloseq(sample_data(samdf_total_vol), otu_table(ps.Phy.REC),
-                tax_table(ps.Phy.REC), phy_tree(ps.Phy.REC))
-ps6 # 91 taxa and 18 samples
-```
-
-    ## phyloseq-class experiment-level object
-    ## otu_table()   OTU Table:         [ 100 taxa and 18 samples ]
-    ## sample_data() Sample Data:       [ 18 samples by 12 sample variables ]
-    ## tax_table()   Taxonomy Table:    [ 100 taxa by 8 taxonomic ranks ]
-    ## phy_tree()    Phylogenetic Tree: [ 100 tips and 99 internal nodes ]
-
-``` r
-write.csv(AveFeatTab(ps6), file.path(path, "feature_table/FeatTab_total_vol.csv"))
-
-# 7. phase 3 kit, cleanup and lysing method 
-samdf_phase3 <- read.csv(file.path(path, "mapping/phase3_samdf.csv"))
-rownames(samdf_phase3) <- samdf_phase3$SampleID
-ps7 <- phyloseq(sample_data(samdf_phase3), otu_table(ps.Phy.REC),
-                tax_table(ps.Phy.REC), phy_tree(ps.Phy.REC))
-ps7 # 100 taxa and 51 samples
-```
-
-    ## phyloseq-class experiment-level object
-    ## otu_table()   OTU Table:         [ 100 taxa and 51 samples ]
-    ## sample_data() Sample Data:       [ 51 samples by 15 sample variables ]
-    ## tax_table()   Taxonomy Table:    [ 100 taxa by 8 taxonomic ranks ]
-    ## phy_tree()    Phylogenetic Tree: [ 100 tips and 99 internal nodes ]
-
-``` r
-write.csv(AveFeatTab(ps7), file.path(path, ("feature_table/FeatTab_phase3.csv")))
-
-
-# create ps list with all phyloseq objects
-psList <- list(ps1, ps2, ps3, ps4, ps5, ps6, ps7)
-names(psList) <- c(1:7)
-
-# use the function to write feature table (not average) list and write out csv
-FeatTab.list <- lapply(psList, FeatTab)
-mapply(write.csv, FeatTab.list, file = paste0(path, "feature_table/FeatTab_", names(FeatTab.list), ".csv"))
-```
-
-    ## $`1`
-    ## NULL
-    ## 
-    ## $`2`
-    ## NULL
-    ## 
-    ## $`3`
-    ## NULL
-    ## 
-    ## $`4`
-    ## NULL
-    ## 
-    ## $`5`
-    ## NULL
-    ## 
-    ## $`6`
-    ## NULL
-    ## 
-    ## $`7`
-    ## NULL
-
-#### Taxonomy plot
-
-### For alpha and beta div based on ps.Phy.rare
-
-``` r
-ps1.rare <- rarefy_even_depth(ps1, sample.size = 3990, replace = TRUE, rngseed = 123 , trimOTUs = TRUE, verbose = TRUE) 
-```
-
-    ## `set.seed(123)` was used to initialize repeatable random subsampling.
-
-    ## Please record this for your records so others can reproduce.
-
-    ## Try `set.seed(123); .Random.seed` for the full vector
-
-    ## ...
-
-    ## 75OTUs were removed because they are no longer 
-    ## present in any sample after random subsampling
-
-    ## ...
-
-``` r
-ps2.rare <- rarefy_even_depth(ps2, sample.size = 3990, replace = TRUE, rngseed = 123 , trimOTUs = TRUE, verbose = TRUE) 
-```
-
-    ## `set.seed(123)` was used to initialize repeatable random subsampling.
-
-    ## Please record this for your records so others can reproduce.
-
-    ## Try `set.seed(123); .Random.seed` for the full vector
-
-    ## ...
-
-    ## 90OTUs were removed because they are no longer 
-    ## present in any sample after random subsampling
-
-    ## ...
-
-``` r
-ps3.rare <- rarefy_even_depth(ps3, sample.size = 3990, replace = TRUE, rngseed = 123 , trimOTUs = TRUE, verbose = TRUE) 
-```
-
-    ## `set.seed(123)` was used to initialize repeatable random subsampling.
-
-    ## Please record this for your records so others can reproduce.
-
-    ## Try `set.seed(123); .Random.seed` for the full vector
-
-    ## ...
-
-    ## 1 samples removedbecause they contained fewer reads than `sample.size`.
-
-    ## Up to first five removed samples are:
-
-    ## 10UB.1   
-
-    ## ...
-
-    ## 50OTUs were removed because they are no longer 
-    ## present in any sample after random subsampling
-
-    ## ...
-
-``` r
-ps4.rare <- rarefy_even_depth(ps4, sample.size = 3990, replace = TRUE, rngseed = 123 , trimOTUs = TRUE, verbose = TRUE) 
-```
-
-    ## `set.seed(123)` was used to initialize repeatable random subsampling.
-
-    ## Please record this for your records so others can reproduce.
-
-    ## Try `set.seed(123); .Random.seed` for the full vector
-
-    ## ...
-
-    ## 46OTUs were removed because they are no longer 
-    ## present in any sample after random subsampling
-
-    ## ...
-
-``` r
-ps5.rare <- rarefy_even_depth(ps5, sample.size = 3990, replace = TRUE, rngseed = 123 , trimOTUs = TRUE, verbose = TRUE) 
-```
-
-    ## `set.seed(123)` was used to initialize repeatable random subsampling.
-
-    ## Please record this for your records so others can reproduce.
-
-    ## Try `set.seed(123); .Random.seed` for the full vector
-
-    ## ...
-
-    ## 83OTUs were removed because they are no longer 
-    ## present in any sample after random subsampling
-
-    ## ...
-
-``` r
-ps6.rare <- rarefy_even_depth(ps6, sample.size = 3990, replace = TRUE, rngseed = 123 , trimOTUs = TRUE, verbose = TRUE) 
-```
-
-    ## `set.seed(123)` was used to initialize repeatable random subsampling.
-
-    ## Please record this for your records so others can reproduce.
-
-    ## Try `set.seed(123); .Random.seed` for the full vector
-
-    ## ...
-
-    ## 52OTUs were removed because they are no longer 
-    ## present in any sample after random subsampling
-
-    ## ...
-
-``` r
-ps7.rare <- rarefy_even_depth(ps7, sample.size = 3990, replace = TRUE, rngseed = 123 , trimOTUs = TRUE, verbose = TRUE) 
-```
-
-    ## `set.seed(123)` was used to initialize repeatable random subsampling.
-
-    ## Please record this for your records so others can reproduce.
-
-    ## Try `set.seed(123); .Random.seed` for the full vector
-
-    ## ...
-
-    ## 61OTUs were removed because they are no longer 
-    ## present in any sample after random subsampling
-
-    ## ...
-
-``` r
-ps1.rare #  27 taxa and 23 samples
-```
-
-    ## phyloseq-class experiment-level object
-    ## otu_table()   OTU Table:         [ 25 taxa and 23 samples ]
-    ## sample_data() Sample Data:       [ 23 samples by 13 sample variables ]
-    ## tax_table()   Taxonomy Table:    [ 25 taxa by 8 taxonomic ranks ]
-    ## phy_tree()    Phylogenetic Tree: [ 25 tips and 24 internal nodes ]
-
-``` r
-ps2.rare # 10 taxa and 6 samples
-```
-
-    ## phyloseq-class experiment-level object
-    ## otu_table()   OTU Table:         [ 10 taxa and 6 samples ]
-    ## sample_data() Sample Data:       [ 6 samples by 13 sample variables ]
-    ## tax_table()   Taxonomy Table:    [ 10 taxa by 8 taxonomic ranks ]
-    ## phy_tree()    Phylogenetic Tree: [ 10 tips and 9 internal nodes ]
-
-``` r
-ps3.rare # 55 taxa and 29 samples
-```
-
-    ## phyloseq-class experiment-level object
-    ## otu_table()   OTU Table:         [ 50 taxa and 29 samples ]
-    ## sample_data() Sample Data:       [ 29 samples by 13 sample variables ]
-    ## tax_table()   Taxonomy Table:    [ 50 taxa by 8 taxonomic ranks ]
-    ## phy_tree()    Phylogenetic Tree: [ 50 tips and 49 internal nodes ]
-
-``` r
-ps4.rare # 61 taxa and 15 samples
-```
-
-    ## phyloseq-class experiment-level object
-    ## otu_table()   OTU Table:         [ 54 taxa and 15 samples ]
-    ## sample_data() Sample Data:       [ 15 samples by 13 sample variables ]
-    ## tax_table()   Taxonomy Table:    [ 54 taxa by 8 taxonomic ranks ]
-    ## phy_tree()    Phylogenetic Tree: [ 54 tips and 53 internal nodes ]
-
-``` r
-ps5.rare # 18 taxa and 24 samples
-```
-
-    ## phyloseq-class experiment-level object
-    ## otu_table()   OTU Table:         [ 17 taxa and 24 samples ]
-    ## sample_data() Sample Data:       [ 24 samples by 13 sample variables ]
-    ## tax_table()   Taxonomy Table:    [ 17 taxa by 8 taxonomic ranks ]
-    ## phy_tree()    Phylogenetic Tree: [ 17 tips and 16 internal nodes ]
-
-``` r
-ps6.rare # 51 taxa and 18 samples
-```
-
-    ## phyloseq-class experiment-level object
-    ## otu_table()   OTU Table:         [ 48 taxa and 18 samples ]
-    ## sample_data() Sample Data:       [ 18 samples by 12 sample variables ]
-    ## tax_table()   Taxonomy Table:    [ 48 taxa by 8 taxonomic ranks ]
-    ## phy_tree()    Phylogenetic Tree: [ 48 tips and 47 internal nodes ]
-
-``` r
-ps7.rare # 39 taxa and 51 samples
-```
-
-    ## phyloseq-class experiment-level object
-    ## otu_table()   OTU Table:         [ 39 taxa and 51 samples ]
-    ## sample_data() Sample Data:       [ 51 samples by 15 sample variables ]
-    ## tax_table()   Taxonomy Table:    [ 39 taxa by 8 taxonomic ranks ]
-    ## phy_tree()    Phylogenetic Tree: [ 39 tips and 38 internal nodes ]
-
-#### Beta diversity
-
-``` r
-# Define function to get distance matrix 
-# I have to use distance() from vegan packages due to in compatibility 
-# https://github.com/joey711/phyloseq/issues/918
-DistTab <- function(ps, DistMethod){
-  df <- psmelt(ps)
-  df.cast <- dcast(df, For_AVE + SampleID ~ REC, value.var = "Abundance")
-  df.cast <- df.cast[,-1]
-  row.names(df.cast) <- df.cast[,1]
-  df.cast <- df.cast[,-1]
-  dist <- vegdist(df.cast, method = DistMethod) %>% as.matrix()
+# Define function that plots out alpha box plot as well as p values
+AlphaBox <- function(ps, alpha_measures, var1, var, lvl, path.out, w, h){
+  df <- estimate_richness(ps, split = TRUE, measures = alpha_measures) 
+  row.names(df) <- gsub("X","",row.names(df) )
+  # add sample metadata information
+  df <- merge(df, data.frame(sample_data(ps)), by.x = 'row.names', by.y = 'row.names')
+  df <- df[, -1]
+  # Melt dataframe for plotting figures
+  dfm <- melt(df, id.vars = c("SampleID", var),
+              variable.name = "measure", value.name = "value")
+  dfm[[var1]] <- factor(dfm[[var1]], levels = lvl)
+  
+  pdf(path.out, w, h)
+  p<- ggboxplot(dfm, x = var1, y = "value", add = "jitter", palette = "Set3",
+                font.label = list(size = 18, face = "plain"), ggtheme = theme_bw())+
+    stat_compare_means(method = "t.test", ref.group = "Expected", 
+                       hide.ns = TRUE,  label = "p.signif")
+
+  facet(p, facet.by = "measure", scales = "free") %>% print()
+  dev.off()
 }
 
-# create ps list with all phyloseq objects
-psList.rare <- list(ps1.rare, ps2.rare, ps3.rare, ps4.rare, ps5.rare, ps6.rare, ps7.rare)
-names(psList.rare) <- c(1:7)
-
-# use the function to write bray distance list and write out as csv files
-BrayList <- lapply(psList.rare, DistTab, DistMethod = "bray")
-mapply(write.csv, BrayList, file = paste0(path, "distance/bray_", names(psList.rare), ".csv"))
+# Alpha box plot on ps6 (sample volume)
+AlphaBox(subset_samples(psList.rare[[6]], SampleID != "10TB.1" & SampleID != "10TB.2" & SampleID != "10TB.3"),
+         # subset to include only one set of 10ml samples 
+         alpha_measures = c("Observed", "Shannon"),
+         var1 = "For_AVE", var = c("KIT","For_AVE","STORAGE","MATRIX","PMA",
+                                   "SampleOrCtrl","LYSING","Chemical_time",
+                                   "Bead_beat_speed_time","vortex_time","Description"),
+         lvl = c("Expected","30ml","10ml","1ml","200uL"),
+         path.out = file.path(path, "alpha/ps6_ForAVE.pdf"), 4.5, 2.3)
 ```
 
-    ## $`1`
-    ## NULL
-    ## 
-    ## $`2`
-    ## NULL
-    ## 
-    ## $`3`
-    ## NULL
-    ## 
-    ## $`4`
-    ## NULL
-    ## 
-    ## $`5`
-    ## NULL
-    ## 
-    ## $`6`
-    ## NULL
-    ## 
-    ## $`7`
-    ## NULL
+    ## Warning: Computation failed in `stat_compare_means()`:
+    ## data are essentially constant
+
+    ## quartz_off_screen 
+    ##                 2
 
 ``` r
-# write out weighted list as well
-WeightList <- lapply(psList.rare, UniFrac, weighted = TRUE)
-WeightList <- lapply(WeightList, as.matrix)
-mapply(write.csv, WeightList, file = paste0(path, "distance/weighted_", names(psList.rare), ".csv"))
+# Alpha box plot on ps 4 (PMA)
+AlphaBox(psList.rare[[4]], alpha_measures = c("Observed", "Shannon"),
+         var1 = "For_AVE", var = c("KIT","For_AVE","VOL","STORAGE","MATRIX","PMA",
+                                   "SampleOrCtrl","LYSING","Chemical_time",
+                                   "Bead_beat_speed_time","vortex_time","Description"),
+         lvl = c("Expected","Untreated","Live","Half","Dead"),
+         path.out = file.path(path, "alpha/ps4_ForAVE.pdf"), 4.5, 2.3)
 ```
 
-    ## $`1`
-    ## NULL
-    ## 
-    ## $`2`
-    ## NULL
-    ## 
-    ## $`3`
-    ## NULL
-    ## 
-    ## $`4`
-    ## NULL
-    ## 
-    ## $`5`
-    ## NULL
-    ## 
-    ## $`6`
-    ## NULL
-    ## 
-    ## $`7`
-    ## NULL
+    ## quartz_off_screen 
+    ##                 2
+
+qPCR results
+------------
+
+### PMA on single bacterial strain or gDNA
 
 ``` r
-# Import organized and subsetted distance csv file for making bar plots
+# PMA on E.coli gDNA 
+PMA.conc <- read.csv(file.path(path, "qPCR/10min_conc.csv"))
+gghistogram(PMA.conc, x = "Ct_diff",
+            add = "mean", rug = TRUE, color = "Treatment", fill = "Treatment",
+            palette = c("#00AFBB", "#E7B800"))
 ```
 
-BBBBBB USE CCA TRIPLOT TO SEE IF THERE'S ASSOCIATION BETWEEN METHOD AND TAXA
+    ## Warning: Using `bins = 30` by default. Pick better value with the argument
+    ## `bins`.
 
-AAAAAA Alpha could be more useful when using actual milk samples?
+![](figs/unnamed-chunk-10-1.png)
+
+``` r
+pdf(file.path(path, "qPCR/10min_conc.pdf"), 3.2, 3)
+print(ggboxplot(PMA.conc, x = "Treatment", y = "Ct_diff",
+                font.label = list(size = 18, face = "plain"), 
+                ggtheme = theme_bw()) +
+        stat_compare_means(method = "kruskal", hide.ns = TRUE, label = "p.signif"))
+dev.off()
+```
+
+    ## quartz_off_screen 
+    ##                 2
+
+``` r
+# PMA on 3 species strain 
+PMA.T <- read.csv(file.path(path, "qPCR/50uM_time.csv"))
+PMA.T$Cell_state <- factor(PMA.T$Cell_state, levels = c("Live", "Half", "Dead"))
+## make a df to p value annotation
+df.anno = compare_means(PerOf_untreated ~ Treatment, method = "kruskal.test",
+                        group.by = "Species", data = PMA.T) %>% mutate(y_pos = 40)
+
+pdf(file.path(path, "qPCR/50uM_time.pdf"), 6, 3)
+print(ggboxplot(subset(PMA.T, PerOf_untreated != "NA"), 
+                x = "Treatment", y = "PerOf_untreated", color = "Cell_state",
+                font.label = list(size = 18, face = "plain"), 
+                palette = "jco", ggtheme = theme_bw()) +
+        facet_wrap(~Species, scales = "free_x"))
+dev.off()
+```
+
+    ## quartz_off_screen 
+    ##                 2
+
+``` r
+# PMA on MC 
+PMC.mc <- read.csv(file.path(path,"qPCR/MC_total.csv"))
+PMC.mc$Cell_state <- factor(PMC.mc$Cell_state, levels = c("Live", "Half", "Dead"))
+
+pdf(file.path(path, "qPCR/PMC.mc.pdf"), 3.2, 3)
+print(ggboxplot(subset(PMC.mc, PerOf_untreated != "NA"), 
+                x = "Cell_state", y = "PerOf_untreated", color = "Cell_state",
+                font.label = list(size = 18, face = "plain"), 
+                palette = "jco", ggtheme = theme_bw()) +
+        stat_compare_means(method = "kruskal.test", hide.ns = TRUE,  label = "p.signif"))
+dev.off()
+```
+
+    ## quartz_off_screen 
+    ##                 2
+
+Use decontam package to see if by removing the UHT taxa, the vol (ps6) will be better
+-------------------------------------------------------------------------------------
+
+At the end, the decontam package did not remove much of the contaminant, unexpected taxa. Therefore, I decided to take a closer look by manually examine the taxtab. Also, I want to find out if, for example, the Bacillus in MC is the same ASV as in UHT. If not, I may be able to perform manual filtering.
+
+Manual filtering to see if by removing the UHT taxa, the vol (ps6) will be better
+---------------------------------------------------------------------------------
 
 Percent recovery of GBS DNA with meconium extractions generated from various extraction kits. Data are mean ± S

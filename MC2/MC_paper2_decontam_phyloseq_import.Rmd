@@ -24,7 +24,7 @@ library(cowplot);packageVersion("cowplot")
 library(plyr)
 library(dplyr)
 
-path <- "G:/My Drive/UC_Davis/Marco_lab/milk_microbiota/Mock_community/MC_paper2_QIIME2/"
+path <- "~/Google Drive File Stream/My Drive/UC_Davis/Marco_lab/milk_microbiota/Mock_community/MC_paper2_QIIME2/"
 ```
 
 
@@ -104,7 +104,7 @@ ps.Phy05 # 197 taxa and 212 samples
 ```{r}
 set.seed(123)
 # Read in function to calculate alpha diversity and rarefaction levels
-calculate_rarefaction_curves <-dget(file.path("D:/src/Marco_Lab/Cheese1_R/FUN_calculate_rarefaction.R"))
+calculate_rarefaction_curves <-dget(file.path("~/src/Marco_Lab/FUN_calculate_rarefaction.R"))
 
 rarefaction_curve_data <- calculate_rarefaction_curves(ps.Phy05, c("Observed", "Shannon","Simpson"), 
                                                        rep(c(1, 2500, 5000, 7500, 10000), each = 10))
@@ -142,7 +142,7 @@ write.csv(sample_sums(ps.Phy05), file.path(path, "mapping/library_size_ps.Phy05_
 ```{r include=FALSE}
 # Clean up the taxonomy level
 #make the deepest taxonomic identification in TaxTab as the recommened taxonomy (REC)
-RECps <- dget("D:/src/Marco_Lab/Cheese1_R/FUN_RECps.R") # Read in RECps function
+RECps <- dget("~/src/Marco_Lab/FUN_RECps.R") # Read in RECps function
 ps.Phy.REC <- RECps(ps.Phy05@tax_table, ps.Phy05)
 ps.Phy.REC # 197 taxa and 212 samples
 ps.REC.glom <- tax_glom(ps.Phy.REC, taxrank = "REC", NArm = FALSE)
