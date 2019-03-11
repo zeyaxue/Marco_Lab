@@ -27,7 +27,7 @@ library(RColorBrewer)
 library(superheat)
 library(DESeq2);packageVersion("DESeq2")
 
-path <- "G:/My Drive/UC_Davis/Marco_lab/milk_microbiota/2017_Hilmar_sampling/Sequencing/QIIME2/"
+path <- "~/Google Drive File Stream/My Drive/UC_Davis/Marco_lab/milk_microbiota/2017_Hilmar_sampling/Sequencing/QIIME2/"
 ```
 
 
@@ -52,6 +52,9 @@ TaxTab$Order <- substring(TaxTab$Order, 4)
 TaxTab$Family <- substring(TaxTab$Family, 4)
 TaxTab$Genus <- substring(TaxTab$Genus, 4)
 TaxTab$Species <- substring(TaxTab$Species, 4)
+# remove species column
+TaxTab <- subset(TaxTab, select = -c(Species))
+TaxTab <- subset(TaxTab, select = -c(Confidence))
 # organized as a matrix for phyloseq import
 rownames(TaxTab) <- TaxTab$Feature.ID
 TaxTab <- TaxTab[,-1]
@@ -105,23 +108,8 @@ ps.Phy05 # 175 taxa and 29 samples
 ## Determine rarefaction level for Alpha and Beta analysis later on
 ```{r}
 set.seed(123)
-# Define function to calculate alpha diversity and rarefaction levels
-calculate_rarefaction_curves <- function(psdata, measures, depths) {
-  estimate_rarified_richness <- function(psdata, measures, depth) {
-    if(max(sample_sums(psdata)) < depth) return()
-    psdata <- prune_samples(sample_sums(psdata) >= depth, psdata)
-    rarified_psdata <- rarefy_even_depth(psdata, depth, verbose = FALSE)
-    alpha_diversity <- estimate_richness(rarified_psdata, measures = measures)
-    # as.matrix forces the use of melt.array, which includes the Sample names (rownames)
-    molten_alpha_diversity <- melt(as.matrix(alpha_diversity), varnames = c("SampleID", 'measures'), value.name = 'Alpha_diversity')
-    molten_alpha_diversity
-  }
-  names(depths) <- depths # this enables automatic addition of the Depth to the output by ldply
-  rarefaction_curve_data <- ldply(depths, estimate_rarified_richness, psdata = psdata, measures = measures, .id = 'Depth', .progress = ifelse(interactive(), 'text', 'none'))
-  #convert Depth from factor to numeric
-  rarefaction_curve_data$Depth <- as.numeric(levels(rarefaction_curve_data$Depth))[rarefaction_curve_data$Depth]
-  rarefaction_curve_data
-}
+# Read in function to calculate alpha diversity and rarefaction levels
+calculate_rarefaction_curves <- dget(file.path("~/src/Marco_Lab/FUN_calculate_rarefaction.R"))
 rarefaction_curve_data <- calculate_rarefaction_curves(ps.Phy, c("Observed", "Shannon","Simpson","Chao1"), 
                                                        rep(c(1, 1000, 2500, 4000, 6000, 10000, 20000), each = 10))
 rarefaction_curve_data$SampleID <- gsub("X","",rarefaction_curve_data$SampleID)
@@ -149,48 +137,35 @@ write.csv(sample_sums(ps.Phy05), file.path(path, "Jan/library_size_ps.Phy05.csv"
 
 # The diversity leveled out after 2000 seqs per sample, rarefy at 6100 reads
 # to keep the sample with the fewest reads
-ps.Phy.rare <- rarefy_even_depth(ps.Phy05, sample.size = 6100, replace = TRUE, 
-                                 rngseed = 123 , trimOTUs = TRUE, verbose = TRUE) 
-ps.Phy.rare #  175 taxa and 29 samples  # no OTU were exclude 
 ```
 
 
 ## Divide the ps object for milk and cheese
-### For taxonomy analysis based on "ps.Phy.glom"
-### For alpha and beta analysis based on "ps.xxxx.rare"
+### For taxonomy analysis based on "ps.REC.glom"
+The goal is to 
+(1) Confirm that the isolates do exist in the milk that they were isolated from 
+(2) The pilot cheeses made with the isolate had similar slit profile 
+(3) the milk containing the isolates had similar slits profile compared to study 1 
+[but I don't have no slits samples from the same cheese study 2]
 ```{r}
 # Clean up the taxonomy level
-## If set at "REC" level, won't glom
-ps.Phy.glom <- tax_glom(ps.Phy05, taxrank = "Genus", NArm = FALSE) 
-ps.Phy.glom # 89 taxa and 29 samples
-RECps <- dget("D:/src/Marco_Lab/Cheese1_R/FUN_RECps.R")
-ps.Phy.REC <- RECps(TaxTab, ps.Phy.glom)
-ps.Phy.REC # 89 taxa and 29 samples
+#make the deepest taxonomic identification in TaxTab as the recommened taxonomy (REC)
+RECps <- dget("~/src/Marco_Lab/FUN_RECps.R") # Read in RECps function
+ps.Phy.REC <- RECps(ps.Phy05@tax_table, ps.Phy05)
+ps.Phy.REC # 175 taxa and 29 samples
+ps.REC.glom <- tax_glom(ps.Phy.REC, taxrank = "REC", NArm = FALSE)
+ps.REC.glom #  89 taxa and 29 samples 
 
 # Subset to contain milk samples 
-ps.milk <- subset_samples(ps.Phy.REC, SampleType %in% c("HTST_feed", "HTST_milk"))
+ps.milk <- subset_samples(ps.REC.glom, SampleType %in% c("HTST_feed", "HTST_milk"))
 ps.milk #  89 taxa and 18 samples 
-ps.milk.rare <- rarefy_even_depth(ps.milk, sample.size = 6100, replace = TRUE, 
-                                 rngseed = 123 , trimOTUs = TRUE, verbose = TRUE) 
-ps.milk.rare # 89 taxa and 18 sampless  
 
 # Subset to contain cheese samples ()
-ps.cheese <- subset_samples(ps.Phy.REC, SampleType %in% "Pilot_cheese_5D")
+ps.cheese <- subset_samples(ps.REC.glom, SampleType %in% "Pilot_cheese_5D")
 ps.cheese #  89 taxa and 11 samples 
-ps.cheese.rare <- rarefy_even_depth(ps.cheese, sample.size = 6100, replace = TRUE,
-                                    rngseed = 123 , trimOTUs = TRUE, verbose = TRUE) 
-ps.cheese.rare #  14 taxa and 11 samples   # 71 OTU were excluded 
-ps.cheese.rarenoL <- subset_taxa(ps.cheese.rare, !Genus %in% "Lactococcus")
-ps.cheese.rarenoL # 13 taxa and 11 samples
-```
+ps.cheese.noL <- subset_taxa(ps.cheese, !Genus %in% "Lactococcus")
+ps.cheese.noL # 88 taxa and 11 samples
 
-
-## Taxonomy analysis
-The goal is (1) Confirm that the isolates do exist in the milk that they were isolated 
-from (2) The pilot cheeses made with the isolate had similar slit profile 
-(3) the milk containing the isolates had similar slits profile [but I don't]
-no slits samples from the same cheese study 2 
-```{r}
 # Define function to make Bar plots 
 #### Bar plot #####
 SlitBar <- function(ps, var1, var2, taxa, mycol, path.out, w, h, x){  
@@ -200,7 +175,7 @@ SlitBar <- function(ps, var1, var2, taxa, mycol, path.out, w, h, x){
   taxa_names(ps) <- TaxTab$REC
   allTaxa <- taxa_names(ps)
   ps.other <- prune_taxa(allTaxa[!(allTaxa %in% taxa)], ps)
-  taxa.other <- ps.other@tax_table[,6] %>% as.character() # 6 for Genus level 
+  taxa.other <- ps.other@tax_table[,7] %>% as.character() # 7 for REC level  
   
   # change the taxa that are not the expected taxa to "Other" 
   TaxTab2 <- psmelt(ps)
@@ -277,4 +252,24 @@ SlitBar(ps.cheese, var1 = "Bacterial_isolate", var2 = "SampleType",
 
 ```
 
+
+### For alpha and beta div based on ps.REC.glom after rarefaction (ps.REC.glom.rare)
+```{r}
+ps.glom.rare <-  rarefy_even_depth(ps.REC.glom, sample.size = 6100, 
+                                   replace = TRUE, rngseed = 123 , 
+                                   trimOTUs = TRUE, verbose = TRUE)
+ps.glom.rare #  171 taxa and 29 samples
+
+# Subset to contain milk samples 
+ps.milk.rare <- subset_samples(ps.glom.rare, SampleType %in% c("HTST_feed", "HTST_milk"))
+ps.milk.rare #  171 taxa and 18 samples 
+
+# Subset to contain cheese samples ()
+ps.cheese.rare <- subset_samples(ps.glom.rare, SampleType %in% "Pilot_cheese_5D")
+ps.cheese.rare #  171 taxa and 11 samples 
+ps.cheese.rare.noL <- subset_taxa(ps.cheese.rare, !Genus %in% "Lactococcus")
+ps.cheese.rare.noL # 166 taxa and 11 samples
+
+
+```
 
