@@ -43,15 +43,26 @@ SeqTab <- as.matrix.data.frame(SeqTab)
 # Parse out taxonomic assignment in excel and remove confidence column
 TaxTab <- read.table(file.path(path,"Jan/taxonomy-mc2.tsv"), header = TRUE, sep = '\t', na.strings = NA)
 tax_col <- c("Kingdom", "Phylum", "Class", "Order", "Family", "Genus", "Species")
-TaxTab <- separate(data = TaxTab, col = "Taxon", into = tax_col, sep = "; ", remove = TRUE, fill = "right")
+TaxTab <- separate(data = TaxTab, col = "Taxon", into = tax_col, sep = "; ", 
+                   remove = TRUE, fill = "right")
 # format taxon columns to remove preceding taxon letter (" p__, o__"")
-TaxTab$Kingdom <- substring(TaxTab$Kingdom, 4)  # 4th letter start to keep
-TaxTab$Phylum <- substring(TaxTab$Phylum, 4)
-TaxTab$Class <- substring(TaxTab$Class, 4)
-TaxTab$Order <- substring(TaxTab$Order, 4)
-TaxTab$Family <- substring(TaxTab$Family, 4)
-TaxTab$Genus <- substring(TaxTab$Genus, 4)
-TaxTab$Species <- substring(TaxTab$Species, 4)
+# 4th letter start to keep
+TaxTab$Kingdom <- substring(TaxTab$Kingdom, 4) %>% factor()
+TaxTab$Phylum <- substring(TaxTab$Phylum, 4) %>% factor()
+TaxTab$Class <- substring(TaxTab$Class, 4) %>% factor()
+TaxTab$Order <- substring(TaxTab$Order, 4) %>% factor()
+TaxTab$Family <- substring(TaxTab$Family, 4) %>% factor()
+TaxTab$Genus <- substring(TaxTab$Genus, 4) %>% factor()
+TaxTab$Species <- substring(TaxTab$Species, 4) %>% factor()
+# replace NA with "None" (because some tax level are blank and some are NA)
+for (i in 2:(dim(TaxTab)[2])-1) {
+  # Get levels and add "None"
+  levels <- levels(TaxTab[,i])
+  # refactor to include "None" as a factor level and replace NA with "None"
+  levels[length(levels) + 1] <- "None"
+  TaxTab[,i] <- factor(TaxTab[,i], levels = levels)
+  TaxTab[,i][is.na(TaxTab[,i])] <- "None"
+}
 # remove species column
 TaxTab <- subset(TaxTab, select = -c(Species))
 TaxTab <- subset(TaxTab, select = -c(Confidence))
@@ -80,7 +91,7 @@ rank_names(ps)
 # Create table, number of features for each phylum
 table(tax_table(ps)[, "Phylum"], exclude = NULL)
 # remove asv that was not assigned at phylum level
-ps.Phy <- subset_taxa(ps, !is.na(Phylum) & !Phylum %in% c(""))
+ps.Phy <- subset_taxa(ps, !is.na(Phylum) & !Phylum %in% c("","None"))
 ps.Phy #  279 taxa and 29 samples 
 # Explore abundance to decide filter threshold
 ## Compute prevalence of each feature, store as data.frame
