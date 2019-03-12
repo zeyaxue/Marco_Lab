@@ -2,11 +2,12 @@
 title: "pilot_cheese_inoculation_sequencing"
 author: "Zeya Zhengyao Xue"
 date: "2/6/2019"
-output: html_document
+output: rmarkdown::github_document
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(fig.path = "figs/")
 ```
 
 This is the file to analysis pilot cheese project, including 
@@ -134,7 +135,7 @@ write.csv(sample_sums(ps.Phy05), file.path(path, "Jan/library_size_ps.Phy05.csv"
 The goal is to 
 (1) Confirm that the isolates do exist in the milk that they were isolated from 
 (2) The pilot cheeses made with the isolate had similar slit profile 
-(3) the milk containing the isolates had similar slits profile compared to study 1 
+(3) the milk containing the isolates had similar slits profile compared to study 1
 [but I don't have no slits samples from the same cheese study 2]
 ```{r}
 # Clean up the taxonomy level
@@ -159,7 +160,7 @@ ps.cheese.noL # 84 taxa and 11 samples
 
 # Define function to make Bar plots 
 #### Bar plot #####
-SlitBar <- function(ps, var1, var2, taxa, lvl1, lvl2, mycol, path.out, w, h, x){  
+SlitBar <- function(ps, var1, var2, taxa, lvl1, lvl2, mycol, path.out, w, h){  
   ps <- ps %>% transform_sample_counts(function(x) x/sum(x) ) 
   
   TaxTab <- tax_table(ps) %>% as.data.frame()
@@ -252,6 +253,61 @@ col16 <- c("#A6CEE3", "#438EC0", "#1f78b4","#b3e2cd",
            "#C3AAD2", "#7D54A5", "#B9A499", "#EAD27A", "#B15928")
 ##############################
 #Unfinished analysis on low inoculation cheese
+```
+
+
+## Prportion analysis of isolates
+```{r}
+ps.iso <- subset_taxa(ps.milk %>% transform_sample_counts(function(x) x/sum(x)),  
+                      REC %in% c("Lactobacillus", "Lactobacillaceae", "Leuconostoc"))
+ps.iso # 3 taxa and 18 samples
+
+IsoBar <- function(ps, var1, var2, lvl1, lvl2, mycol, path.out, w, h){
+  TaxTab.iso <- psmelt(ps) 
+  TaxTab.iso_agg <- ddply(TaxTab.iso, c(var1, var2, "REC"), 
+                           summarise,
+                           N = length(Abundance),
+                           mean = mean(Abundance),
+                           sd = sd(Abundance),
+                           se = sd / sqrt(N))
+  
+  # merge/average per var1 and var2
+  colnames(TaxTab.iso_agg)[1] <- var1
+  colnames(TaxTab.iso_agg)[2] <- var2
+  
+  # Set orders for taxonomy and sample
+  TaxTab.iso_agg$REC <- factor(TaxTab.iso_agg$REC, levels = c("Lactobacillus", 
+                                                              "Lactobacillaceae",
+                                                              "Leuconostoc"))
+  TaxTab.iso_agg[[var1]] <- factor(TaxTab.iso_agg[[var1]], levels = lvl1)
+  TaxTab.iso_agg[[var2]] <- factor(TaxTab.iso_agg[[var2]], levels = lvl2)
+  
+  pdf(path.out, w, h)
+  print(ggplot(TaxTab.iso_agg, aes(x = get(var1), y = mean, fill = REC)) +
+      geom_bar(stat = "identity", position = "dodge") + 
+      geom_errorbar(aes(ymin = mean-se, ymax = mean+se), 
+                    width = 0.8, position = position_dodge(.9)) +
+      scale_fill_manual(values = mycol)+
+      theme_bw(base_size = 20) +
+      facet_grid(~ get(var2), scales = "free_x")+
+      # Remove x axis title
+      theme(axis.title.x = element_blank(), 
+            axis.text.x = element_text(angle = 0, hjust = 1), 
+            text = element_text(size = 16)) + 
+      guides(fill = guide_legend(reverse = FALSE, keywidth = 1, keyheight = 1)) +
+      ylab("Relative abundance"))
+  dev.off()
+}
+
+IsoBar(ps.iso, var2 = "SampleType", var1 = "Species", 
+       mycol = c("#F16667", "#fbb4ae", "#F9A963"),
+       lvl2 = c("HTST_feed","HTST_milk"), 
+       lvl1 = c("Lactobacillus fermentum ",
+                "Leuconostoc lactis ",
+                "Leuconostoc mesenteroides "), 
+       path.out = file.path(path, "figs/Isolates_in_milk.pdf"), 6, 5.5)
+
+### Unifinished analysis to add the cheese as made with these milk as well
 ```
 
 
