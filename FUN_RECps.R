@@ -10,12 +10,12 @@ RECps <- function(x, ps) {
   list.REC <- character(length(list.g))
   
   for(i in 1:dim(TaxTab2)[1]){
-    G = which(TaxTab2$Genus[i] == "" | is.na(TaxTab2$Genus[i]))
-    F = which(TaxTab2$Family[i] == "" | is.na(TaxTab2$Family[i]))
-    O = which(TaxTab2$Order[i] == "" | is.na(TaxTab2$Order[i]))
-    C = which(TaxTab2$Class[i] == "" | is.na(TaxTab2$Class[i]))
-    P = which(TaxTab2$Phylum[i] == "" | is.na(TaxTab2$Phylum[i]))
-    K = which(TaxTab2$Kingdom[i] == "" | is.na(TaxTab2$Kingdom[i]))
+    G = which(TaxTab2$Genus[i] == "" | TaxTab2$Genus[i] == "None")
+    F = which(TaxTab2$Family[i] == "" | TaxTab2$Family[i] == "None")
+    O = which(TaxTab2$Order[i] == "" | TaxTab2$Order[i] == "None")
+    C = which(TaxTab2$Class[i] == "" | TaxTab2$Class[i] == "None")
+    P = which(TaxTab2$Phylum[i] == "" | TaxTab2$Phylum[i] == "None")
+    K = which(TaxTab2$Kingdom[i] == "" | TaxTab2$Kingdom[i] == "None")
     if(length(G) == 0){
       list.REC[i] <- list.g[i]
     } else if(length(F) == 0){
