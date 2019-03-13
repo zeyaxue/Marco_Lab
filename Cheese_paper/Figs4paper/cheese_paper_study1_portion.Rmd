@@ -315,11 +315,11 @@ Bar <- function(ps, var1, taxa, lvl1, mycol, path.out, w, h){
 }
 
 Bar(ps.ChedY.noL, var1 = "SampleType", 
-    lvl1 = c("Cheese_0D","Cheese_120D","Cheese_30D","Cheese_90D"),
+    lvl1 = c("Cheese_0D","Cheese_30D","Cheese_90D", "Cheese_120D"),
     taxa = comm16, mycol = col16,
     path.out = file.path(path, "Mar_2019/ChedY_noL_sampletype.pdf"),7,6)
 Bar(ps.ChedN.noL, var1 = "SampleType", 
-    lvl1 = c("Cheese_0D","Cheese_120D","Cheese_30D","Cheese_90D"),
+    lvl1 = c("Cheese_0D","Cheese_30D","Cheese_90D", "Cheese_120D"),
     taxa = comm16, mycol = col16,
     path.out = file.path(path, "Mar_2019/ChedN_noL_sampletype.pdf"),7,6)
 ```
@@ -328,7 +328,7 @@ Bar(ps.ChedN.noL, var1 = "SampleType",
 
 ## Stacked bar plot
 ```{r}
-ChouBar <- function(ps, taxa, mycol, samType, w, h, path.out){
+ChouBar <- function(ps, taxa, mycol, samType,lvl, w, h, path.out){
   TaxTab <- tax_table(ps) %>% as.data.frame()
   taxa_names(ps) <- TaxTab$REC
   allTaxa <- taxa_names(ps)
@@ -343,7 +343,8 @@ ChouBar <- function(ps, taxa, mycol, samType, w, h, path.out){
                        mean = mean(Abundance))
   TaxTab2_agg$REC <- as.character(TaxTab2_agg$REC)
   TaxTab2_agg[TaxTab2_agg$REC %in% taxa.filt,]$REC <- "Other"
-  TaxTab2_agg$REC = factor(TaxTab2_agg$REC, levels = taxa)
+  TaxTab2_agg$REC <- factor(TaxTab2_agg$REC, levels = taxa)
+  TaxTab2_agg$SampleType <- factor(TaxTab2_agg$SampleType, levels = lvl)
   
   pdf(path.out, width = w, height = h)
   (ggplot(TaxTab2_agg, aes(x = CheeseOutcome, y = mean, fill = REC)) +
@@ -359,14 +360,15 @@ ChouBar <- function(ps, taxa, mycol, samType, w, h, path.out){
 }
 
 
-ChouBar(ps.milkq4Y, taxa = comm17, mycol = col17,
+ChouBar(ps.milkq4Y, taxa = comm17, mycol = col17, lvl = c("HTST_feed", "HTST_milk"),
         samType = "PMA treated HTST milk", w = 6, h = 5,
         path.out = file.path(path, "Mar_2019/milkq4Y_cheeseOutcome.pdf"))
-ChouBar(ps.milkq4N, taxa = comm17, mycol = col17,
+ChouBar(ps.milkq4N, taxa = comm17, mycol = col17, lvl = c("HTST_feed", "HTST_milk"),
         samType = "PMA untreated HTST milk", w = 6, h = 5,
         path.out = file.path(path, "Mar_2019/milkq4N_cheeseOutcome.pdf"))
 ChouBar(ps.ChedY.noL %>% transform_sample_counts(function(x) x/sum(x) ) , 
         taxa = comm16, mycol = col16,
+        lvl = c("Cheese_0D","Cheese_30D","Cheese_90D", "Cheese_120D"),
         samType = "PMA treated HTST milk", w = 6, h = 5,
         path.out = file.path(path, "Mar_2019/ChedY.noL_cheeseOutcome.pdf"))
 ```
