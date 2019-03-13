@@ -1,0 +1,131 @@
+#!/bin/python
+
+import pandas as pd
+from collections import Counter
+import seaborn as sns
+import matplotlib as plt
+%matplotlib inline
+import math
+import numpy as np
+from matplotlib.colors import LogNorm
+
+## Read in the BLAST outputs
+ATPase1_DC = pd.read_csv("ATPase1_protein.csv")
+ATPase2_DC = pd.read_csv("ATPase2_protein.csv")
+dmkB_DC = pd.read_csv("dmkB_protein.csv")
+eetA_DC = pd.read_csv("eetA_protein.csv")
+eetB_DC = pd.read_csv("eetB_protein.csv")
+fmnA_DC = pd.read_csv("fmnA_protein.csv")
+fmnB_DC = pd.read_csv("fmnB_protein.csv")
+ndh2_DC = pd.read_csv("ndh2_protein.csv")
+pplA_DC = pd.read_csv("pplA_protein.csv")
+df_list = [ATPase1_DC, ATPase2_DC, dmkB_DC, eetA_DC, 
+           eetB_DC, fmnA_DC, fmnB_DC, ndh2_DC, pplA_DC]
+
+## This quantifies at the species level by creating a 
+## dictionary of all unique species and counts.
+def quant_species(count_df, column_name):
+    titles = []
+    sci_names = []
+    for entry in count_df.stitle:
+        titles.append(entry.split())
+    for entry in titles:
+        sci_names.append(entry[1]+" "+entry[2])
+    quant_dict = Counter(sci_names)
+    df_quant = pd.DataFrame.from_dict(quant_dict, 
+                                      orient='index').reset_index()
+    df_quant.columns = ["Species", column_name]
+    return df_quant
+
+## This quantifies at the genus level by creating a 
+## dictionary of all unique genera and counts.
+def quant_genus(count_df, column_name):
+    titles = []
+    sci_names = []
+    for entry in count_df.stitle:
+        titles.append(entry.split())
+    for entry in titles:
+        sci_names.append(entry[1])
+    quant_dict = Counter(sci_names)
+    df_quant = pd.DataFrame.from_dict(quant_dict, 
+                                      orient='index').reset_index()
+    df_quant.columns = ["Species", column_name]
+    return df_quant
+
+## Create a dataframe for each quantification (species level)
+df_ATPase1_DC = quant_species(ATPase1_DC, "ATPase1")
+df_ATPase2_DC = quant_species(ATPase2_DC, "ATPase2")
+df_dmkB_DC = quant_species(dmkB_DC, "dmkB")
+df_eetA_DC = quant_species(eetA_DC, "eetA")
+df_eetB_DC = quant_species(eetB_DC, "eetB")
+df_fmnA_DC = quant_species(fmnA_DC, "fmnA")
+df_fmnB_DC = quant_species(fmnB_DC, "fmnB")
+df_ndh2_DC = quant_species(ndh2_DC, "ndh2")
+df_pplA_DC = quant_species(pplA_DC, "pplA")
+
+## Create a dataframe for each quantification (genus level)
+df_ATPase1_genus = quant_genus(ATPase1_DC, "ATPase1")
+df_ATPase2_genus = quant_genus(ATPase2_DC, "ATPase2")
+df_dmkB_genus = quant_genus(dmkB_DC, "dmkB")
+df_eetA_genus = quant_genus(eetA_DC, "eetA")
+df_eetB_genus = quant_genus(eetB_DC, "eetB")
+df_fmnA_genus = quant_genus(fmnA_DC, "fmnA")
+df_fmnB_genus = quant_genus(fmnB_DC, "fmnB")
+df_ndh2_genus = quant_genus(ndh2_DC, "ndh2")
+df_pplA_genus = quant_genus(pplA_DC, "pplA")
+
+## To make a heatmap, quantification dataframes were merged 
+df1 = pd.merge(df_ATPase1_DC, df_ATPase2_DC, how='outer', on='Species')
+df2 = pd.merge(df1, df_dmkB_DC, how='outer', on='Species')
+df3 = pd.merge(df2, df_eetA_DC, how='outer', on='Species')
+df4 = pd.merge(df3, df_eetB_DC, how='outer', on='Species')
+df5 = pd.merge(df4, df_fmnA_DC, how='outer', on='Species')
+df6 = pd.merge(df5, df_fmnB_DC, how='outer', on='Species')
+df7 = pd.merge(df6, df_ndh2_DC, how='outer', on='Species')
+df_species_all = pd.merge(df7, df_pplA_DC, how='outer', on='Species')
+df_species_all.fillna(value=0, inplace=True)
+df_species_all.to_csv("LAB_species_9_gene_quantification.csv")
+
+## To make a heatmap, quantification dataframes were merged at genus
+df1 = pd.merge(df_ATPase1_genus, df_ATPase2_genus, how='outer', on='Species')
+df2 = pd.merge(df1, df_dmkB_genus, how='outer', on='Species')
+df3 = pd.merge(df2, df_eetA_genus, how='outer', on='Species')
+df4 = pd.merge(df3, df_eetB_genus, how='outer', on='Species')
+df5 = pd.merge(df4, df_fmnA_genus, how='outer', on='Species')
+df6 = pd.merge(df5, df_fmnB_genus, how='outer', on='Species')
+df7 = pd.merge(df6, df_ndh2_genus, how='outer', on='Species')
+df_genus_all = pd.merge(df7, df_pplA_genus, how='outer', on='Species')
+df_genus_all.fillna(value=0.0001, inplace=True)
+df_genus_all.to_csv("LAB_genus_9_gene_quantification.csv")
+
+## Set index to species
+df_genus_all.set_index("Species", inplace=True)
+
+## Check dataframe
+df_genus_all
+
+## Basic heatmap
+sns.heatmap(data=df_genus_all, cmap="RdBu_r")
+
+## Convert the raw data matematically: log2, log10, and square root:
+df_genus_all_log2 = df_genus_all.apply(np.log2, axis=0)
+df_genus_all_log10 = df_genus_all.apply(np.log10, axis=0)
+df_genus_all_sqrt = df_genus_all.apply(np.sqrt, axis=0)
+
+## log2 visual:
+sns.heatmap(data=df_genus_all_log2, cmap="RdBu_r")
+
+## log10 visual:
+sns.heatmap(data=df_genus_all_log10, cmap="RdBu_r")
+
+## Square root visual:
+sns.heatmap(data=df_genus_all_sqrt, cmap="RdBu_r")
+
+## log2 clustermap
+sns.clustermap(data=df_genus_all_log2, cmap="RdBu_r")
+
+## log10 clustermap
+sns.clustermap(data=df_genus_all_log10, cmap="RdBu_r")
+
+## square root clustermap
+sns.clustermap(data=df_genus_all_sqrt, cmap="RdBu_r")
