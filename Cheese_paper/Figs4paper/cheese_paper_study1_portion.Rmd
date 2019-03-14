@@ -308,20 +308,22 @@ Bar <- function(ps, var1, taxa, lvl1, mycol, path.out, w, h){
     geom_bar(stat = "identity",position = "dodge" ) + 
     geom_errorbar(aes(ymin = mean-se, ymax = mean+se), width = 0.8, position = position_dodge(.9)) +
     scale_fill_manual(values = mycol)+
+    theme_bw()+
     theme(axis.text.x = element_text(angle = 45, hjust = 1))+
+    theme(text = element_text(size = 15))+
     guides(fill = guide_legend(reverse = FALSE, keywidth = 1, keyheight = 1)) +
     ylab("Relative Abundance \n"))
   dev.off()
 }
 
 Bar(ps.ChedY.noL, var1 = "SampleType", 
-    lvl1 = c("Cheese_0D","Cheese_120D","Cheese_30D","Cheese_90D"),
+    lvl1 = c("Cheese_0D","Cheese_30D","Cheese_90D","Cheese_120D"),
     taxa = comm16, mycol = col16,
-    path.out = file.path(path, "Mar_2019/ChedY_noL_sampletype.pdf"),7,6)
+    path.out = file.path(path, "Mar_2019/ChedY_noL_sampletype.pdf"),6.5,5.5)
 Bar(ps.ChedN.noL, var1 = "SampleType", 
-    lvl1 = c("Cheese_0D","Cheese_120D","Cheese_30D","Cheese_90D"),
+    lvl1 = c("Cheese_0D","Cheese_30D","Cheese_90D","Cheese_120D"),
     taxa = comm16, mycol = col16,
-    path.out = file.path(path, "Mar_2019/ChedN_noL_sampletype.pdf"),7,6)
+    path.out = file.path(path, "Mar_2019/ChedN_noL_sampletype.pdf"),6.5, 5.5)
 ```
 
 
