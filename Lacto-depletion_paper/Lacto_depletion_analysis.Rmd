@@ -65,15 +65,16 @@ ggplot(subset(qPCR.subm, variable %in% c("Lactococcus","Pseudomonas","Lactobacil
   theme_bw(base_size = 16)
 dev.off()
 
-pdf(file.path(path, "figs/relative_dodged_bar_2treatmnt.pdf"), w = 8, h = 5)
+pdf(file.path(path, "figs/relative_dodged_bar_2treatmnt.pdf"), w = 8, h = 6)
 ggplot(subset(qPCR.subm, variable %in% c("Lactococcus_prop",
                                          "Pseudomonas_prop",
                                          "Lactobacillus_prop")),
        aes(x = SampleName, y = value, fill = Treatment))+
-  facet_wrap(variable ~ ., scales = "free")+
+  facet_wrap(variable ~ ., scales = "fixed", ncol = 1)+
   geom_bar(stat = "identity", position = "dodge")+
   theme_bw(base_size = 16)
 dev.off()
+
 
 
 # qPCR results of a subset of Hyb, W1 and W2 samples and 
