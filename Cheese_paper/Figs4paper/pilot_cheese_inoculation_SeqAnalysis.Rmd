@@ -311,3 +311,29 @@ IsoBar(ps.iso, var2 = "SampleType", var1 = "Species",
 ```
 
 
+## Chemical analysis portion 
+```{r}
+chem <- read.csv(file.path(path,"Sample_chemical_analysis_subset.csv"))
+chemm <- melt(chem, id.vars = c("Marco_lab_sample_label",
+                                "Collection_group", "Cheese_D90_quality", 
+                                "Cheese_D90_slits", "Sample_type"),
+              na.rm = TRUE)
+
+
+pdf(file.path(path, "figs/Cheese90D_chem.pdf"), w = 6, h = 5.5)
+ggboxplot(subset(chemm, Sample_type == "Cheese_day90"), 
+          x = "Cheese_D90_slits", y = "value",
+          facet.by = "variable", scales = "free_y", 
+          fill = "Cheese_D90_slits", palette = c("#a6cee3","#1f78b4")) + 
+  stat_compare_means(method = "t.test", label =  "p.signif", hide.ns = TRUE)
+dev.off()
+
+pdf(file.path(path, "figs/Cheese5D_chem.pdf"), w = 6, h = 5.5)
+ggboxplot(subset(chemm, Sample_type == "Cheese_day5"), 
+          x = "Cheese_D90_slits", y = "value",
+          facet.by = "variable", scales = "free_y", 
+          fill = "Cheese_D90_slits", palette = c("#a6cee3","#1f78b4")) + 
+  stat_compare_means(method = "t.test", label =  "p.signif", hide.ns = TRUE)
+dev.off()
+```
+
