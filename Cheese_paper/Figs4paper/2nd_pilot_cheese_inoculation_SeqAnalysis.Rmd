@@ -1,0 +1,390 @@
+---
+title: "2nd_pilot_cheese_inoculation_sequencing"
+author: "Zeya Xue"
+date: "3/23/2019"
+output: rmarkdown::github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(fig.path = "figs/")
+```
+
+
+This is the file to analysis pilot cheese project, including 
+1. pilot cheeses (low level and cryo milk inoculation)
+2. milk and cheeese where the isolates are from
+
+## Setting up packages and working directory 
+```{r}
+library(phyloseq);packageVersion("phyloseq")
+library(tidyr)
+library(ggplot2)
+library(reshape2)
+library(plyr)
+library(dplyr)
+library(PMCMR)
+library(vegan)
+library(RColorBrewer)
+library(superheat)
+library(DESeq2);packageVersion("DESeq2")
+
+path <- "~/Google Drive File Stream/My Drive/UC_Davis/Marco_lab/milk_microbiota/2017_Hilmar_sampling/Sequencing/QIIME2/"
+```
+
+
+## Import QIIME2 output and make phyloseq object
+```{r}
+# Transpose the QIIME2 output in excel
+SeqTab <- read.table(file.path(path,"March/table-mc2.tsv"), header = TRUE, stringsAsFactors = FALSE)
+colnames(SeqTab) <- gsub("X","",colnames(SeqTab))
+row.names(SeqTab) <- SeqTab$OTUID
+SeqTab <- SeqTab[,-1]
+SeqTab <- as.matrix.data.frame(SeqTab)
+
+# Parse out taxonomic assignment in excel and remove confidence column
+TaxTab <- read.csv(file.path(path,"March/taxonomy.csv"))
+# remove species column
+TaxTab <- subset(TaxTab, select = -c(Species))
+# organized as a matrix for phyloseq import
+rownames(TaxTab) <- TaxTab$Feature.ID
+TaxTab <- TaxTab[,-1]
+TaxTab <- as.matrix.data.frame(TaxTab)
+
+# Read in metadata file
+samdf <- read.csv(file.path(path,"March/March2019_run_samdf.csv"))
+rownames(samdf) <- samdf$SampleID
+
+# Read in exported rooted tree 
+tree <- read_tree(file.path(path, "March/tree.nwk"))
+
+### Merge as one phyloseq object
+ps <- phyloseq(otu_table(SeqTab,taxa_are_rows = TRUE), tax_table(TaxTab), sample_data(samdf), phy_tree(tree))
+ps # 46 taxa and 92 samples
+
+# Remove Archaea Chloroplast and mitochondria
+ps <- subset_taxa(ps, !Family %in% "mitochondria") %>% 
+  subset_taxa(!Kingdom %in% "Archaea") %>% 
+  subset_taxa(!Class %in% "Chloroplast")
+ps # 46 taxa and 92 samples #  none of these taxa were observed
+```
+
+## Filter ASVs based on taxonomy and abundance 
+```{r}
+# Show available ranks in the dataset
+rank_names(ps)
+# Create table, number of features for each phylum
+table(tax_table(ps)[, "Phylum"], exclude = NULL)
+# remove asv that was not assigned at phylum level
+ps.Phy <- subset_taxa(ps, !is.na(Phylum) & !Phylum %in% c("","None"))
+ps.Phy #  46 taxa and 92 samples
+# Explore abundance to decide filter threshold
+## Compute prevalence of each feature, store as data.frame
+prevdf <- apply(X = otu_table(ps.Phy),
+                MARGIN = ifelse(taxa_are_rows(ps.Phy), yes = 1, no = 2),
+                FUN = function(x)(sum(x>0)))
+# Add taxonomy and total read counts to this data.frame
+prevdf <- data.frame(Prevalence = prevdf,
+                     TotalAbundance = taxa_sums(ps.Phy),
+                     tax_table(ps.Phy))
+# plot the abudance per phylum 
+ggplot(prevdf, aes(TotalAbundance, Prevalence / nsamples(ps.Phy),color=Phylum)) +
+  # Include a guess for parameter
+  geom_hline(yintercept = 0.01,  linetype = 2) + geom_point(size = 2, alpha = 0.7) +
+  scale_x_log10() +  xlab("Total Abundance") + ylab("Prevalence [Frac. Samples]") +
+  facet_wrap(~Phylum) + theme(legend.position="none")
+
+# Remove very low abudance ASVs independent of sample prevalence
+x = taxa_sums(ps.Phy)
+keepTaxa = which((x / sum(x)) > 0.00005)
+ps.Phy05 <- prune_taxa(names(keepTaxa), ps.Phy)
+ps.Phy05 # 46 taxa and 92 samples # No taxa were filtered out 
+
+saveRDS(ps.Phy05, file.path(path, "March/ps.Phy05.rds"))
+```
+
+## Determine rarefaction level for Alpha and Beta analysis later on
+```{r}
+set.seed(123)
+# Read in function to calculate alpha diversity and rarefaction levels
+calculate_rarefaction_curves <- dget(file.path("~/src/Marco_Lab/FUN_calculate_rarefaction.R"))
+rarefaction_curve_data <- calculate_rarefaction_curves(ps.Phy, c("Observed", "Shannon","Simpson","Chao1"), 
+                                                       rep(c(1,300,700,1000, 2500, 4000, 6000), each = 10))
+rarefaction_curve_data$SampleID <- gsub("X","",rarefaction_curve_data$SampleID)
+# summarize alpha diversity
+rarefaction_curve_data_summary <- ddply(rarefaction_curve_data, c('Depth', 'SampleID', 'measures'),
+                                        summarise, 
+                                        Alpha_diversity_mean = mean(Alpha_diversity), 
+                                        Alpha_diversity_sd = sd(Alpha_diversity))
+# Add sample data
+rarefaction_curve_data_summary_verbose <- merge(rarefaction_curve_data_summary, 
+                                                data.frame(sample_data(ps.Phy)), 
+                                                by.x = 'SampleID', by.y = 'row.names')
+rarefaction_curve_data_summary_verbose <- rarefaction_curve_data_summary_verbose[, -1]
+# plot out rarefaction curve
+ggplot(rarefaction_curve_data_summary_verbose, aes(x = Depth, y = Alpha_diversity_mean, 
+                                                   ymin = Alpha_diversity_mean - Alpha_diversity_sd, 
+                                                   ymax = Alpha_diversity_mean + Alpha_diversity_sd,
+                                                   color = SampleID, group = SampleID)) +
+  scale_fill_brewer(palette = "Set2") + 
+  geom_line()+
+  geom_pointrange(size=0.1)+
+  theme(legend.position = "none")+
+  facet_wrap(facets = ~ measures, scales = "free")
+# Rarefaction level flattens out after ~1000 reads
+
+# export the library size to a csv file so that I can set appropriate rarefaction 
+# levels based on the 3 different projects in this sequencing run
+write.csv(sample_sums(ps.Phy05), file.path(path, "March/library_size_ps.Phy05.csv"))
+
+# cheese paper sample @ 1000 reads 
+# remove sample 4021, which has only 677 reads
+ps.Phy05 <- subset_samples(ps.Phy05, !SampleID %in% "4021")
+ps.Phy05 # 46 taxa and 91 samples
+```
+
+# Subset to contain only samples for cheese paper 
+### For taxonomy analysis based on "ps.REC.glom"
+The goal is to 
+(1) The pilot cheeses made with the isolate had similar slit profile 
+(3) slit milk inoculated cheese have more lactobacillus than no slit milk inoculation
+```{r}
+samdf2 <- read.csv(file.path(path,"March/March2019_run_samdf_cheesepaper.csv"))
+rownames(samdf2) <- samdf2$SampleID
+
+ps.Phy05.cheese <- phyloseq(sample_data(samdf2), otu_table(ps.Phy05),
+                            phy_tree(ps.Phy05), tax_table(ps.Phy05))
+ps.Phy05.cheese # 46 taxa and 21 samples 
+# Remove very low abudance ASVs independent of sample prevalence
+x = taxa_sums(ps.Phy05.cheese)
+keepTaxa = which((x / sum(x)) > 0.00005)
+ps.Phy05.cheese <- prune_taxa(names(keepTaxa), ps.Phy05.cheese)
+ps.Phy05.cheese # 17 taxa and 21 samples
+
+# Clean up the taxonomy level
+#make the deepest taxonomic identification in TaxTab as the recommened taxonomy (REC)
+RECps <- dget("~/src/Marco_Lab/FUN_RECps.R") # Read in RECps function
+ps.Phy.REC <- RECps(ps.Phy05.cheese@tax_table, ps.Phy05.cheese)
+ps.Phy.REC # 17 taxa and 21 samples
+ps.REC.glom <- tax_glom(ps.Phy.REC, taxrank = "REC", NArm = FALSE)
+ps.REC.glom #  8 taxa and 21 samples 
+
+# Define function to make Bar plots 
+#### Bar plot #####
+SlitBar <- function(ps, var1, var2, taxa, lvl1, lvl2, mycol, path.out, w, h){  
+  ps <- ps %>% transform_sample_counts(function(x) x/sum(x) ) 
+  
+  TaxTab <- tax_table(ps) %>% as.data.frame()
+  taxa_names(ps) <- TaxTab$REC
+  allTaxa <- taxa_names(ps)
+  ps.other <- prune_taxa(allTaxa[!(allTaxa %in% taxa)], ps)
+  taxa.other <- ps.other@tax_table[,7] %>% as.character() # 7 for REC level  
+  
+  # change the taxa that are not the expected taxa to "Other" 
+  TaxTab2 <- psmelt(ps)
+  # merge/average per Sample and CheeseOutcome
+  TaxTab2_agg <- ddply(TaxTab2, c(var1, var2, "REC"),
+                       summarise,
+                       mean = mean(Abundance))
+  colnames(TaxTab2_agg)[1] <- var1
+  colnames(TaxTab2_agg)[2] <- var2
+  TaxTab2_agg$REC <- as.character(TaxTab2_agg$REC)
+  TaxTab2_agg[TaxTab2_agg$REC %in% taxa.other,]$REC <- "Other"
+  
+  # Set orders for taxonomy and sample
+  TaxTab2_agg$REC <- factor(TaxTab2_agg$REC, levels = taxa)
+  TaxTab2_agg[[var1]] <- factor(TaxTab2_agg[[var1]], levels = lvl1)
+  TaxTab2_agg[[var2]] <- factor(TaxTab2_agg[[var2]], levels = lvl2)
+  
+  pdf(path.out, w, h)
+  p <- ggplot(TaxTab2_agg, aes(x = get(var1), y = mean, fill = REC)) +
+    geom_bar(stat = "identity") + 
+    scale_fill_manual(values = mycol)+
+    theme_bw(base_size = 20) +
+    facet_grid(~ get(var2), scales = "free_x")+
+    # Remove x axis title
+    theme(axis.title.x = element_blank(), axis.text.x = element_text(angle = 0, hjust = 1),
+          text = element_text(size = 16)) + 
+    guides(fill = guide_legend(reverse = FALSE, keywidth = 1, keyheight = 1)) +
+    ylab("Relative abundance")
+  
+  # convert ggplot object to grob object
+  gp <- ggplotGrob(p)
+  # optional: take a look at the grob object's layout 
+  # gtable::gtable_show_layout(gp)
+  # get gtable columns corresponding to the facets 
+  facet.columns <- gp$layout$l[grepl("panel", gp$layout$name)]
+  # get the number of unique x-axis values per facet (1 & 3, in this case)
+  x.var <- sapply(ggplot_build(p)$layout$panel_scales_x, 
+                  function(l) length(l$range$range))
+  # change the relative widths of the facet columns based on how many unique 
+  # x-axis values are in each facet
+  gp$widths[facet.columns] <- gp$widths[facet.columns] * x.var
+  # plot result
+  grid::grid.draw(gp)
+  dev.off()
+}
+
+# I only have 8 taxa 
+comm8 <- c("Enterobacteriaceae", "Lactococcus", 
+           "Lactobacillus", "Lactobacillaceae","Leuconostoc", 
+            "Staphylococcus", "Thermus", "Other")
+col8 <- c("#B89B74", "#E62F27", 
+           "#F16667", "#fbb4ae", "#F9A963", 
+           "#C3AAD2", "#B9A499",  "#B15928")
+SlitBar(subset_samples(ps.REC.glom, CollectionWk_date == "12/20/18"), 
+        # subset to contain only cryo milk inoculated samples
+        var1 = "SampleID", var2 = "Species",
+        lvl1 = c("4020","4022","4023","4024","4025","4026","4027","4028"),
+        lvl2 = c("Saline","milk_no_slits","milk_slits"),
+        taxa = comm8, mycol = col8, 
+        path.out = file.path(path, "figs/cheese_cryo_SampleID_Species.pdf"), 6.8, 5.5)
+SlitBar(subset_samples(ps.REC.glom, CollectionWk_date == "12/20/18"), 
+        # subset to contain only cryo milk inoculated samples
+        var1 = "Species", var2 = "Description",
+        lvl1 = c("Saline","milk_no_slits","milk_slits"),
+        lvl2 = "Pilot_cheese_11D",
+        taxa = comm8, mycol = col8, 
+        path.out = file.path(path, "figs/cheese_cryo_Species_Description.pdf"), 5, 5.5)
+SlitBar(subset_samples(ps.REC.glom, CollectionWk_date == "2/7/19"), 
+        # subset to contain only cryo milk inoculated samples
+        var1 = "SampleID", var2 = "Species",
+        lvl1 = c("4062","4063","4064","4065","4066","4067","4068","4069","4070",
+                 "4071","4072","4073","4074"),
+        lvl2 = c("Saline","Lactobacillus plantarum","Lactobacillus fermentum ",
+                 "Leuconostoc lactis ","Leuconostoc mesenteroides "),
+        taxa = comm8, mycol = col8, 
+        path.out = file.path(path, "figs/cheese_low_SampleID_Species.pdf"), 8, 5.5)
+SlitBar(subset_samples(ps.REC.glom, CollectionWk_date == "2/7/19"), 
+        # subset to contain only low inoculation cheese
+        var1 = "Species", var2 = "Description",
+        lvl1 = c("Saline","Lactobacillus plantarum","Lactobacillus fermentum ",
+                 "Leuconostoc lactis ","Leuconostoc mesenteroides "),
+        lvl2 = "Pilot_cheese_11D",
+        taxa = comm8, mycol = col8, 
+        path.out = file.path(path, "figs/cheese_low_Species_Description.pdf"), 6, 5.5)
+
+# 7 taxa does not have Lactococcus 
+comm7 <- c("Enterobacteriaceae", 
+           "Lactobacillus", "Lactobacillaceae","Leuconostoc", 
+            "Staphylococcus", "Thermus", "Other")
+col7 <- c("#B89B74", 
+           "#F16667", "#fbb4ae", "#F9A963", 
+           "#C3AAD2", "#B9A499",  "#B15928")
+SlitBar(subset_samples(ps.REC.glom, CollectionWk_date == "12/20/18") %>% 
+          subset_taxa(!REC %in% "Lactococcus"),  
+        var1 = "SampleID", var2 = "Species",
+        lvl1 = c("4020","4022","4023","4024","4025","4026","4027","4028"),
+        lvl2 = c("Saline","milk_no_slits","milk_slits"),
+        taxa = comm7, mycol = col7, 
+        path.out = file.path(path, "figs/cheesenoL_cryo_SampleID_Species.pdf"), 6.8, 5.5)
+SlitBar(subset_samples(ps.REC.glom, CollectionWk_date == "12/20/18") %>% 
+          subset_taxa(!REC %in% "Lactococcus"), 
+        var1 = "Species", var2 = "Description",
+        lvl1 = c("Saline","milk_no_slits","milk_slits"),
+        lvl2 = "Pilot_cheese_11D",
+        taxa = comm7, mycol = col7, 
+        path.out = file.path(path, "figs/cheesenoL_cryo_Species_Description.pdf"), 5, 5.5)
+SlitBar(subset_samples(ps.REC.glom, CollectionWk_date == "2/7/19") %>% 
+          subset_taxa(!REC %in% "Lactococcus"),  
+        # subset to contain only low inoculation cheese
+        var1 = "Species", var2 = "Description",
+        lvl1 = c("Saline","Lactobacillus plantarum","Lactobacillus fermentum ",
+                 "Leuconostoc lactis ","Leuconostoc mesenteroides "),
+        lvl2 = "Pilot_cheese_11D",
+        taxa = comm7, mycol = col7, 
+        path.out = file.path(path, "figs/cheesenoL_low_Species_Description.pdf"), 6, 5.5)
+
+```
+
+
+# DESeq2 
+```{r}
+# calculate geometric means prior to estimate size factors
+gmMean = function(x, na.rm=TRUE){
+  exp(sum(log(x[x > 0]), na.rm=na.rm) / length(x))
+}
+# Cheese Outcome Differential abundance and generate diagnostic plots and write sig tables 
+## fold change is 1. sample groups compare with saline 2. sample vs Lp (no slits)
+## Uses default Benjamini-Hochberg pvalue adjust
+LowIsoCheeseDA <- function(ps) {
+  sample_data(ps)$Species <- factor(sample_data(ps)$Species)
+  psdds <- phyloseq_to_deseq2(ps, design = ~ Species)
+  
+  geoMeans <- apply(counts(psdds), 1, gmMean)
+  psdds <- estimateSizeFactors(psdds, geoMeans = geoMeans)
+  dds <- DESeq(psdds, test = "Wald", fitType = "local") 
+  plotDispEsts(dds, ylim = c(1e-6, 1e2)) 
+  alpha <- 0.1 #  padj for indepenent filtering and expect FDR < alpha
+  
+  resSLf <- results(dds, contrast = c("Species", "Saline", "Lactobacillus fermentum "),
+                    alpha = alpha, lfcThreshold = 0, altHypothesis = "greaterAbs")
+  resSLl <- results(dds, contrast = c("Species", "Saline", "Leuconostoc lactis "),
+                    alpha = alpha, lfcThreshold = 0, altHypothesis = "greaterAbs")
+  resSLm <- results(dds, contrast = c("Species", "Saline", "Leuconostoc mesenteroides "),
+                    alpha = alpha, lfcThreshold = 0, altHypothesis = "greaterAbs")
+  resLpLf <- results(dds, contrast = c("Species", "Lactobacillus plantarum", 
+                                       "Lactobacillus fermentum "),
+                     alpha = alpha, lfcThreshold = 0, altHypothesis = "greaterAbs")
+  resLpLl <- results(dds, contrast = c("Species", "Lactobacillus plantarum", 
+                                       "Leuconostoc lactis "),
+                     alpha = alpha, lfcThreshold = 0, altHypothesis = "greaterAbs")
+  resLpLm <- results(dds, contrast = c("Species", "Lactobacillus plantarum", 
+                                       "Leuconostoc mesenteroides "),
+                     alpha = alpha, lfcThreshold = 0, altHypothesis = "greaterAbs")  
+ 
+  # Define function to write out csv tables 
+  f <- function(res, path.out){
+    mcols(res, use.names = TRUE)
+    sigtab <- res
+    if (nrow(sigtab) > 0){
+      sigtab <- cbind(as(sigtab, "data.frame"), 
+                      as(tax_table(ps)[rownames(sigtab), ], "matrix"))
+      write.csv(sigtab, file.path(path.out))
+    }
+  }
+  
+  f(resSLf, file.path(path, "DESeqTab/Low_resSLf.csv"))
+  f(resSLl, file.path(path, "DESeqTab/Low_resSLl.csv"))
+  f(resSLm, file.path(path, "DESeqTab/Low_resSLm.csv"))
+  f(resLpLf, file.path(path, "DESeqTab/Low_resLpLf.csv"))
+  f(resLpLl, file.path(path, "DESeqTab/Low_resLpLl.csv"))
+  f(resLpLm, file.path(path, "DESeqTab/Low_resLpLm.csv"))
+}
+
+CryoMilkCheeseDA <- function(ps) {
+  sample_data(ps)$Species <- factor(sample_data(ps)$Species)
+  psdds <- phyloseq_to_deseq2(ps, design = ~ Species)
+  
+  geoMeans <- apply(counts(psdds), 1, gmMean)
+  psdds <- estimateSizeFactors(psdds, geoMeans = geoMeans)
+  dds <- DESeq(psdds, test = "Wald", fitType = "local") 
+  plotDispEsts(dds, ylim = c(1e-6, 1e2)) 
+  alpha <- 0.1 #  padj for indepenent filtering and expect FDR < alpha
+  
+  resSslit <- results(dds, contrast = c("Species", "Saline", "milk_slits"),
+                      alpha = alpha, lfcThreshold = 0, altHypothesis = "greaterAbs")  
+  resnoslit <- results(dds, contrast = c("Species", "milk_no_slits", "milk_slits"),
+                       alpha = alpha, lfcThreshold = 0, altHypothesis = "greaterAbs")  
+  
+  # Define function to write out csv tables 
+  f <- function(res, path.out){
+    mcols(res, use.names = TRUE)
+    sigtab <- res
+    if (nrow(sigtab) > 0){
+      sigtab <- cbind(as(sigtab, "data.frame"), 
+                      as(tax_table(ps)[rownames(sigtab), ], "matrix"))
+      write.csv(sigtab, file.path(path.out))
+    }
+  }
+  
+  f(resSslit, file.path(path, "DESeqTab/resSslit.csv"))
+  f(resnoslit, file.path(path, "DESeqTab/resnoslit.csv"))
+}
+
+
+LowIsoCheeseDA(subset_samples(ps.REC.glom, CollectionWk_date == "2/7/19"))
+CryoMilkCheeseDA(subset_samples(ps.REC.glom, CollectionWk_date == "12/20/18"))
+
+```
+
