@@ -11,7 +11,7 @@ knitr::opts_chunk$set(fig.path = "figs/")
 ```
 
 This is the file to analysis pilot cheese project, including 
-1. pilot cheeses
+1. pilot cheeses （high level isolate inoculation）
 2. milk and cheeese where the isolates are from
 
 ## Setting up packages and working directory 
@@ -61,6 +61,9 @@ tree <- read_tree(file.path(path, "Jan/tree.nwk"))
 ### Merge as one phyloseq object
 ps <- phyloseq(otu_table(SeqTab,taxa_are_rows = TRUE), tax_table(TaxTab), sample_data(samdf), phy_tree(tree))
 ps # 282 taxa and 29 samples
+
+
+
 ```
 
 ## Filter ASVs based on taxonomy and abundance 
@@ -251,8 +254,64 @@ col16 <- c("#A6CEE3", "#438EC0", "#1f78b4","#b3e2cd",
            "#98D277", "#3BA432", "#B89B74", 
            "#F16667", "#fbb4ae", "#F9A963", "#ff7f00", 
            "#C3AAD2", "#7D54A5", "#B9A499", "#EAD27A", "#B15928")
-##############################
-#Unfinished analysis on low inoculation cheese
+```
+
+
+# DESeq2 
+```{r}
+# calculate geometric means prior to estimate size factors
+gmMean = function(x, na.rm=TRUE){
+  exp(sum(log(x[x > 0]), na.rm=na.rm) / length(x))
+}
+# Cheese Outcome Differential abundance and generate diagnostic plots and write sig tables 
+## fold change is 1. sample groups compare with saline 2. sample vs Lp
+## Uses default Benjamini-Hochberg pvalue adjust
+HighIsoCheeseDA <- function(ps) {
+  sample_data(ps)$Species <- factor(sample_data(ps)$Species)
+  psdds <- phyloseq_to_deseq2(ps, design = ~ Species)
+  
+  geoMeans <- apply(counts(psdds), 1, gmMean)
+  psdds <- estimateSizeFactors(psdds, geoMeans = geoMeans)
+  dds <- DESeq(psdds, test = "Wald", fitType = "local") 
+  plotDispEsts(dds, ylim = c(1e-6, 1e2)) 
+  alpha <- 0.1 #  padj for indepenent filtering and expect FDR < alpha
+  
+  resSLf <- results(dds, contrast = c("Species", "Saline", "Lactobacillus fermentum "),
+                    alpha = alpha, lfcThreshold = 0, altHypothesis = "greaterAbs")
+  resSLl <- results(dds, contrast = c("Species", "Saline", "Leuconostoc lactis "),
+                    alpha = alpha, lfcThreshold = 0, altHypothesis = "greaterAbs")
+  resSLm <- results(dds, contrast = c("Species", "Saline", "Leuconostoc mesenteroides "),
+                    alpha = alpha, lfcThreshold = 0, altHypothesis = "greaterAbs")
+  resLpLf <- results(dds, contrast = c("Species", "Lactobacillus plantarum", 
+                                       "Lactobacillus fermentum "),
+                     alpha = alpha, lfcThreshold = 0, altHypothesis = "greaterAbs")
+  resLpLl <- results(dds, contrast = c("Species", "Lactobacillus plantarum", 
+                                       "Leuconostoc lactis "),
+                     alpha = alpha, lfcThreshold = 0, altHypothesis = "greaterAbs")
+  resLpLm <- results(dds, contrast = c("Species", "Lactobacillus plantarum", 
+                                       "Leuconostoc mesenteroides "),
+                     alpha = alpha, lfcThreshold = 0, altHypothesis = "greaterAbs")  
+ 
+  # Define function to write out csv tables 
+  f <- function(res, path.out){
+    mcols(res, use.names = TRUE)
+    sigtab <- res
+    if (nrow(sigtab) > 0){
+      sigtab <- cbind(as(sigtab, "data.frame"), 
+                      as(tax_table(ps)[rownames(sigtab), ], "matrix"))
+      write.csv(sigtab, file.path(path.out))
+    }
+  }
+  
+  f(resSLf, file.path(path, "DESeqTab/High_resSLf.csv"))
+  f(resSLl, file.path(path, "DESeqTab/High_resSLl.csv"))
+  f(resSLm, file.path(path, "DESeqTab/High_resSLm.csv"))
+  f(resLpLf, file.path(path, "DESeqTab/High_resLpLf.csv"))
+  f(resLpLl, file.path(path, "DESeqTab/High_resLpLl.csv"))
+  f(resLpLm, file.path(path, "DESeqTab/High_resLpLm.csv"))
+}
+
+HighIsoCheeseDA(ps.cheese)
 ```
 
 
@@ -309,6 +368,7 @@ IsoBar(ps.iso, var2 = "SampleType", var1 = "Species",
 
 ### Unifinished analysis to add the cheese as made with these milk as well
 ```
+
 
 
 ## Chemical analysis portion 
