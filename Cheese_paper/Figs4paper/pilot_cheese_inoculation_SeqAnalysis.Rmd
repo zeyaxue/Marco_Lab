@@ -366,7 +366,41 @@ IsoBar(ps.iso, var2 = "SampleType", var1 = "Species",
                 "Leuconostoc mesenteroides "), 
        path.out = file.path(path, "figs/Isolates_in_milk.pdf"), 6, 5.5)
 
-### Unifinished analysis to add the cheese as made with these milk as well
+# Box plot 
+## This is the figure I decided to use in paper 
+TaxTab.iso <- psmelt(subset_samples(ps.iso, SampleID %in% c("3490","3498","3502",
+                                                            "3504","3512","3518",
+                                                            "3850","3860","3872")))
+                                    # subset to contain directly linked milk samples with isolates
+# Subset to contain taxa that were directly linked with isolates in milk
+index.Lb <- which(with(TaxTab.iso, Species %in% "Lactobacillus fermentum " & 
+                         REC %in% c("Lactobacillus","Lactobacillaceae") & 
+                         SampleType %in% "HTST_milk"))
+index.Lm <- which(with(TaxTab.iso, Species %in% "Leuconostoc mesenteroides " & 
+                         REC %in% "Leuconostoc" &  SampleType %in% "HTST_feed"))
+index.Ll <- which(with(TaxTab.iso, Species %in% "Leuconostoc lactis " & 
+                         REC %in% "Leuconostoc" &  SampleType %in% "HTST_feed"))
+TaxTab.iso2 <- TaxTab.iso[c(index.Lb, index.Lm, index.Ll),]
+
+# Set orders for taxonomy and sample
+TaxTab.iso2$REC <- factor(TaxTab.iso2$REC, levels = c("Lactobacillus", 
+                                                      "Lactobacillaceae",
+                                                      "Leuconostoc"))
+pdf(file.path(path, "figs/Isolates_in_milk_box.pdf"), 6, 5.5)
+ggplot(TaxTab.iso2, aes(x = Species, y = Abundance, fill = REC)) +
+  geom_boxplot() + 
+  scale_fill_manual(values = c("Lactobacillus" = "#fbb4ae",
+                               "Lactobacillaceae" = "#F16667",
+                               "Leuconostoc" = "#F9A963"))+
+  theme_bw(base_size = 20) +
+  facet_grid(~ SampleType, scales = "free_x")+
+  # Remove x axis title
+  theme(axis.title.x = element_blank(), 
+        axis.text.x = element_text(angle = 0, hjust = 1), 
+        text = element_text(size = 16)) + 
+  guides(fill = guide_legend(reverse = FALSE, keywidth = 1, keyheight = 1)) +
+  ylab("Relative abundance")
+dev.off()
 ```
 
 
