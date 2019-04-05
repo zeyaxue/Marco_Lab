@@ -373,6 +373,12 @@ ChouBar(ps.ChedY.noL %>% transform_sample_counts(function(x) x/sum(x) ) ,
         lvl = c("Cheese_0D","Cheese_30D","Cheese_90D", "Cheese_120D"),
         samType = "PMA treated HTST milk", w = 6, h = 5,
         path.out = file.path(path, "Mar_2019/ChedY.noL_cheeseOutcome.pdf"))
+# Present in actual relatvie propotion of non-starter bacteria
+ChouBar(subset_taxa(ps.ChedY %>% transform_sample_counts(function(x) x/sum(x)) , !Genus %in% "Lactococcus"), 
+        taxa = comm16, mycol = col16,
+        lvl = c("Cheese_0D","Cheese_30D","Cheese_90D", "Cheese_120D"),
+        samType = "PMA treated HTST milk", w = 6, h = 5,
+        path.out = file.path(path, "Mar_2019/ChedY.noL_actualprop_cheeseOutcome.pdf"))
 ```
 
 
