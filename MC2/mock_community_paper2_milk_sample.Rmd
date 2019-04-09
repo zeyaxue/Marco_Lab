@@ -1,0 +1,124 @@
+---
+title: "milk_sample_mock_community_paper"
+author: "Zeya Xue"
+date: "4/2/2019"
+output: rmarkdown::github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(fig.path = "figs/")
+```
+
+## Setting up packages and working directory 
+```{r}
+library(phyloseq);packageVersion("phyloseq")
+library(vegan);packageVersion("vegan")
+library(ggplot2);packageVersion("ggplot2")
+library(ggpubr); packageVersion("ggpubr") #  ggplot2 based publication ready fig
+library(reshape2);packageVersion("reshape2")
+library(cowplot);packageVersion("cowplot")
+library(plyr)
+library(dplyr)
+
+path <- "~/Google Drive File Stream/My Drive/UC_Davis/Marco_lab/milk_microbiota/Mock_community/MC_paper2_QIIME2/"
+```
+
+## Import pre-processed ps from march 2019 run with pilot cheese and lacto depletion
+```{r}
+ps.Phy05.rds <- readRDS(file.path("~/Google Drive File Stream/My Drive/UC_Davis/Marco_lab/milk_microbiota/2017_Hilmar_sampling/Sequencing/QIIME2/", "March/ps.Phy05.rds"))
+
+# subset to include only mock community paper samples
+samdf <- read.csv(file.path(path,"mapping/March2019_run_milk_mcpaper2_samdf.csv"))
+rownames(samdf) <- samdf$SampleID
+ps.Phy05 <- phyloseq(sample_data(samdf), otu_table(ps.Phy05.rds), 
+                    tax_table(ps.Phy05.rds), phy_tree(ps.Phy05.rds))
+ps.Phy05 # 46 taxa and 10 samples # for alpha and beta
+
+# Clean up the taxonomy level
+#make the deepest taxonomic identification in TaxTab as the recommened taxonomy (REC)
+RECps <- dget("~/src/Marco_Lab/FUN_RECps.R") # Read in RECps function
+ps.Phy.REC <- RECps(ps.Phy05@tax_table, ps.Phy05)
+ps.Phy.REC # 46 taxa and 10 samples
+ps.REC.glom <- tax_glom(ps.Phy.REC, taxrank = "REC", NArm = FALSE)
+ps.REC.glom #  23 taxa and 10 samples # for taxa analysis
+```
+No rarefaction needed. 
+
+#### Taxonomy plot for individual values
+```{r}
+TaxBar <- function(ps, var1, var2, lvl = NULL, lvl2 = NULL, w, h, path.out){
+  ExpTaxa <- c("Acinetobacter", "Bacillus", "Bacillaceae", 
+               "Clostridiales", "Enterobacteriaceae",
+               "Lactococcus", "Lactobacillus", "Lactobacillaceae","Leuconostoc",
+               "Pseudomonas", "Staphylococcus", "Streptococcus", "Thermus",
+               "Turicibacter") 
+  
+  ps <-  ps %>% transform_sample_counts(function(x) x/sum(x) )  
+  TaxTab <- tax_table(ps) %>% as.data.frame()
+  taxa_names(ps) <- TaxTab$REC 
+  allTaxa <- taxa_names(ps)
+  ps.other <- prune_taxa(allTaxa[!(allTaxa %in% ExpTaxa)], ps)
+  taxa.other <- ps.other@tax_table[,7] %>% as.character() # 7 for REC level 
+  
+  # change the taxa that are not the expected taxa to "Other" 
+  TaxTab2 <- psmelt(ps)
+  # merge/average per Sample and CheeseOutcome
+  TaxTab2_agg <- aggregate(Abundance ~ TaxTab2[[var1]] + TaxTab2[[var2]] + REC,
+                           data = TaxTab2,
+                           mean)
+  colnames(TaxTab2_agg)[1] <- var1
+  colnames(TaxTab2_agg)[2] <- var2
+  TaxTab2_agg$REC <- as.character(TaxTab2_agg$REC)
+  TaxTab2_agg[TaxTab2_agg$REC %in% taxa.other,]$REC <- "Other"
+  
+  # Set colors for plotting
+  mycol = c("#A6CEE3", "#438EC0", "#1f78b4", 
+            "#3BA432", "#B89B74", "#E62F27", 
+           "#F16667", "#fbb4ae", "#F9A963", "#ff7f00", 
+           "#C3AAD2", "#7D54A5", "#B9A499", "#EAD27A", "#B15928")
+  
+  # Set orders for taxonomy and sampleID
+  TaxTab2_agg$REC = factor(TaxTab2_agg$REC, levels = c(ExpTaxa, "Other"))
+  if (!is.null(lvl)) TaxTab2_agg[[var1]] <- factor(TaxTab2_agg[[var1]], levels = lvl)
+  if (!is.null(lvl2)) TaxTab2_agg[[var2]] <- factor(TaxTab2_agg[[var2]], levels = lvl2)
+  
+  pdf(path.out, width = w, height = h)
+  p <- ggplot(TaxTab2_agg, aes(x = get(var1), y = Abundance, fill = REC)) +
+    facet_grid(. ~ get(var2), scales = "free_x") + 
+    geom_bar(stat = "identity") + 
+    scale_fill_manual(values = mycol)+
+    theme_bw(base_size = 15)+
+    guides(fill = guide_legend(reverse = FALSE, keywidth = 1, keyheight = 1)) +
+    ylab("Relative proportion")
+  
+  # convert ggplot object to grob object
+  gp <- ggplotGrob(p)
+  # optional: take a look at the grob object's layout 
+  # gtable::gtable_show_layout(gp)
+  # get gtable columns corresponding to the facets 
+  facet.columns <- gp$layout$l[grepl("panel", gp$layout$name)]
+  # get the number of unique x-axis values per facet (1 & 3, in this case)
+  x.var <- sapply(ggplot_build(p)$layout$panel_scales_x, 
+                  function(l) length(l$range$range))
+  # change the relative widths of the facet columns based on how many unique 
+  # x-axis values are in each facet
+  gp$widths[facet.columns] <- gp$widths[facet.columns] * x.var
+  # plot result
+  grid::grid.draw(gp)
+  dev.off()
+}
+
+TaxBar(ps.REC.glom, var1 = "SampleID", var2 = "Lysis", 
+       lvl = c("T1", "T2", "T3", "PB1", "PB2", "PB3", "PV1", "PV2", "PV3"), 
+       lvl2 = c("Bead beat: 2min x 6.5m/s", "Bead beat: 10s x 4m/s", "Vortex: 30s"),
+       path.out = file.path(path,"feature_table/milk_SampleID_Lysis.pdf"), w = 6, h = 5)
+TaxBar(ps.REC.glom, var1 = "SampleID", var2 = "milk.sample", 
+       lvl = c("T1", "T2", "T3", "PB1", "PB2", "PB3", "PV1", "PV2", "PV3"), 
+       lvl2 = c("1","2","3"),
+       path.out = file.path(path,"feature_table/milk_SampleID_milk.sample.pdf"), w = 6, h = 5)
+
+
+
+```
+
