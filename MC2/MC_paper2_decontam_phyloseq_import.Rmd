@@ -412,6 +412,57 @@ gmMean = function(x, na.rm=TRUE){
   exp(sum(log(x[x > 0]), na.rm=na.rm) / length(x))
 }
 
+# Define function for harsh cell lysis method (ps1)
+HarshLyseDA <- function(ps, path.out) {
+  sample_data(ps)$For_AVE <- factor(sample_data(ps)$For_AVE)
+  psdds <- phyloseq_to_deseq2(ps, design = ~ For_AVE)
+  geoMeans <- apply(counts(psdds), 1, gmMean)
+  psdds <- estimateSizeFactors(psdds, geoMeans = geoMeans)
+  
+  dds <- DESeq(psdds, test = "Wald", fitType = "local") 
+  plotDispEsts(dds, ylim = c(1e-6, 1e2)) 
+  alpha <- 0.1 #  padj for indepenent filtering and expect FDR < alpha
+  resB1 <- results(dds, contrast = c("For_AVE", "Expected", "Bead_beating_6.5_2min"),
+                   alpha = alpha, lfcThreshold = log2(1.5), altHypothesis = "greaterAbs")
+  resB2 <- results(dds, contrast = c("For_AVE", "Expected", "Bead_beating_6.5_1min"),
+                    alpha = alpha, lfcThreshold = log2(1.5), altHypothesis = "greaterAbs")
+  resB3<- results(dds, contrast = c("For_AVE", "Expected", "Bead_beating_3.5_2min"),
+                     alpha = alpha, lfcThreshold = log2(1.5), altHypothesis = "greaterAbs")
+  resB4 <- results(dds, contrast = c("For_AVE", "Expected", "Bead_beating_3.5_1min"),
+                      alpha = alpha, lfcThreshold = log2(1.5), altHypothesis = "greaterAbs")
+  resV1 <- results(dds, contrast = c("For_AVE", "Expected", "Vortex_15min"),
+                   alpha = alpha, lfcThreshold = log2(1.5), altHypothesis = "greaterAbs")
+  resV2 <- results(dds, contrast = c("For_AVE", "Expected", "Vortex_10min"),
+                    alpha = alpha, lfcThreshold = log2(1.5), altHypothesis = "greaterAbs")
+  resC1 <- results(dds, contrast = c("For_AVE", "Expected", "Chemical_20min"),
+                     alpha = alpha, lfcThreshold = log2(1.5), altHypothesis = "greaterAbs")
+  
+  f <- function(res){
+    mcols(res, use.names = TRUE)
+    sigtab <- res[which(res$padj < alpha), ]
+    cbind(as(sigtab, "data.frame"), as(tax_table(ps)[rownames(sigtab), ], "matrix"))
+  }
+  
+  sigtabB1 <- f(resB1)
+  sigtabB2 <- f(resB2)
+  sigtabB3 <- f(resB3)
+  sigtabB4 <- f(resB4)
+  sigtabV1 <- f(resV1)
+  sigtabV2 <- f(resV2)
+  sigtabC1 <- f(resC1)
+  
+  dir.create(path.out, recursive = TRUE)
+  if (nrow(resB1) > 0) write.csv(sigtabB1, file.path(path.out, "sigtabB1.csv"))
+  if (nrow(resB2) > 0) write.csv(sigtabB2, file.path(path.out, "sigtabB2.csv"))
+  if (nrow(resB3) > 0) write.csv(sigtabB3, file.path(path.out, "sigtabB3.csv"))
+  if (nrow(resB4) > 0) write.csv(sigtabB4, file.path(path.out, "sigtabB4.csv"))
+  if (nrow(resV1) > 0) write.csv(sigtabV1, file.path(path.out, "sigtabV1.csv"))
+  if (nrow(resV2) > 0) write.csv(sigtabV2, file.path(path.out, "sigtabV2.csv"))
+  if (nrow(resC1) > 0) write.csv(sigtabC1, file.path(path.out, "sigtabC1.csv"))
+}
+
+HarshLyseDA(psList[[1]], path.out = file.path(path, "deseq_table/HarshLyse"))
+
 # Define function for 3 different kits (Total, Core, Ultra2)
 KitDA <- function(ps, path.out) {
   sample_data(ps)$LYSING <- factor(sample_data(ps)$LYSING)
