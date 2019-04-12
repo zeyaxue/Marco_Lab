@@ -296,6 +296,20 @@ TaxBar(ps1.merge,
                "Vortex_15min","Vortex_10min","Chemical_20min"),
        path.out = file.path(path, "feature_table/ps1_For_AVE.pdf"),w = 5,h = 4)
 
+
+# Plot for AVERAGE PMA (ps3)
+## Take average of samples by catergory "For_AVE"
+ps3.merge <- merge_samples(psList[[3]], "For_AVE", fun = mean)
+## Repair the merged values associated with each surface after merge
+sample_data(ps3.merge)$For_AVE <- levels(sample_data(psList[[3]])$For_AVE)
+TaxBar(ps3.merge,
+       var1 = "For_AVE", var2 = "SampleID",
+       lvl = c("Expected","Total_Bead_beating_6.5_2min","Total_Vortex_NA","Total_Chemical_NA",
+               "Core_Bead_beating_6.5_2min","Core_Vortex_","Core_Chemical_",
+               "Ultra2_Bead_beating_6.5_2min","Ultra2_Vortex_","Ultra2_Chemical_"),
+       path.out = file.path(path, "feature_table/ps3_For_AVE.pdf"),4.5,5.5)
+
+
 # Plot for PMA (ps4)
 TaxBar(subset_samples(psList[[4]], SampleID != "Theo2.2" & SampleID != "Theo2.3"), 
        var1 = "SampleID", var2 = "For_AVE",
@@ -358,6 +372,37 @@ TaxBar(psList[[7]], var1 = "SampleID", var2 = "Lysis", lvl = lvl.ID$V1,
                 "Chemical + Bead beat: 1hr + 10s x 4m/s",
                 "Vortex: 30s", "Chemical + Vortex: 1hr + 30s "),
        path.out = file.path(path,"feature_table/ps7_SampleID_Lysis.pdf"), w = 9, h = 5)
+# Plot for ps7 average 
+ps7.merge <- merge_samples(psList[[7]], "For_AVE", fun = mean)
+sample_data(ps7.merge)$For_AVE <- levels(sample_data(psList[[7]])$For_AVE)
+## Fix Lysis with every 3rd row 
+sample_data(ps7.merge)$Lysis <- sample_data(psList[[7]])[seq(1, nrow(sample_data(psList[[7]])), 3), ]$Lysis
+sample_data(ps7.merge)$Kit <- sample_data(psList[[7]])[seq(1, nrow(sample_data(psList[[7]])), 3), ]$Kit
+TaxBar(ps7.merge, var1 = "For_AVE", var2 = "Lysis", 
+       lvl = c("Expected","Total_Bead_beating_","Total_Bead_beating_Rnase_ammonium_acetate",
+               "Total_Chemical_Bead_beating_","Total_Chemical_Bead_beating_Rnase_ammonium_acetate",
+               "Total_Vortex_","Total_Vortex_Rnase_ammonium_acetate",
+               "Total_Chemical_Vortex_","Total_Chemical_Vortex_Rnase_ammonium_acetate",
+               "Microbiome_Bead_beating_","Microbiome_Bead_beating_Rnase_ammonium_acetate",
+               "Microbiome_Chemical_Bead_beating_","Microbiome_Chemical_Bead_beating_Rnase_ammonium_acetate",
+               "Microbiome_Vortex_","Microbiome_Vortex_Rnase_ammonium_acetate",
+               "Microbiome_Chemical_Vortex_","Microbiome_Chemical_Vortex_Rnase_ammonium_acetate"), 
+       lvl2 = c("Expected", "Bead beat: 2min x 6.5m/s", "Vortex: 15min", 
+                "Chemical: 1hr", "Bead beat: 10s x 4m/s",
+                "Chemical + Bead beat: 1hr + 10s x 4m/s",
+                "Vortex: 30s", "Chemical + Vortex: 1hr + 30s "),
+       path.out = file.path(path,"feature_table/ps7_For_AVE_Lysis.pdf"), w = 9, h = 5)
+TaxBar(ps7.merge, var1 = "For_AVE", var2 = "Kit", 
+       lvl = c("Expected","Total_Bead_beating_","Total_Bead_beating_Rnase_ammonium_acetate",
+               "Total_Chemical_Bead_beating_","Total_Chemical_Bead_beating_Rnase_ammonium_acetate",
+               "Total_Vortex_","Total_Vortex_Rnase_ammonium_acetate",
+               "Total_Chemical_Vortex_","Total_Chemical_Vortex_Rnase_ammonium_acetate",
+               "Microbiome_Bead_beating_","Microbiome_Bead_beating_Rnase_ammonium_acetate",
+               "Microbiome_Chemical_Bead_beating_","Microbiome_Chemical_Bead_beating_Rnase_ammonium_acetate",
+               "Microbiome_Vortex_","Microbiome_Vortex_Rnase_ammonium_acetate",
+               "Microbiome_Chemical_Vortex_","Microbiome_Chemical_Vortex_Rnase_ammonium_acetate"), 
+       lvl2 = c("Expected", "Total_phase3", "Total_ProteinaseK"),
+       path.out = file.path(path,"feature_table/ps7_For_AVE_Kit.pdf"), w = 8, h = 5.5)
 ```
 
 #### DESeq2 analysis
@@ -366,6 +411,57 @@ TaxBar(psList[[7]], var1 = "SampleID", var2 = "Lysis", lvl = lvl.ID$V1,
 gmMean = function(x, na.rm=TRUE){
   exp(sum(log(x[x > 0]), na.rm=na.rm) / length(x))
 }
+
+# Define function for 3 different kits (Total, Core, Ultra2)
+KitDA <- function(ps, path.out) {
+  sample_data(ps)$LYSING <- factor(sample_data(ps)$LYSING)
+  psdds <- phyloseq_to_deseq2(ps, design = ~ LYSING)
+  geoMeans <- apply(counts(psdds), 1, gmMean)
+  psdds <- estimateSizeFactors(psdds, geoMeans = geoMeans)
+  
+  dds <- DESeq(psdds, test = "Wald", fitType = "local") 
+  plotDispEsts(dds, ylim = c(1e-6, 1e2)) 
+  alpha <- 0.1 #  padj for indepenent filtering and expect FDR < alpha
+  resB1 <- results(dds, contrast = c("LYSING", "Theoretical_value", "Bead_beating"),
+                   alpha = alpha, lfcThreshold = log2(1.5), altHypothesis = "greaterAbs")
+  resV1 <- results(dds, contrast = c("LYSING", "Theoretical_value", "Vortex"),
+                   alpha = alpha, lfcThreshold = log2(1.5), altHypothesis = "greaterAbs")
+  resC1 <- results(dds, contrast = c("LYSING", "Theoretical_value", "Chemical"),
+                   alpha = alpha, lfcThreshold = log2(1.5), altHypothesis = "greaterAbs")
+  
+  f <- function(res){
+    mcols(res, use.names = TRUE)
+    sigtab <- res[which(res$padj < alpha), ]
+    cbind(as(sigtab, "data.frame"), as(tax_table(ps)[rownames(sigtab), ], "matrix"))
+  }
+  
+  sigtabUn <- f(resB1)
+  sigtabLi <- f(resV1)
+  sigtabHa <- f(resC1)
+  
+  dir.create(path.out, recursive = TRUE)
+  if (nrow(resB1) > 0){
+    write.csv(resB1, file.path(path.out, "resB1.csv"))
+  }
+  if (nrow(resV1) > 0){
+    write.csv(resV1, file.path(path.out, "resV1.csv"))
+  }
+  if (nrow(resC1) > 0){
+    write.csv(resC1, file.path(path.out, "resC1.csv"))
+  }
+}
+
+# Total kit
+KitDA(subset_samples(psList[[3]], KIT %in% c("Total","Expected")),
+      path.out = file.path(path, "deseq_table/Kit/Total"))
+# Core kit
+KitDA(subset_samples(psList[[3]], KIT %in% c("Core","Expected")),
+      path.out = file.path(path, "deseq_table/Kit/Core"))
+# Ultra2 kit
+KitDA(subset_samples(psList[[3]], KIT %in% c("Ultra2","Expected")),
+      path.out = file.path(path, "deseq_table/Kit/Ultra2"))
+
+
 
 # Define function for PMA differential abundance
 PMADA <- function(ps, path.out) {
@@ -406,6 +502,7 @@ PMADA <- function(ps, path.out) {
   sigtabUHa <- f(resUHa)
   sigtabUDe <- f(resUDe)
   
+  dir.create(path.out, recursive = TRUE)
   if (nrow(resUn) > 0){
     write.csv(resUn, file.path(path.out, "resUn.csv"))
   }
@@ -434,6 +531,94 @@ PMADA(subset_taxa(psList[[4]], REC %in% c("Bacillaceae","Bacillus","Corynebacter
                                           "Clostridiaceae","Clostridium","Enterococcus",
                                           "Escherichia","Lactococcus","Pseudomonas","Staphylococcus","Streptococcus")),
       path.out = file.path(path,"deseq_table/PMAnoOther"))
+
+
+# Define function for Gentle cell lysis methods (ps7)
+Phase3DA <- function(ps, path.out) {
+  sample_data(ps)$For_AVE <- factor(sample_data(ps)$For_AVE)
+  psdds <- phyloseq_to_deseq2(ps, design = ~ For_AVE)
+  geoMeans <- apply(counts(psdds), 1, gmMean)
+  psdds <- estimateSizeFactors(psdds, geoMeans = geoMeans)
+  
+  dds <- DESeq(psdds, test = "Wald", fitType = "local") 
+  plotDispEsts(dds, ylim = c(1e-6, 1e2)) 
+  alpha <- 0.1 #  padj for indepenent filtering and expect FDR < alpha
+  resB5 <- results(dds, contrast = c("For_AVE", "Expected", "Total_Bead_beating_"),
+                   alpha = alpha, lfcThreshold = log2(1.5), altHypothesis = "greaterAbs")
+  resB5R <- results(dds, contrast = c("For_AVE", "Expected", "Total_Bead_beating_Rnase_ammonium_acetate"),
+                    alpha = alpha, lfcThreshold = log2(1.5), altHypothesis = "greaterAbs")
+  resC2B5 <- results(dds, contrast = c("For_AVE", "Expected", "Total_Chemical_Bead_beating_"),
+                     alpha = alpha, lfcThreshold = log2(1.5), altHypothesis = "greaterAbs")
+  resC2B5R <- results(dds, contrast = c("For_AVE", "Expected", "Total_Chemical_Bead_beating_Rnase_ammonium_acetate"),
+                      alpha = alpha, lfcThreshold = log2(1.5), altHypothesis = "greaterAbs")
+  resV3 <- results(dds, contrast = c("For_AVE", "Expected", "Total_Vortex_"),
+                   alpha = alpha, lfcThreshold = log2(1.5), altHypothesis = "greaterAbs")
+  resV3R <- results(dds, contrast = c("For_AVE", "Expected", "Total_Vortex_Rnase_ammonium_acetate"),
+                    alpha = alpha, lfcThreshold = log2(1.5), altHypothesis = "greaterAbs")
+  resC2V3 <- results(dds, contrast = c("For_AVE", "Expected", "Total_Chemical_Vortex_"),
+                     alpha = alpha, lfcThreshold = log2(1.5), altHypothesis = "greaterAbs")
+  resC2V3R <- results(dds, contrast = c("For_AVE", "Expected", "Total_Chemical_Vortex_Rnase_ammonium_acetate"),
+                      alpha = alpha, lfcThreshold = log2(1.5), altHypothesis = "greaterAbs")
+  resB5P <- results(dds, contrast = c("For_AVE", "Expected", "Microbiome_Bead_beating_"),
+                    alpha = alpha, lfcThreshold = log2(1.5), altHypothesis = "greaterAbs")
+  resB5RP <- results(dds, contrast = c("For_AVE", "Expected", "Microbiome_Bead_beating_Rnase_ammonium_acetate"),
+                     alpha = alpha, lfcThreshold = log2(1.5), altHypothesis = "greaterAbs")
+  resC2B5P <- results(dds, contrast = c("For_AVE", "Expected", "Microbiome_Chemical_Bead_beating_"),
+                      alpha = alpha, lfcThreshold = log2(1.5), altHypothesis = "greaterAbs")
+  resC2B5RP <- results(dds, contrast = c("For_AVE", "Expected", "Microbiome_Chemical_Bead_beating_Rnase_ammonium_acetate"),
+                       alpha = alpha, lfcThreshold = log2(1.5), altHypothesis = "greaterAbs")
+  resV3P <- results(dds, contrast = c("For_AVE", "Expected", "Microbiome_Vortex_"),
+                    alpha = alpha, lfcThreshold = log2(1.5), altHypothesis = "greaterAbs")
+  resV3RP <- results(dds, contrast = c("For_AVE", "Expected", "Microbiome_Vortex_Rnase_ammonium_acetate"),
+                     alpha = alpha, lfcThreshold = log2(1.5), altHypothesis = "greaterAbs")
+  resC2V3P <- results(dds, contrast = c("For_AVE", "Expected", "Microbiome_Chemical_Vortex_"),
+                      alpha = alpha, lfcThreshold = log2(1.5), altHypothesis = "greaterAbs")
+  resC2V3RP <- results(dds, contrast = c("For_AVE", "Expected", "Microbiome_Chemical_Vortex_Rnase_ammonium_acetate"),
+                       alpha = alpha, lfcThreshold = log2(1.5), altHypothesis = "greaterAbs")
+  
+  f <- function(res){
+    mcols(res, use.names = TRUE)
+    sigtab <- res[which(res$padj < alpha), ]
+    cbind(as(sigtab, "data.frame"), as(tax_table(ps)[rownames(sigtab), ], "matrix"))
+  }
+  
+  sigtabB5 <- f(resB5)
+  sigtabB5R <- f(resB5R)
+  sigtabC2B5 <- f(resC2B5)
+  sigtabC2B5R <- f(resC2B5R)
+  sigtabV3 <- f(resV3)
+  sigtabV3R <- f(resV3R) 
+  sigtabC2V3 <- f(resC2V3)
+  sigtabC2V3R <- f(resC2V3R)
+  sigtabB5P <- f(resB5P) 
+  sigtabB5RP <- f(resB5RP)
+  sigtabC2B5P <- f(resC2B5P)
+  sigtabC2B5RP <- f(resC2B5RP) 
+  sigtabV3P <- f(resV3P)
+  sigtabV3RP <- f(resV3RP)
+  sigtabC2V3P <- f(resC2V3P)   
+  sigtabC2V3RP <- f(resC2V3RP)  
+  
+  dir.create(path.out, recursive = TRUE)
+  if (nrow(resB5) > 0) write.csv(resB5, file.path(path.out, "resB5.csv"))
+  if (nrow(resB5R) > 0) write.csv(resB5R, file.path(path.out, "resB5R.csv"))
+  if (nrow(resC2B5) > 0) write.csv(resC2B5, file.path(path.out, "resC2B5.csv"))
+  if (nrow(resC2B5R) > 0) write.csv(resC2B5R, file.path(path.out, "resC2B5R.csv"))
+  if (nrow(resV3) > 0) write.csv(resV3, file.path(path.out, "resV3.csv"))
+  if (nrow(resV3R) > 0) write.csv(resV3R, file.path(path.out, "resV3R.csv"))
+  if (nrow(resC2V3) > 0) write.csv(resC2V3, file.path(path.out, "resC2V3.csv"))
+  if (nrow(resC2V3R) > 0) write.csv(resC2V3R, file.path(path.out, "resC2V3R.csv"))
+  if (nrow(resB5P) > 0) write.csv(resB5P, file.path(path.out, "resB5P.csv"))
+  if (nrow(resB5RP) > 0) write.csv(resB5RP, file.path(path.out, "resB5RP.csv"))
+  if (nrow(resC2B5P) > 0) write.csv(resC2B5P, file.path(path.out, "resC2B5P.csv"))
+  if (nrow(resC2B5RP) > 0) write.csv(resC2B5RP, file.path(path.out, "resC2B5RP.csv"))
+  if (nrow(resV3P) > 0) write.csv(resV3P, file.path(path.out, "resV3P.csv"))
+  if (nrow(resV3RP) > 0) write.csv(resV3RP, file.path(path.out, "resV3RP.csv"))
+  if (nrow(resC2V3P) > 0) write.csv(resC2V3P, file.path(path.out, "resC2V3P.csv"))
+  if (nrow(resC2V3RP) > 0) write.csv(resC2V3RP, file.path(path.out, "resC2V3RP.csv"))
+}
+
+Phase3DA(psList[[7]], path.out = file.path(path,"deseq_table/phase3"))
 ```
 
 
@@ -508,6 +693,26 @@ DistBox <- function(df, DistMethod,lvl,facet.variable = NULL,ref = NULL,comp=NUL
 }
 
 
+# Plot for ps3
+## DNA extraction using 3 kits (Total, Core, Ultra)
+Bray.3kits <- read.csv(file.path(path,"distance/organized_bray_3_3kits.csv"))
+DistBox(Bray.3kits, DistMethod = "Bray-Curtis dissimilarity",
+        lvl = c("Total_Bead_beating_6.5_2min","Total_Vortex_NA","Total_Chemical_NA",
+                "Core_Bead_beating_6.5_2min","Core_Vortex_","Core_Chemical_",
+                "Ultra2_Bead_beating_6.5_2min","Ultra2_Vortex_","Ultra2_Chemical_"),
+        ref = "Total_Bead_beating_6.5_2min",
+        path.out = file.path(path,"distance/Bray.3kits.pdf"), w = 5, h = 2.8)
+
+weighted.3kits <- read.csv(file.path(path,"distance/organized_weighted_3_3kits.csv"))
+DistBox(weighted.3kits, DistMethod = "Weighted UniFrac distance",
+        lvl = c("Total_Bead_beating_6.5_2min","Total_Vortex_NA","Total_Chemical_NA",
+                "Core_Bead_beating_6.5_2min","Core_Vortex_","Core_Chemical_",
+                "Ultra2_Bead_beating_6.5_2min","Ultra2_Vortex_","Ultra2_Chemical_"),
+        ref = "Total_Bead_beating_6.5_2min",
+        path.out = file.path(path,"distance/Weighted.3kits.pdf"), w = 5, h = 2.8)
+
+
+# Plot for ps7
 ## DNA extration from Phase 3 (distance from the expected value)
 Bray.ext <- read.csv(file.path(path, "distance/organized_distance_extraction_bray.csv"))
 DistBox(Bray.ext, DistMethod = "Bray-Curtis dissimilarity",
@@ -528,6 +733,7 @@ DistBox(weighted.ext, DistMethod = "Weighted UniFrac distance",
         path.out = file.path(path,"distance/Weigted.ext.pdf"), w = 8, h = 4.5)
 
 
+# Plot for ps6
 ## Milk vol extraction sample variability (intra-sample distance)
 Bray.vol <- read.csv(file.path(path,"distance/organized_bray_6.csv"))
 DistBox(Bray.vol, DistMethod = "Bray-Curtis dissimilarity", 
