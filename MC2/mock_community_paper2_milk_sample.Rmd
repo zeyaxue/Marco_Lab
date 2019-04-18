@@ -42,6 +42,7 @@ ps.Phy.REC <- RECps(ps.Phy05@tax_table, ps.Phy05)
 ps.Phy.REC # 46 taxa and 10 samples
 ps.REC.glom <- tax_glom(ps.Phy.REC, taxrank = "REC", NArm = FALSE)
 ps.REC.glom #  23 taxa and 10 samples # for taxa analysis
+saveRDS(ps.REC.glom, file.path(path, "ps.milk.rds"))
 ```
 No rarefaction needed. 
 
@@ -121,4 +122,5 @@ TaxBar(ps.REC.glom, var1 = "SampleID", var2 = "milk.sample",
 
 
 ```
+
 
