@@ -537,7 +537,7 @@ FoldDot <- function(ps, var1, var2, lvl = NULL, lvl2 = NULL, w, h, path.out) {
 
   pdf(path.out, width = w, height = h)
   print(ggplot(TaxTab2_agg, aes(x = get(var1), y = REC)) +
-          geom_point(aes(size = Abundance, color = Abundance)) +
+          geom_point(aes(size = abs(Abundance), color = Abundance)) +
           scale_size(range = c(2, 8))+
           scale_color_gradientn(colors = colorRampPalette(c( "#B2182B", "#D6604D", 
                                "#FDDBC7", "#FFFFFF", "#D1E5F0", "#92C5DE",
@@ -1211,6 +1211,7 @@ otu.q3 <- as.matrix(otu.q3)
 ps4q <- phyloseq(otu_table(otu.q3, taxa_are_rows = FALSE), tax_table(ps4q),
                  sample_data(ps4q), phy_tree(ps4q))
 ps4q
+FeatTab(ps4q) %>% write.csv(file.path(path,"qPCR/FeatTab_ps4q.csv"))
 
 # Plot for AVE ps4q, stacked bar after adjusting for qPCR counts
 ## Take average of samples by catergory "For_AVE"
@@ -1222,7 +1223,17 @@ TaxBar(ps4q.merge,
        lvl = c("Expected","Untreated","Live","Half","Dead"),
        path.out = file.path(path, "feature_table/ps4_For_AVE_qPCR.pdf"),4.5,5.5)
 
-
+# Plot for percent of untreated for each strain
+PMC.strain <- read.csv(file.path(path,"qPCR/FeatTab_ps4q_manual.csv"))
+PMC.strain$Treatment <- factor(PMC.strain$Treatment, levels = c("Live", "Half", "Dead"))
+pdf(file.path(path, "qPCR/PMC.strain.pdf"), 6.5, 4.8)
+print(ggboxplot(subset(PMC.strain, PerOf_untreated != "NA"), 
+                x = "Treatment", y = "PerOf_untreated", color = "Treatment",
+                facet.by = "Taxon", scale = "free_y",
+                font.label = list(size = 18, face = "plain"), 
+                palette = "jco", ggtheme = theme_bw()) +
+        stat_compare_means(method = "kruskal.test", hide.ns = TRUE,  label = "p.signif"))
+dev.off()
 ```
 
 
