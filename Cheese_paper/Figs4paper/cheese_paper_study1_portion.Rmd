@@ -440,3 +440,42 @@ CheeseOutcomeDA(subset_samples(ps.milk4Y, SampleType %in% "HTST_milk"),
 ```
 
 
+## Animation
+```{r}
+GifBar <- function(ps, taxa, mycol, samType, lvl=NULL) {
+  TaxTab <- tax_table(ps) %>% as.data.frame()
+  taxa_names(ps) <- TaxTab$REC
+  allTaxa <- taxa_names(ps)
+  ps.notaxa <- prune_taxa(allTaxa[!(allTaxa %in% taxa)], ps)
+  taxa.filt <- ps.notaxa@tax_table[,7] %>% as.character() # 7 for REC level 
+  
+  # change the taxa that are not within the 13 common taxa to "Other" 
+  TaxTab2 <- psmelt(ps)
+  # merge/average per SampleType and CheeseOutcome
+  TaxTab2_agg <- ddply(TaxTab2, c("SampleType", "CollectionTime", "REC"),
+                       summarise,
+                       mean = mean(Abundance))
+  TaxTab2_agg$REC <- as.character(TaxTab2_agg$REC)
+  TaxTab2_agg[TaxTab2_agg$REC %in% taxa.filt,]$REC <- "Other"
+  TaxTab2_agg$REC <- factor(TaxTab2_agg$REC, levels = taxa)
+  TaxTab2_agg$SampleType <- factor(TaxTab2_agg$SampleType, levels = lvl)
+  
+  theme_set(theme_bw()) 
+  p1 <- ggplot(TaxTab2_agg, aes(x = CollectionTime, y = mean, fill = REC, frame = CollectionTime, cumulative = TRUE)) +
+    facet_wrap(~SampleType, scales = "fixed")+
+    geom_bar(stat = "identity") + # position = "fill" is for making the bar 100% 
+    scale_fill_manual(values = mycol)+
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))+
+    guides(fill = guide_legend(reverse = FALSE, keywidth = 1, keyheight = 1)) +
+    ylab("Log 16S rRNA gene copy/mL") +
+    ggtitle("PMA treated samples") +
+    theme(text = element_text(size = 15))
+   (gganimate(p1, interval = 1)) %>% print() 
+}
+
+GifBar(ps.milkqY, lvl = c("HTST_feed","HTST_milk"),
+       taxa = comm17, mycol = col17, samType = "PMA treated")
+
+```
+To save the output gif, on my MacOS, click export –> save as web page –> go to the saved web page and save image as GIF.
+
