@@ -1,0 +1,433 @@
+---
+title: "pilot_cheese_inoculation_sequencing"
+author: "Zeya Zhengyao Xue"
+date: "2/6/2019"
+output: rmarkdown::github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(fig.path = "figs/")
+```
+
+This is the file to analysis pilot cheese project, including 
+1. pilot cheeses （high level isolate inoculation）
+2. milk and cheeese where the isolates are from
+
+## Setting up packages and working directory 
+```{r}
+library(phyloseq);packageVersion("phyloseq")
+library(tidyr)
+library(ggplot2)
+library(reshape2)
+library(plyr)
+library(dplyr)
+library(PMCMR)
+library(vegan)
+library(RColorBrewer)
+library(superheat)
+library(DESeq2);packageVersion("DESeq2")
+
+path <- "~/Google Drive File Stream/My Drive/UC_Davis/Marco_lab/milk_microbiota/2017_Hilmar_sampling/Sequencing/QIIME2/"
+```
+
+
+## Import QIIME2 output and make phyloseq object
+```{r}
+# Transpose the QIIME2 output in excel
+SeqTab <- read.table(file.path(path,"Jan/feature-table-mc2.txt"), header = TRUE, stringsAsFactors = FALSE)
+colnames(SeqTab) <- gsub("X","",colnames(SeqTab))
+row.names(SeqTab) <- SeqTab$OTUID
+SeqTab <- SeqTab[,-1]
+SeqTab <- as.matrix.data.frame(SeqTab)
+
+# Parse out taxonomic assignment in excel and remove confidence column
+TaxTab <- read.csv(file.path(path,"Jan/taxonomy-mc2.csv"))
+# remove species column
+TaxTab <- subset(TaxTab, select = -c(Species))
+# organized as a matrix for phyloseq import
+rownames(TaxTab) <- TaxTab$Feature.ID
+TaxTab <- TaxTab[,-1]
+TaxTab <- as.matrix.data.frame(TaxTab)
+
+# Read in metadata file
+# In the samdf file, L.fermentum R2 was removed due to potential contamination from 
+samdf <- read.csv(file.path(path,"Jan/samdf_Jan_2019.csv"))
+rownames(samdf) <- samdf$SampleID
+
+# Read in exported rooted tree 
+tree <- read_tree(file.path(path, "Jan/tree.nwk"))
+
+### Merge as one phyloseq object
+ps <- phyloseq(otu_table(SeqTab,taxa_are_rows = TRUE), tax_table(TaxTab), sample_data(samdf), phy_tree(tree))
+ps # 282 taxa and 29 samples
+
+
+
+```
+
+## Filter ASVs based on taxonomy and abundance 
+```{r}
+# Show available ranks in the dataset
+rank_names(ps)
+# Create table, number of features for each phylum
+table(tax_table(ps)[, "Phylum"], exclude = NULL)
+# remove asv that was not assigned at phylum level
+ps.Phy <- subset_taxa(ps, !is.na(Phylum) & !Phylum %in% c("","None"))
+ps.Phy #  279 taxa and 29 samples 
+# Explore abundance to decide filter threshold
+## Compute prevalence of each feature, store as data.frame
+prevdf <- apply(X = otu_table(ps.Phy),
+                MARGIN = ifelse(taxa_are_rows(ps.Phy), yes = 1, no = 2),
+                FUN = function(x)(sum(x>0)))
+# Add taxonomy and total read counts to this data.frame
+prevdf <- data.frame(Prevalence = prevdf,
+                     TotalAbundance = taxa_sums(ps.Phy),
+                     tax_table(ps.Phy))
+# plot the abudance per phylum 
+ggplot(prevdf, aes(TotalAbundance, Prevalence / nsamples(ps.Phy),color=Phylum)) +
+  # Include a guess for parameter
+  geom_hline(yintercept = 0.01,  linetype = 2) + geom_point(size = 2, alpha = 0.7) +
+  scale_x_log10() +  xlab("Total Abundance") + ylab("Prevalence [Frac. Samples]") +
+  facet_wrap(~Phylum) + theme(legend.position="none")
+
+# Remove very low abudance ASVs independent of sample prevalence
+x = taxa_sums(ps.Phy)
+keepTaxa = which((x / sum(x)) > 0.00005)
+ps.Phy05 <- prune_taxa(names(keepTaxa), ps.Phy)
+ps.Phy05 # 175 taxa and 29 samples
+```
+
+## Determine rarefaction level for Alpha and Beta analysis later on
+```{r}
+set.seed(123)
+# Read in function to calculate alpha diversity and rarefaction levels
+calculate_rarefaction_curves <- dget(file.path("~/src/Marco_Lab/FUN_calculate_rarefaction.R"))
+rarefaction_curve_data <- calculate_rarefaction_curves(ps.Phy, c("Observed", "Shannon","Simpson","Chao1"), 
+                                                       rep(c(1, 1000, 2500, 4000, 6000, 10000, 20000), each = 10))
+rarefaction_curve_data$SampleID <- gsub("X","",rarefaction_curve_data$SampleID)
+# summarize alpha diversity
+rarefaction_curve_data_summary <- ddply(rarefaction_curve_data, c('Depth', 'SampleID', 'measures'),
+                                        summarise, 
+                                        Alpha_diversity_mean = mean(Alpha_diversity), 
+                                        Alpha_diversity_sd = sd(Alpha_diversity))
+# Add sample data
+rarefaction_curve_data_summary_verbose <- merge(rarefaction_curve_data_summary, 
+                                                data.frame(sample_data(ps.Phy)), 
+                                                by.x = 'SampleID', by.y = 'row.names')
+rarefaction_curve_data_summary_verbose <- rarefaction_curve_data_summary_verbose[, -1]
+# plot out rarefaction curve
+ggplot(rarefaction_curve_data_summary_verbose, aes(x = Depth, y = Alpha_diversity_mean, 
+                                                   ymin = Alpha_diversity_mean - Alpha_diversity_sd, 
+                                                   ymax = Alpha_diversity_mean + Alpha_diversity_sd,
+                                                   color = SampleID, group = SampleID)) +
+  scale_fill_brewer(palette = "Set2") + 
+  geom_line()+
+  geom_pointrange(size=0.1)+
+  facet_wrap(facets = ~ measures, scales = "free")
+# export the library size to a csv file
+write.csv(sample_sums(ps.Phy05), file.path(path, "Jan/library_size_ps.Phy05.csv"))
+
+# The diversity leveled out after 2000 seqs per sample, rarefy at 6100 reads
+# to keep the sample with the fewest reads
+```
+
+
+## Divide the ps object for milk and cheese
+### For taxonomy analysis based on "ps.REC.glom"
+The goal is to 
+(1) Confirm that the isolates do exist in the milk that they were isolated from 
+(2) The pilot cheeses made with the isolate had similar slit profile 
+(3) the milk containing the isolates had similar slits profile compared to study 1
+[but I don't have no slits samples from the same cheese study 2]
+```{r}
+# Clean up the taxonomy level
+#make the deepest taxonomic identification in TaxTab as the recommened taxonomy (REC)
+RECps <- dget("~/src/Marco_Lab/FUN_RECps.R") # Read in RECps function
+ps.Phy.REC <- RECps(ps.Phy05@tax_table, ps.Phy05)
+ps.Phy.REC # 175 taxa and 29 samples
+ps.REC.glom <- tax_glom(ps.Phy.REC, taxrank = "REC", NArm = FALSE)
+ps.REC.glom #  85 taxa and 29 samples 
+
+# Subset to contain milk samples 
+ps.milk <- subset_samples(ps.REC.glom, SampleType %in% c("HTST_feed", "HTST_milk"))
+ps.milk #  85 taxa and 18 samples 
+# Merge with ps.milk from cheese study 1 as well
+
+
+# Subset to contain cheese samples ()
+ps.cheese <- subset_samples(ps.REC.glom, SampleType %in% "Pilot_cheese_5D")
+ps.cheese #  85 taxa and 11 samples 
+ps.cheese.noL <- subset_taxa(ps.cheese, !Genus %in% "Lactococcus")
+ps.cheese.noL # 84 taxa and 11 samples
+
+# Define function to make Bar plots 
+#### Bar plot #####
+SlitBar <- function(ps, var1, var2, taxa, lvl1, lvl2, mycol, path.out, w, h){  
+  ps <- ps %>% transform_sample_counts(function(x) x/sum(x) ) 
+  
+  TaxTab <- tax_table(ps) %>% as.data.frame()
+  taxa_names(ps) <- TaxTab$REC
+  allTaxa <- taxa_names(ps)
+  ps.other <- prune_taxa(allTaxa[!(allTaxa %in% taxa)], ps)
+  taxa.other <- ps.other@tax_table[,7] %>% as.character() # 7 for REC level  
+  
+  # change the taxa that are not the expected taxa to "Other" 
+  TaxTab2 <- psmelt(ps)
+  # merge/average per Sample and CheeseOutcome
+  TaxTab2_agg <- ddply(TaxTab2, c(var1, var2, "REC"),
+                       summarise,
+                       mean = mean(Abundance))
+  colnames(TaxTab2_agg)[1] <- var1
+  colnames(TaxTab2_agg)[2] <- var2
+  TaxTab2_agg$REC <- as.character(TaxTab2_agg$REC)
+  TaxTab2_agg[TaxTab2_agg$REC %in% taxa.other,]$REC <- "Other"
+  
+  # Set orders for taxonomy and sample
+  TaxTab2_agg$REC <- factor(TaxTab2_agg$REC, levels = taxa)
+  TaxTab2_agg[[var1]] <- factor(TaxTab2_agg[[var1]], levels = lvl1)
+  TaxTab2_agg[[var2]] <- factor(TaxTab2_agg[[var2]], levels = lvl2)
+  
+  pdf(path.out, w, h)
+  p <- ggplot(TaxTab2_agg, aes(x = get(var1), y = mean, fill = REC)) +
+    geom_bar(stat = "identity") + 
+    scale_fill_manual(values = mycol)+
+    theme_bw(base_size = 20) +
+    facet_grid(~ get(var2), scales = "free_x")+
+    # Remove x axis title
+    theme(axis.title.x = element_blank(), axis.text.x = element_text(angle = 0, hjust = 1),
+          text = element_text(size = 16)) + 
+    guides(fill = guide_legend(reverse = FALSE, keywidth = 1, keyheight = 1)) +
+    ylab("Relative abundance")
+  
+  # convert ggplot object to grob object
+  gp <- ggplotGrob(p)
+  # optional: take a look at the grob object's layout 
+  # gtable::gtable_show_layout(gp)
+  # get gtable columns corresponding to the facets 
+  facet.columns <- gp$layout$l[grepl("panel", gp$layout$name)]
+  # get the number of unique x-axis values per facet (1 & 3, in this case)
+  x.var <- sapply(ggplot_build(p)$layout$panel_scales_x, 
+                  function(l) length(l$range$range))
+  # change the relative widths of the facet columns based on how many unique 
+  # x-axis values are in each facet
+  gp$widths[facet.columns] <- gp$widths[facet.columns] * x.var
+  # plot result
+  grid::grid.draw(gp)
+  dev.off()
+}
+
+comm17 <- c("Acinetobacter", "Bacillus", "Bacillaceae", "Clostridium", 
+            "Clostridiaceae", "Clostridiales", "Enterobacteriaceae", "Lactococcus", 
+            "Lactobacillus", "Lactobacillaceae","Leuconostoc", "Pseudomonas",
+            "Staphylococcus", "Streptococcus", "Thermus", "Turicibacter", "Other")
+col17 <- c("#A6CEE3", "#438EC0", "#1f78b4","#b3e2cd", 
+           "#98D277", "#3BA432", "#B89B74", "#E62F27", 
+           "#F16667", "#fbb4ae", "#F9A963", "#ff7f00", 
+           "#C3AAD2", "#7D54A5", "#B9A499", "#EAD27A", "#B15928")
+SlitBar(ps.milk, var1 = "CollectionGroup", var2 = "SampleType",
+        lvl1 = c("Beginning","Middle","End"),
+        lvl2 = c("HTST_feed","HTST_milk"),
+        taxa = comm17, mycol = col17, 
+        path.out = file.path(path, "figs/milk_CollectionGroup_SampleType.pdf"), 6.8, 5.5)
+SlitBar(ps.milk, var2 = "SampleType", var1 = "PMA.treatment",
+        lvl2 = c("HTST_feed","HTST_milk"),
+        lvl1 = c("N"),
+        taxa = comm17, mycol = col17, 
+        path.out = file.path(path, "figs/milk_SampleType.pdf"), 4.8, 5.5)
+#SlitBar(ps.cheese, var1 = "Bacterial_isolate", var2 = "SampleType",
+#        taxa = comm16, mycol = col16,
+#        path.out = file.path(path, "figs/cheese_Bacterial_isolate_SampleType.pdf"), 6, 9)
+SlitBar(ps.cheese, var1 = "Species", var2 = "SampleType",
+        lvl1 = c("Saline","Lactobacillus plantarum","Lactobacillus fermentum ",
+                 "Leuconostoc lactis ","Leuconostoc mesenteroides "),
+        lvl2 = c("Pilot_cheese_5D"),
+        taxa = comm17, mycol = col17,
+        path.out = file.path(path, "figs/cheese_Species_SampleType.pdf"), 6, 5.5)
+
+# comm16 doesn't have Lactococcus 
+comm16 <- c("Acinetobacter", "Bacillus", "Bacillaceae", "Clostridium", 
+            "Clostridiaceae", "Clostridiales", "Enterobacteriaceae", 
+            "Lactobacillus", "Lactobacillaceae","Leuconostoc", "Pseudomonas",
+            "Staphylococcus", "Streptococcus", "Thermus", "Turicibacter", "Other")
+col16 <- c("#A6CEE3", "#438EC0", "#1f78b4","#b3e2cd", 
+           "#98D277", "#3BA432", "#B89B74", 
+           "#F16667", "#fbb4ae", "#F9A963", "#ff7f00", 
+           "#C3AAD2", "#7D54A5", "#B9A499", "#EAD27A", "#B15928")
+```
+
+
+# DESeq2 
+```{r}
+# calculate geometric means prior to estimate size factors
+gmMean = function(x, na.rm=TRUE){
+  exp(sum(log(x[x > 0]), na.rm=na.rm) / length(x))
+}
+# Cheese Outcome Differential abundance and generate diagnostic plots and write sig tables 
+## fold change is 1. sample groups compare with saline 2. sample vs Lp
+## Uses default Benjamini-Hochberg pvalue adjust
+HighIsoCheeseDA <- function(ps) {
+  sample_data(ps)$Species <- factor(sample_data(ps)$Species)
+  psdds <- phyloseq_to_deseq2(ps, design = ~ Species)
+  
+  geoMeans <- apply(counts(psdds), 1, gmMean)
+  psdds <- estimateSizeFactors(psdds, geoMeans = geoMeans)
+  dds <- DESeq(psdds, test = "Wald", fitType = "local") 
+  plotDispEsts(dds, ylim = c(1e-6, 1e2)) 
+  alpha <- 0.1 #  padj for indepenent filtering and expect FDR < alpha
+  
+  resSLf <- results(dds, contrast = c("Species", "Saline", "Lactobacillus fermentum "),
+                    alpha = alpha, lfcThreshold = 0, altHypothesis = "greaterAbs")
+  resSLl <- results(dds, contrast = c("Species", "Saline", "Leuconostoc lactis "),
+                    alpha = alpha, lfcThreshold = 0, altHypothesis = "greaterAbs")
+  resSLm <- results(dds, contrast = c("Species", "Saline", "Leuconostoc mesenteroides "),
+                    alpha = alpha, lfcThreshold = 0, altHypothesis = "greaterAbs")
+  resLpLf <- results(dds, contrast = c("Species", "Lactobacillus plantarum", 
+                                       "Lactobacillus fermentum "),
+                     alpha = alpha, lfcThreshold = 0, altHypothesis = "greaterAbs")
+  resLpLl <- results(dds, contrast = c("Species", "Lactobacillus plantarum", 
+                                       "Leuconostoc lactis "),
+                     alpha = alpha, lfcThreshold = 0, altHypothesis = "greaterAbs")
+  resLpLm <- results(dds, contrast = c("Species", "Lactobacillus plantarum", 
+                                       "Leuconostoc mesenteroides "),
+                     alpha = alpha, lfcThreshold = 0, altHypothesis = "greaterAbs")  
+ 
+  # Define function to write out csv tables 
+  f <- function(res, path.out){
+    mcols(res, use.names = TRUE)
+    sigtab <- res
+    if (nrow(sigtab) > 0){
+      sigtab <- cbind(as(sigtab, "data.frame"), 
+                      as(tax_table(ps)[rownames(sigtab), ], "matrix"))
+      write.csv(sigtab, file.path(path.out))
+    }
+  }
+  
+  f(resSLf, file.path(path, "DESeqTab/High_resSLf.csv"))
+  f(resSLl, file.path(path, "DESeqTab/High_resSLl.csv"))
+  f(resSLm, file.path(path, "DESeqTab/High_resSLm.csv"))
+  f(resLpLf, file.path(path, "DESeqTab/High_resLpLf.csv"))
+  f(resLpLl, file.path(path, "DESeqTab/High_resLpLl.csv"))
+  f(resLpLm, file.path(path, "DESeqTab/High_resLpLm.csv"))
+}
+
+HighIsoCheeseDA(ps.cheese)
+```
+
+
+## Prportion analysis of isolates
+```{r}
+ps.iso <- subset_taxa(ps.milk %>% transform_sample_counts(function(x) x/sum(x)),  
+                      REC %in% c("Lactobacillus", "Lactobacillaceae", "Leuconostoc"))
+ps.iso # 3 taxa and 18 samples
+
+IsoBar <- function(ps, var1, var2, lvl1, lvl2, mycol, path.out, w, h){
+  TaxTab.iso <- psmelt(ps) 
+  TaxTab.iso_agg <- ddply(TaxTab.iso, c(var1, var2, "REC"), 
+                           summarise,
+                           N = length(Abundance),
+                           mean = mean(Abundance),
+                           sd = sd(Abundance),
+                           se = sd / sqrt(N))
+  
+  # merge/average per var1 and var2
+  colnames(TaxTab.iso_agg)[1] <- var1
+  colnames(TaxTab.iso_agg)[2] <- var2
+  
+  # Set orders for taxonomy and sample
+  TaxTab.iso_agg$REC <- factor(TaxTab.iso_agg$REC, levels = c("Lactobacillus", 
+                                                              "Lactobacillaceae",
+                                                              "Leuconostoc"))
+  TaxTab.iso_agg[[var1]] <- factor(TaxTab.iso_agg[[var1]], levels = lvl1)
+  TaxTab.iso_agg[[var2]] <- factor(TaxTab.iso_agg[[var2]], levels = lvl2)
+  
+  pdf(path.out, w, h)
+  print(ggplot(TaxTab.iso_agg, aes(x = get(var1), y = mean, fill = REC)) +
+      geom_bar(stat = "identity", position = "dodge") + 
+      geom_errorbar(aes(ymin = mean-se, ymax = mean+se), 
+                    width = 0.8, position = position_dodge(.9)) +
+      scale_fill_manual(values = mycol)+
+      theme_bw(base_size = 20) +
+      facet_grid(~ get(var2), scales = "free_x")+
+      # Remove x axis title
+      theme(axis.title.x = element_blank(), 
+            axis.text.x = element_text(angle = 0, hjust = 1), 
+            text = element_text(size = 16)) + 
+      guides(fill = guide_legend(reverse = FALSE, keywidth = 1, keyheight = 1)) +
+      ylab("Relative abundance"))
+  dev.off()
+}
+
+IsoBar(ps.iso, var2 = "SampleType", var1 = "Species", 
+       mycol = c("#F16667", "#fbb4ae", "#F9A963"),
+       lvl2 = c("HTST_feed","HTST_milk"), 
+       lvl1 = c("Lactobacillus fermentum ",
+                "Leuconostoc lactis ",
+                "Leuconostoc mesenteroides "), 
+       path.out = file.path(path, "figs/Isolates_in_milk.pdf"), 6, 5.5)
+
+# Box plot 
+## This is the figure I decided to use in paper 
+TaxTab.iso <- psmelt(subset_samples(ps.iso, SampleID %in% c("3490","3498","3502",
+                                                            "3504","3512","3518",
+                                                            "3850","3860","3872")))
+                                    # subset to contain directly linked milk samples with isolates
+# Subset to contain taxa that were directly linked with isolates in milk
+index.Lb <- which(with(TaxTab.iso, Species %in% "Lactobacillus fermentum " & 
+                         REC %in% c("Lactobacillus","Lactobacillaceae") & 
+                         SampleType %in% "HTST_milk"))
+index.Lm <- which(with(TaxTab.iso, Species %in% "Leuconostoc mesenteroides " & 
+                         REC %in% "Leuconostoc" &  SampleType %in% "HTST_feed"))
+index.Ll <- which(with(TaxTab.iso, Species %in% "Leuconostoc lactis " & 
+                         REC %in% "Leuconostoc" &  SampleType %in% "HTST_feed"))
+TaxTab.iso2 <- TaxTab.iso[c(index.Lb, index.Lm, index.Ll),]
+
+# Set orders for taxonomy and sample
+TaxTab.iso2$REC <- factor(TaxTab.iso2$REC, levels = c("Lactobacillus", 
+                                                      "Lactobacillaceae",
+                                                      "Leuconostoc"))
+pdf(file.path(path, "figs/Isolates_in_milk_box.pdf"), 6, 5.5)
+ggplot(TaxTab.iso2, aes(x = Species, y = Abundance, fill = REC)) +
+  geom_boxplot() + 
+  scale_fill_manual(values = c("Lactobacillus" = "#fbb4ae",
+                               "Lactobacillaceae" = "#F16667",
+                               "Leuconostoc" = "#F9A963"))+
+  theme_bw(base_size = 20) +
+  facet_grid(~ SampleType, scales = "free_x")+
+  # Remove x axis title
+  theme(axis.title.x = element_blank(), 
+        axis.text.x = element_text(angle = 0, hjust = 1), 
+        text = element_text(size = 16)) + 
+  guides(fill = guide_legend(reverse = FALSE, keywidth = 1, keyheight = 1)) +
+  ylab("Relative abundance")
+dev.off()
+```
+
+
+
+## Chemical analysis portion 
+```{r}
+chem <- read.csv(file.path(path,"Sample_chemical_analysis_subset.csv"))
+chemm <- melt(chem, id.vars = c("Marco_lab_sample_label",
+                                "Collection_group", "Cheese_D90_quality", 
+                                "Cheese_D90_slits", "Sample_type"),
+              na.rm = TRUE)
+
+
+pdf(file.path(path, "figs/Cheese90D_chem.pdf"), w = 6, h = 5.5)
+ggboxplot(subset(chemm, Sample_type == "Cheese_day90"), 
+          x = "Cheese_D90_slits", y = "value",
+          facet.by = "variable", scales = "free_y", 
+          fill = "Cheese_D90_slits", palette = c("#a6cee3","#1f78b4")) + 
+  stat_compare_means(method = "t.test", label =  "p.signif", hide.ns = TRUE)
+dev.off()
+
+pdf(file.path(path, "figs/Cheese5D_chem.pdf"), w = 6, h = 5.5)
+ggboxplot(subset(chemm, Sample_type == "Cheese_day5"), 
+          x = "Cheese_D90_slits", y = "value",
+          facet.by = "variable", scales = "free_y", 
+          fill = "Cheese_D90_slits", palette = c("#a6cee3","#1f78b4")) + 
+  stat_compare_means(method = "t.test", label =  "p.signif", hide.ns = TRUE)
+dev.off()
+```
+

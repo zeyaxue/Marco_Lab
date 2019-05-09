@@ -1,0 +1,102 @@
+---
+title: "Lacto-depletion1"
+author: "Zeya Xue"
+date: "5/1/2019"
+output: rmarkdown::github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(fig.path = "figs/")
+```
+
+## Setting up packages and working directory 
+```{r}
+library(phyloseq);packageVersion("phyloseq")
+library(vegan);packageVersion("vegan")
+library(ggplot2);packageVersion("ggplot2")
+library(ggpubr); packageVersion("ggpubr") #  ggplot2 based publication ready fig
+library(reshape2);packageVersion("reshape2")
+library(cowplot);packageVersion("cowplot")
+library(plyr)
+library(dplyr)
+
+path <- "~/Google Drive File Stream/My Drive/UC_Davis/Marco_lab/milk_microbiota/Depletion_Abundant_sequences/Agilent_SureSelect/sequencing/"
+```
+
+## Import pre-processed ps from march 2019 run with pilot cheese and Mock community
+```{r}
+ps.Phy05.rds <- readRDS(file.path("~/Google Drive File Stream/My Drive/UC_Davis/Marco_lab/milk_microbiota/2017_Hilmar_sampling/Sequencing/QIIME2/", "March/ps.Phy05.rds"))
+
+# subset to include only Lacto depletion samples
+samdf <- read.csv(file.path(path,"Lacto_samdf.csv"))
+rownames(samdf) <- samdf$SampleID
+ps.Phy05 <- phyloseq(sample_data(samdf), otu_table(ps.Phy05.rds), 
+                    tax_table(ps.Phy05.rds), phy_tree(ps.Phy05.rds))
+ps.Phy05 # 46 taxa and 32 samples # for alpha and beta
+# Clean up the taxonomy level
+#make the deepest taxonomic identification in TaxTab as the recommened taxonomy (REC)
+RECps <- dget("~/src/Marco_Lab/FUN_RECps.R") # Read in RECps function
+ps.Phy.REC <- RECps(ps.Phy05@tax_table, ps.Phy05)
+ps.Phy.REC # 46 taxa and 32 samples
+ps.REC.glom <- tax_glom(ps.Phy.REC, taxrank = "REC", NArm = FALSE)
+ps.REC.glom #  23 taxa and 32 samples # for taxa analysis
+saveRDS(ps.REC.glom, file.path(path, "ps.Lacto1.rds"))
+```
+
+## Taxa plot
+```{r}
+TaxBar <- function(ps, var1, var2, lvl = NULL, lvl2 = NULL, w, h, path.out){
+  ExpTaxa <- c("Acinetobacter", "Bacillus", "Bacillaceae", 
+               "Clostridiales", "Enterobacteriaceae",
+               "Lactococcus", "Lactobacillus", "Lactobacillaceae","Leuconostoc",
+               "Pseudomonas", "Staphylococcus", "Streptococcus", "Thermus",
+               "Turicibacter") 
+  
+  ps <-  ps %>% transform_sample_counts(function(x) x/sum(x) )  
+  TaxTab <- tax_table(ps) %>% as.data.frame()
+  taxa_names(ps) <- TaxTab$REC 
+  allTaxa <- taxa_names(ps)
+  ps.other <- prune_taxa(allTaxa[!(allTaxa %in% ExpTaxa)], ps)
+  taxa.other <- ps.other@tax_table[,7] %>% as.character() # 7 for REC level 
+  
+  # change the taxa that are not the expected taxa to "Other" 
+  TaxTab2 <- psmelt(ps)
+  # merge/average per Sample and CheeseOutcome
+  TaxTab2_agg <- aggregate(Abundance ~ TaxTab2[[var1]] + TaxTab2[[var2]] + REC,
+                           data = TaxTab2,
+                           mean)
+  colnames(TaxTab2_agg)[1] <- var1
+  colnames(TaxTab2_agg)[2] <- var2
+  TaxTab2_agg$REC <- as.character(TaxTab2_agg$REC)
+  TaxTab2_agg[TaxTab2_agg$REC %in% taxa.other,]$REC <- "Other"
+  
+  # Set colors for plotting
+  mycol = c("#A6CEE3", "#438EC0", "#1f78b4", 
+            "#3BA432", "#B89B74", "#E62F27", 
+           "#F16667", "#fbb4ae", "#F9A963", "#ff7f00", 
+           "#C3AAD2", "#7D54A5", "#B9A499", "#EAD27A", "#B15928")
+  
+  # Set orders for taxonomy and sampleID
+  TaxTab2_agg$REC = factor(TaxTab2_agg$REC, levels = c(ExpTaxa, "Other"))
+  if (!is.null(lvl)) TaxTab2_agg[[var1]] <- factor(TaxTab2_agg[[var1]], levels = lvl)
+  if (!is.null(lvl2)) TaxTab2_agg[[var2]] <- factor(TaxTab2_agg[[var2]], levels = lvl2)
+  
+  pdf(path.out, width = w, height = h)
+  p <- ggplot(TaxTab2_agg, aes(x = get(var1), y = Abundance, fill = REC)) +
+    facet_wrap(. ~ get(var2)) + 
+    geom_bar(stat = "identity") + 
+    scale_fill_manual(values = mycol)+
+    theme_bw(base_size = 15)+
+    guides(fill = guide_legend(reverse = FALSE, keywidth = 1, keyheight = 1)) +
+    ylab("Relative proportion")
+  
+  print(p)
+  dev.off()
+}
+
+TaxBar(ps.REC.glom, var1 = "SampleType", var2 = "SampleName",
+       lvl = c("Untreated ","Hybridization_buffer","Wash1","Wash2","Beads"),
+       path.out = file.path(path, "SampleType_SampleName.pdf"), w = 12, h = 6)
+```
+

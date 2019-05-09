@@ -1,0 +1,62 @@
+---
+title: "Lacto_depletion_analysis_new_kit"
+author: "Zeya Zhengyao Xue"
+date: "May 6, 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Setting up packages and working directory 
+```{r}
+library(ggplot2)
+library(reshape2)
+library(plyr)
+library(dplyr)
+
+path <- "~/Google Drive File Stream/My Drive/UC_Davis/Marco_lab/milk_microbiota/Depletion_Abundant_sequences/Agilent_SureSelect/NewKit_May2019/"
+```
+
+```{r}
+# Define function qPCR results of all samples 
+qPCR.Bar <- function(path.in, lvl, path.out, w, h){
+  qPCR.abun <- read.csv(path.in)
+  qPCR.abunm <- melt(qPCR.abun, id.vars = c("ID","SampleType","SampleName"),                   
+                     na.rm = TRUE)
+  qPCR.abunm$SampleType <- factor(qPCR.abunm$SampleType, 
+                                  levels = c("Untreated","Fragmentation",
+                                             "Treated","Wash1","Wash2","Beads"))
+  qPCR.abunm$SampleName <- factor(qPCR.abunm$SampleName, 
+                                  levels = lvl)
+  pdf(path.out, w, h)
+  print(ggplot(qPCR.abunm, aes(x = SampleType, y = value, fill = variable))+
+      facet_wrap(SampleName ~ ., scales = "fixed")+
+      geom_bar(stat = "identity", position = "fill")+
+      theme(axis.text.x = element_text(angle = 90)))
+  dev.off()
+}
+
+
+qPCR.Bar(path.in = file.path(path,"Newkit_Run1.csv"), 
+         lvl = c(paste0("N",c(1:6))), 
+         path.out = file.path(path,"Run1.pdf"), w = 6, h =6)
+
+
+```
+
+
+# Fold change
+```{r}
+fold <- read.csv(file.path(path,"Newkit_Run1_per_fold.csv"))
+foldm <- melt(fold, id.vars = "X", na.rm = TRUE, value.name = "Fold_Change")
+
+pdf(file.path(path, "Run1_fold_change.pdf"),  6, 6)
+ggplot(foldm, aes(x = variable, y = Fold_Change, fill = variable))+
+  facet_wrap(X ~ ., scales = "free_x")+
+  geom_bar(stat = "identity", position = "dodge")
+dev.off()
+```
+
+
