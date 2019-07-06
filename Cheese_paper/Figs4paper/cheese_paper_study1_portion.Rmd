@@ -324,6 +324,16 @@ Bar(ps.ChedN.noL, var1 = "SampleType",
     lvl1 = c("Cheese_0D","Cheese_30D","Cheese_90D", "Cheese_120D"),
     taxa = comm16, mycol = col16,
     path.out = file.path(path, "Mar_2019/ChedN_noL_sampletype.pdf"),6.5, 5.5)
+Bar(ps.ChedY.noL, var1 = "SampleType", 
+    lvl1 = c("Cheese_0D","Cheese_30D","Cheese_90D","Cheese_120D"),
+    taxa = c("Bacillus", "Lactobacillus", "Staphylococcus", "Streptococcus", "Turicibacter", "Other"), 
+    mycol = c("#438EC0", "#F16667", "#C3AAD2", "#7D54A5", "#EAD27A", "#B15928"),
+    path.out = file.path(path, "Mar_2019/ChedY_noL_sampletype_fewtaxa.pdf"),6.5,5.5)
+Bar(ps.ChedN.noL, var1 = "SampleType", 
+    lvl1 = c("Cheese_0D","Cheese_30D","Cheese_90D", "Cheese_120D"),
+    taxa = c("Bacillus", "Lactobacillus", "Staphylococcus", "Streptococcus", "Turicibacter", "Other"), 
+    mycol = c("#438EC0", "#F16667", "#C3AAD2", "#7D54A5", "#EAD27A", "#B15928"),
+    path.out = file.path(path, "Mar_2019/ChedN_noL_sampletype_fewtaxa.pdf"),6.5, 5.5)
 ```
 
 

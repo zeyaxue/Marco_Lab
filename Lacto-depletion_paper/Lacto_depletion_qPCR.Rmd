@@ -16,7 +16,7 @@ library(reshape2)
 library(plyr)
 library(dplyr)
 
-path <- "G:/My Drive/UC_Davis/Marco_lab/milk_microbiota/Depletion_Abundant_sequences/Agilent_SureSelect/sequencing/"
+path <- "~/Google Drive File Stream/My Drive/UC_Davis/Marco_lab/milk_microbiota/Depletion_Abundant_sequences/Agilent_SureSelect/sequencing/"
 ```
 
 ```{r}
@@ -46,8 +46,9 @@ qPCR.subm <- melt(qPCR.sub, id.vars = c("ID","SampleType","SampleName","Treatmen
 qPCR.subm$log <- log10(qPCR.subm$value)
 qPCR.subm$Treatment <- factor(qPCR.subm$Treatment, levels = c("Untreated","Treated"))
 qPCR.subm$SampleName <- factor(qPCR.subm$SampleName, 
-                               levels = c(paste0("Mix",c(1:8)), "4045", "4046", 
-                                          "4068", "4069","3638","3944"))
+                               levels = c(paste0("Mix",c(1:8)), "3638","3944",
+                                          "4045", "4046", 
+                                          "4068", "4069"))
 
 pdf(file.path(path, "figs/relative_stacked_bar_2treatmnt.pdf"), w = 6, h = 8)
 ggplot(subset(qPCR.subm, variable %in% c("Lactococcus","Pseudomonas","Lactobacillus")),
@@ -99,4 +100,18 @@ dev.off()
 
 ```
 
+# Fold change
+```{r}
+fold <- read.csv(file.path(path,"qPCR_abudance_subset_run1-3_fold.csv"))
+foldm <- melt(fold, id.vars = "X", na.rm = TRUE, value.name = "Fold_Change")
+foldm$X <- factor(foldm$X, levels = c(paste0("K",c(1:5)), "3638","3944", "4045", "4046", 
+                                           "4068", "4069"))
 
+pdf(file.path(path, "figs/qPCR_fold_change.pdf"), w = 6, h = 8)
+ggplot(foldm, aes(x = variable, y = Fold_Change, fill = variable))+
+  facet_wrap(X ~ ., scales = "free_x", ncol = 3)+
+  geom_bar(stat = "identity", position = "dodge")+
+  geom_hline(yintercept = 1, linetype="dashed")+
+  theme_bw(base_size = 16)
+dev.off()
+```

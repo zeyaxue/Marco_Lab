@@ -59,4 +59,48 @@ ggplot(foldm, aes(x = variable, y = Fold_Change, fill = variable))+
 dev.off()
 ```
 
+## For writing chapter 
+```{r}
+# Relative abundance plot
+qPCR.sub <- read.csv(file.path(path, "Newkit_Run1_per_2treatment.csv"))
+qPCR.subm <- melt(qPCR.sub, id.vars = c("SampleName","Treatment"),
+                  na.rm = TRUE)
+qPCR.subm$Treatment <- factor(qPCR.subm$Treatment, levels = c("Untreated","Treated"))
+qPCR.subm$SampleName <- factor(qPCR.subm$SampleName, 
+                               levels = c(paste0("N",c(1:3))))
+pdf(file.path(path, "qPCR_newkit_stacked_bar.pdf"), w = 6, h = 2.5)
+ggplot(subset(qPCR.subm, variable %in% c("Lactococcus","Pseudomonas","Lactobacillus","Streptococcus")),
+       aes(x = Treatment, y = value, fill = variable))+
+  facet_wrap(SampleName ~ ., scales = "fixed", ncol = 3)+
+  scale_fill_manual(values = c("Lactococcus" = "#F8766D","Pseudomonas" = "#00BA38", 
+                               "Lactobacillus" = "#619CFF", "Streptococcus" = "#C77CFF"))+
+  geom_bar(stat = "identity", position = "fill")+
+  theme_bw(base_size = 16)
+dev.off()
+
+
+# Fold change
+fold <- read.csv(file.path(path,"Newkit_Run1_per_fold.csv"))
+foldm <- melt(fold, id.vars = "X", na.rm = TRUE, value.name = "Fold_Change")
+# merge/average per X and variable
+foldm_agg <- ddply(foldm, c("X", "variable"), 
+                       summarise,
+                       N = length(Fold_Change),
+                       mean = mean(Fold_Change),
+                       sd = sd(Fold_Change),
+                       se = sd / sqrt(N))
+
+pdf(file.path(path, "qPCR_newkit_fold_change.pdf"), w = 6, h = 2.5)
+ggplot(foldm_agg, aes(x = variable, y = mean, fill = variable))+
+  facet_wrap(X ~ ., scales = "free_x", ncol = 3)+
+  geom_bar(stat = "identity", position = "dodge")+
+  scale_fill_manual(values = c("Lactococcus" = "#F8766D","Pseudomonas" = "#00BA38", 
+                               "Lactobacillus" = "#619CFF", "Streptococcus" = "#C77CFF"))+
+  geom_hline(yintercept = 1, linetype="dashed")+
+  geom_errorbar(aes(ymin = mean-se, ymax = mean+se), width = 0.3, position = position_dodge(.9)) +
+  theme_bw(base_size = 16)
+dev.off()
+
+```
+
 
