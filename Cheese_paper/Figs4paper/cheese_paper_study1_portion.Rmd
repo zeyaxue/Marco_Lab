@@ -258,7 +258,7 @@ LinePlot <- function(ps, x, w, h, path.out){
               geom_line(size = 0.9)+
               geom_point(size = 1)+
               geom_errorbar(aes(ymin = mean-se, ymax = mean+se),width = 0.1, position=position_dodge(0.05))+
-              ylab(x) +
+              ggtitle(x) +
               theme_bw() +
               theme(text = element_text(size = 15)))
   dev.off()
