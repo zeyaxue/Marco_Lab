@@ -987,3 +987,5 @@ slit.plot(qPCR.TurNm[qPCR.TurNm$SampleType %in% c("HTST_feed","HTST_milk"),]) +
   xlab("PMA treated samples by milk type")
 ```
 
+
+
