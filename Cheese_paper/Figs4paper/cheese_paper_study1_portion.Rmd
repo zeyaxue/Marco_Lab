@@ -258,7 +258,7 @@ LinePlot <- function(ps, x, w, h, path.out){
               geom_line(size = 0.9)+
               geom_point(size = 1)+
               geom_errorbar(aes(ymin = mean-se, ymax = mean+se),width = 0.1, position=position_dodge(0.05))+
-              ylab(x) +
+              ggtitle(x) +
               theme_bw() +
               theme(text = element_text(size = 15)))
   dev.off()
@@ -324,6 +324,16 @@ Bar(ps.ChedN.noL, var1 = "SampleType",
     lvl1 = c("Cheese_0D","Cheese_30D","Cheese_90D", "Cheese_120D"),
     taxa = comm16, mycol = col16,
     path.out = file.path(path, "Mar_2019/ChedN_noL_sampletype.pdf"),6.5, 5.5)
+Bar(ps.ChedY.noL, var1 = "SampleType", 
+    lvl1 = c("Cheese_0D","Cheese_30D","Cheese_90D","Cheese_120D"),
+    taxa = c("Bacillus", "Lactobacillus", "Staphylococcus", "Streptococcus", "Turicibacter", "Other"), 
+    mycol = c("#438EC0", "#F16667", "#C3AAD2", "#7D54A5", "#EAD27A", "#B15928"),
+    path.out = file.path(path, "Mar_2019/ChedY_noL_sampletype_fewtaxa.pdf"),6.5,5.5)
+Bar(ps.ChedN.noL, var1 = "SampleType", 
+    lvl1 = c("Cheese_0D","Cheese_30D","Cheese_90D", "Cheese_120D"),
+    taxa = c("Bacillus", "Lactobacillus", "Staphylococcus", "Streptococcus", "Turicibacter", "Other"), 
+    mycol = c("#438EC0", "#F16667", "#C3AAD2", "#7D54A5", "#EAD27A", "#B15928"),
+    path.out = file.path(path, "Mar_2019/ChedN_noL_sampletype_fewtaxa.pdf"),6.5, 5.5)
 ```
 
 
@@ -478,4 +488,83 @@ GifBar(ps.milkqY, lvl = c("HTST_feed","HTST_milk"),
 
 ```
 To save the output gif, on my MacOS, click export –> save as web page –> go to the saved web page and save image as GIF.
+
+# post-HTST L.fermentum power analysis
+```{r}
+# transfer counts to proportions and export feature table
+FeatTab <- function(ps){
+  df <- psmelt(ps)
+  df.cast <- dcast(df, REC ~ CheeseOutcome, sd, value.var = "Abundance")
+  df.cast[, -1] <- lapply( df.cast[ , -1], function(x) x/sum(x, na.rm=TRUE) )
+  df.cast
+}
+
+# get the ps object after qpcr adjustment and only linked to cheese
+ps.milkq4Y.3 <- phyloseq(otu_table(ps.milkq4Y), tax_table(ps.milkq4Y), 
+                         sample_data(subset.data.frame(samdf.4hr2, SampleType == "HTST_milk")),
+                         phy_tree(ps.milkq4Y))
+ps.milkq4Y.3 #94 taxa and 10 samples
+  
+df.Lferm <- FeatTab(subset_samples(ps.milkq4Y.3))
+# mean 
+#               no slits     slits
+#Lactobacillus 0.0005428686 1.113525e-02
+#> 1.113525e-02-0.0005428686
+#[1] 0.01059238
+# stdev
+#Lactobacillus 0.0007932729 0.0434692984
+#> 0.01059238/0.0434692984
+#[1] 0.243675 # current effect size based on 16S 
+
+# effect size based on qpcr
+qPCR.Lb <- read.csv(file.path(path, "mapping/Lactobacillus_qPCR_ZX_NoLOG.csv"))
+qPCR.Lb <- qPCR.Lb[, c(-2,-3)] # remove log values
+mean.Lb <- dcast(qPCR.Lb, SampleType ~ CheeseOutcome, mean, value.var = "Lb_fermentum")
+#               no slits     slits
+#HTST_milk 7.388766 26.015455
+sd.Lb <- dcast(qPCR.Lb, SampleType ~ CheeseOutcome, sd, value.var = "Lb_fermentum")
+#HTST_milk 16.87809987 28.08553995
+26.015455/28.08553995
+# 0.92 
+
+# test of proportions with equal n, asuuming sampling 3 times per day
+library(pwr)
+## calculate sampling size
+# Cohen et al, h > 0.5 as large effect
+#Common practice is to use a value of 0.5 as it indicates a moderate to large difference.
+p <- pwr.2p.test(h = 0.92, n = 25, sig.level = 0.05, power = 0.8, alternative = "greater")
+p
+
+# Plot power as a function of sample size
+
+# range of sample sizes
+n <- seq(3, 100, 1)
+# range of effect sizes 
+h = c(seq(0.55, 0.95, 0.1), 0.92)
+
+# obtain power values
+pwr.val <- array(numeric(length(n)*length(h)), 
+                 dim=c(length(n),length(h)))
+for (i in 1:length(h)){
+  for (j in 1: length(n)){
+    pwr.val[j,i] <- pwr.2p.test(h = h[i], n = n[j], sig.level = 0.05, power = NULL,
+                           alternative = "greater")$power 
+  }
+}
+pwr.val <- data.frame(pwr.val)
+colnames(pwr.val) <- h
+rownames(pwr.val) <- n
+pwr.val$n <- row.names(pwr.val)
+
+# make a df for plotting
+pwr.df <- melt(pwr.val, id = "n", variable.name = "Effect", value.name = "pwr")
+pwr.df$n <- as.numeric(pwr.df$n)
+
+pdf(file.path(path, "Mar_2019/Lf_pwr.pdf"), 5, 3)
+ggplot(pwr.df, aes(x = n, y = pwr, color = Effect))+
+  geom_line(size = 0.9)+
+  theme_bw() +
+  theme(text = element_text(size = 15))
+dev.off()
+```
 

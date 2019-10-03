@@ -100,3 +100,47 @@ TaxBar(ps.REC.glom, var1 = "SampleType", var2 = "SampleName",
        path.out = file.path(path, "SampleType_SampleName.pdf"), w = 12, h = 6)
 ```
 
+# Write out relative abundance plot
+```{r}
+FeatTab <- function(ps){
+  df <- psmelt(ps)
+  df.cast <- dcast(df, Sample ~ REC, value.var = "Abundance")
+  df.cast
+}
+
+write.csv(FeatTab(ps.REC.glom %>% transform_sample_counts(function(x) x/sum(x) )), file.path(path,"FeatTab_ps.REC.glom.csv"))
+
+# Relative abundance plot
+qPCR.sub <- read.csv(file.path(path, "FeatTab_ps.REC.glom_manual.csv"))
+qPCR.subm <- melt(qPCR.sub, id.vars = c("Sample","SampleName","Treatment"),
+                  na.rm = TRUE)
+qPCR.subm$Treatment <- factor(qPCR.subm$Treatment, levels = c("Untreated","Treated"))
+qPCR.subm$SampleName <- factor(qPCR.subm$SampleName, 
+                               levels = c(paste0("K",c(1:5)), "3638","3944",
+                                          "4045", "4046", 
+                                          "4068", "4069"))
+pdf(file.path(path, "figs/seq_oldkit_stacked_bar.pdf"), w = 6, h = 6)
+ggplot(subset(qPCR.subm, variable %in% c("Lactococcus","Pseudomonas","Lactobacillus","Other")),
+       aes(x = Treatment, y = value, fill = variable))+
+  facet_wrap(SampleName ~ ., scales = "fixed", ncol = 3)+
+  scale_fill_manual(values = c("Lactococcus" = "#F8766D","Pseudomonas" = "#00BA38", 
+                               "Lactobacillus" = "#619CFF", "Other" = "#b15928"))+
+  geom_bar(stat = "identity", position = "fill")+
+  theme_bw(base_size = 16)
+dev.off()
+
+# Fold change
+fold <- read.csv(file.path(path,"FeatTab_ps.REC.glom_manual_fold.csv"))
+foldm <- melt(fold, id.vars = "X", na.rm = TRUE, value.name = "Fold_Change")
+foldm$X <- factor(foldm$X, levels = c(paste0("K",c(1:5)), "3638","3944", "4045", "4046", 
+                                           "4068", "4069"))
+
+pdf(file.path(path, "figs/seq_fold_change.pdf"), w = 6, h = 8)
+ggplot(foldm, aes(x = variable, y = Fold_Change, fill = variable))+
+  facet_wrap(X ~ ., scales = "free_x", ncol = 3)+
+  geom_bar(stat = "identity", position = "dodge")+
+  geom_hline(yintercept = 1, linetype="dashed")+
+  theme_bw(base_size = 16)
+dev.off()
+```
+
