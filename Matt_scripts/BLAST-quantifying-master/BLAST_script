@@ -1,0 +1,9 @@
+blastn \
+-db /path/to/db \
+-evalue 0.001 \
+-num_threads 6 \
+-max_hsps 3 \
+-num_alignments 1000 \
+-outfmt "6 qseqid sseqid staxids pident length mismatch qstart qend sstart send evalue bitscore ssciname sseq" \
+-out ./output_name.out \
+-query ./query_file.fasta

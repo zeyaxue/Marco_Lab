@@ -1,0 +1,1443 @@
+#Header
+---
+title: "Protein and Resistant Starch Rat Study"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+#Preprocessing
+```{r setup}
+knitr::opts_chunk$set(echo = TRUE)
+library("phyloseq")
+library("DESeq2")
+library("plyr")
+library("dplyr")
+library("ggplot2")
+library("data.table")
+library("RColorBrewer")
+library("reshape")
+library("reshape2")
+library("S4Vectors")
+library("tidyr")
+library("vegan")
+library("stats")
+library("stats4")
+library("microbiome")
+library("ggsignif")
+library("gridExtra")
+```
+```{PS object for all diets}
+# This imports QIIME output and modifies it for subsequent analysis
+
+SeqTab <- read.table("diet_3_4_5_6_table_merge_sum.txt", 
+                      header = TRUE, 
+                      stringsAsFactors = FALSE)  # General import
+colnames(SeqTab) <- gsub("X", "", colnames(SeqTab))  # Remove the 'X'
+row.names(SeqTab) <- SeqTab$OTUID  # rename
+SeqTab <- SeqTab[,-1]  # move
+SeqTab <- as.matrix.data.frame(SeqTab)  # format as matrix
+
+# STOP and edit: taxon column in taxonomy qiime file must be split over columns
+
+TaxTab <- read.table("taxonomy.csv", header = TRUE, sep = ',', na.strings = NA)
+
+# format taxon columns to remove preceding taxon letter ("p__, o__"")
+TaxTab$Kingdom <- substring(TaxTab$Kingdom, 4)
+TaxTab$Phylum <- substring(TaxTab$Phylum, 4)
+TaxTab$Class <- substring(TaxTab$Class, 4)
+TaxTab$Order <- substring(TaxTab$Order, 4)
+TaxTab$Family <- substring(TaxTab$Family, 4)
+TaxTab$Genus <- substring(TaxTab$Genus, 4)
+TaxTab$Species <- substring(TaxTab$Species, 4)
+
+# set rownames TaxTab as Feature ID
+rownames(TaxTab) <- TaxTab$FeatureID
+
+# subarray of TaxTab without first column
+TaxTab <- TaxTab[,-1]
+
+# import as matrix dataframe
+TaxTab <- as.matrix.data.frame(TaxTab)
+
+# read in metadata
+samdf <- read.table("diet_3_4_5_6.tsv", header = TRUE)
+rownames(samdf) <- samdf$SampleID
+
+# make diet_3 the control
+samdf$Diet <- relevel(samdf$Diet, "Diet_3")
+tree <- read_tree("tree.nwk")
+
+# merge phyloseq object
+ps <- phyloseq(otu_table(SeqTab, taxa_are_rows = TRUE), tax_table(TaxTab), sample_data(samdf), read_tree(tree))
+
+# Recommended lowest taxon
+TaxTab2 <- as.data.frame(TaxTab)
+list.g <- as.character(TaxTab2$Genus)
+list.f <- as.character(TaxTab2$Family)
+list.o <- as.character(TaxTab2$Order)
+list.c <- as.character(TaxTab2$Class)
+list.p <- as.character(TaxTab2$Phylum)
+list.k <- as.character(TaxTab2$Kingdom)
+list.REC <- character(length(list.g))
+for(i in 1:dim(TaxTab2)[1]){
+  G = which(TaxTab2$Genus[i] == "")
+  F = which(TaxTab2$Family[i] == "")
+  O = which(TaxTab2$Order[i] == "")
+  C = which(TaxTab2$Class[i] == "")
+  P = which(TaxTab2$Phylum[i] == "")
+  K = which(TaxTab2$Kingdom[i] == "")
+  if(length(G) == 0){
+    list.REC[i] <- list.g[i]
+  } else if(length(F) == 0){
+    list.REC[i] <- list.f[i]
+  } else if(length(O) == 0){
+    list.REC[i] <- list.o[i]
+  } else if(length(C) == 0){
+    list.REC[i] <- list.c[i]
+  } else if(length(P) == 0){
+    list.REC[i] <- list.p[i]
+  } else if(length(K) == 0){
+    list.REC[i] <- list.k[i]
+  } else
+    list.REC[i] <- "null"
+}
+TaxTab2$REC <- list.REC
+TaxTab2$REC <- factor(TaxTab2$REC)
+ps <- merge_phyloseq(ps, TaxTab2 %>% as.matrix() %>% tax_table())
+```
+
+#Figure 1
+```{Ordination}
+pcoa_wunifrac_cca <- plot_ordination(ps, ordinate(ps, distance = "wunifrac", method = "CCA"), color = "Diet", axes = c(1,2)) + 
+  geom_point(size=2) + 
+  theme_classic(base_size = 13) + 
+  stat_ellipse() + 
+  scale_color_manual(labels = c("HPM", "HAPS", "HAMS", "HAMSB"),
+                     values = c("#FF0000", "#00A08A", "#F2AD00", "#5BBCD6")) +
+  theme(
+    axis.line = element_line(colour = "black"), 
+    panel.grid.major = element_line(colour = "white"),
+    panel.grid.minor = element_line(colour = "white"),
+    axis.text=element_text(color = "black"), 
+    legend.title = element_text(size=12),
+    legend.text = element_text(size=10),
+    legend.position = c(0.75, 0.75), 
+    legend.margin = margin(2,2,2,2),
+    legend.background = element_rect(size=0.5, linetype="solid", colour ="black"))
+    
+ggsave(filename = "pcoa_wunifrac_cca.pdf", plot = pcoa_wunifrac_cca, width = 5, height = 5, device = "pdf")
+```
+```{Alpha diversity}
+#faith PD
+alpha_diversity_faithpd <- read.csv(file = "alpha_diversity_faithpd.csv")
+
+alpha_div_faithpd <- 
+  ggplot(data = alpha_diversity_faithpd, 
+        aes(x = diet, y = faith_pd)) +
+  geom_boxplot() + 
+  ylab("Faith PD") + 
+  aes(fill=diet) + 
+  scale_fill_manual(values=c("#FF0000", "#00A08A", "#F2AD00", "#5BBCD6")) + 
+  geom_signif(comparisons = list(c("diet_3", "diet_4")), 
+              annotations = "p=0.09", 
+              textsize=3, 
+              y_position = 25.2) +
+  geom_signif(comparisons = list(c("diet_3", "diet_5")), 
+              annotations = "*", 
+              textsize=3, 
+              y_position = 26) +
+  geom_signif(comparisons = list(c("diet_3", "diet_6")), 
+              annotations = "p=0.11", 
+              textsize=3, 
+              y_position = 26.7) +
+  xlab("") + 
+  theme_classic(base_size = 13) +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.major = element_line(colour = "white"),
+        panel.grid.minor = element_line(colour = "white"), 
+        axis.text = element_text(color = "black"), 
+        legend.position='none', 
+        axis.text.x = element_text(angle = 45, hjust = 1),) + 
+  scale_x_discrete(labels=c("diet_3" = "HPM", 
+                            "diet_4" = "HAPS", 
+                            "diet_5" = "HAMS", 
+                            "diet_6" = "HAMSB"))
+ggsave(filename = "alpha_div_faithpd.pdf", plot = alpha_div_faithpd, width = 3, height = 5, device = "pdf")
+# ANOVA testing of faith pd
+
+summary(aov(faith_pd ~ diet, data = alpha_diversity_faithpd)) # p=0.0272
+afpd_3 <- c(20.80710194, 23.51475062, 24.44144582, 21.44462783, 23.23639615, 18.88076876, 21.46215843, 21.95985732, 17.80323989, 22.81190782)
+afpd_4 <- c(22.40416155, 23.2099092, 20.23009938, 21.05086469, 18.85838318, 18.55252801, 19.75410814, 19.22817882, 16.90615657, 17.54610989)
+afpd_5 <- c(20.60502677, 20.72647223, 18.08422322, 21.87510697, 19.00794822, 18.9666065, 18.19358174, 19.297938, 18.12405018, 19.07330576)
+afpd_6 <- c(20.32299916, 19.23647322, 19.4214814, 21.23478842, 21.28487845, 19.58367439, 20.39908846, 18.69405489, 21.19092928, 17.06924379)
+
+# t-test of faithpd
+t.test(afpd_3, afpd_4, paired=TRUE) #t = 2.6619, df = 9, p-value = 0.02596
+t.test(afpd_3, afpd_5, paired=TRUE) #t = 3.0703, df = 9, p-value = 0.01335
+t.test(afpd_3, afpd_6, paired=TRUE) #t = 2.0012, df = 9, p-value = 0.07641
+
+#tukey post hoc for significance
+TukeyHSD(aov(faith_pd ~ diet, data = alpha_diversity_faithpd))
+#                    diff         lwr         upr     p adj
+#diet_4-diet_3 -1.8621755 -3.923789  0.1994382 0.0888643
+#diet_5-diet_3 -2.2407995 -4.302413 -0.1791858 0.0287633
+#diet_6-diet_3 -1.7924643 -3.854078  0.2691494 0.1074515
+
+# extract data from phyloseq ggplot and plot
+diet_rename = c("Diet_3" = "HPM", "Diet_4" = "HAPS", "Diet_5" = "HAMS", "Diet_6" = "HAMSB")
+alpha_supp <- alpha_diversity_faithpd$data
+alpha_div_obs_sha_fis <- 
+  ggplot(data = alpha_supp,
+        aes(x=Diet, y=value, fill=Diet)) +
+  geom_boxplot() + 
+  facet_wrap("variable", scales = "free_y") +
+  ylab("") +
+  xlab("") + 
+  geom_boxplot() + 
+  theme_bw(base_size = 13) + 
+  scale_fill_manual(values=c("#FF0000", "#00A08A", "#F2AD00", "#5BBCD6")) + 
+  theme(
+    axis.line = element_line(colour = "black"), 
+    panel.grid.major = element_line(colour = "white"),
+    panel.grid.minor = element_line(colour = "white"), 
+    panel.background = element_blank(), 
+    axis.text.x = element_text(angle = 45, hjust = 1), 
+    legend.position='none', 
+    axis.text = element_text(color = "black")) + 
+  scale_x_discrete(labels=c("Diet_3" = "HPM", 
+                            "Diet_4" = "HAPS", 
+                            "Diet_5" = "HAMS", 
+                            "Diet_6" = "HAMSB"))
+ggsave(filename = "alpha_div_obs_sha_fis.pdf", plot = alpha_div_obs_sha_fis, width = 8, height = 5, device = "pdf")
+
+# individual plots so signif can be added, then grid combine
+obs_div <- 
+  ggplot(data = alpha_supp,
+  aes(x=Diet, y=value, fill=Diet)) +
+  geom_boxplot(data=subset(alpha_supp, variable == "Observed")) +
+  xlab("") + 
+  ylab("") +
+  theme_bw(base_size = 13) + 
+  scale_fill_manual(values=c("#FF0000", "#00A08A", "#F2AD00", "#5BBCD6")) + 
+  ggtitle("Observed") +
+  geom_signif(comparisons = list(c("Diet_3", "Diet_4")), 
+              tip_length = 0,
+              annotations = "p=0.29", 
+              textsize=3, 
+              y_position = 750) +
+  geom_signif(comparisons = list(c("Diet_3", "Diet_5")), 
+              tip_length = 0,
+              annotations = "*", 
+              textsize=3, 
+              y_position = 770) +
+  geom_signif(comparisons = list(c("Diet_3", "Diet_6")), 
+              tip_length = 0,
+              annotations = "p=0.62", 
+              textsize=3, 
+              y_position = 790) +
+  theme(
+    plot.title = element_text(hjust = 0.5),
+    axis.line = element_line(colour = "black"), 
+    panel.grid.major = element_line(colour = "white"),
+    panel.grid.minor = element_line(colour = "white"), 
+    panel.background = element_blank(), 
+    axis.text.x = element_text(angle = 45, hjust = 1), 
+    legend.position='none', 
+    axis.text = element_text(color = "black")) + 
+  scale_x_discrete(labels=c("Diet_3" = "HPM", 
+                            "Diet_4" = "HAPS", 
+                            "Diet_5" = "HAMS", 
+                            "Diet_6" = "HAMSB"))
+
+shan_div <- 
+  ggplot(data = alpha_supp,
+  aes(x=Diet, y=value, fill=Diet)) +
+  geom_boxplot(data=subset(alpha_supp, variable == "Shannon")) +
+  ggtitle("Shannon") +
+  xlab("") + 
+  ylab("") +
+  theme_bw(base_size = 13) + 
+  scale_fill_manual(values=c("#FF0000", "#00A08A", "#F2AD00", "#5BBCD6")) + 
+  geom_signif(comparisons = list(c("Diet_3", "Diet_4")), 
+              tip_length = 0,
+              annotations = "***", 
+              textsize=3, 
+              y_position = 5.5) +
+  geom_signif(comparisons = list(c("Diet_3", "Diet_5")), 
+              tip_length = 0,
+              annotations = "***", 
+              textsize=3, 
+              y_position = 5.65) +
+  geom_signif(comparisons = list(c("Diet_3", "Diet_6")), 
+              tip_length = 0,
+              annotations = "p=0.13", 
+              textsize=3, 
+              y_position = 5.8) + 
+  theme(
+    plot.title = element_text(hjust = 0.5),
+    axis.line = element_line(colour = "black"), 
+    panel.grid.major = element_line(colour = "white"),
+    panel.grid.minor = element_line(colour = "white"), 
+    panel.background = element_blank(), 
+    axis.text.x = element_text(angle = 45, hjust = 1), 
+    legend.position='none', 
+    axis.text = element_text(color = "black")) + 
+  scale_x_discrete(labels=c("Diet_3" = "HPM", 
+                            "Diet_4" = "HAPS", 
+                            "Diet_5" = "HAMS", 
+                            "Diet_6" = "HAMSB"))
+fish_div <- 
+  ggplot(data = alpha_supp,
+        aes(x=Diet, y=value, fill=Diet)) +
+  geom_boxplot(data=subset(alpha_supp, variable == "Fisher")) +
+  ggtitle("Fisher") +
+  xlab("") + 
+  ylab("") +
+  theme_bw(base_size = 13) + 
+  scale_fill_manual(values=c("#FF0000", "#00A08A", "#F2AD00", "#5BBCD6")) + 
+  geom_signif(comparisons = list(c("Diet_3", "Diet_4")), 
+              tip_length = 0,
+              annotations = "p=0.121", 
+              textsize=3, 
+              y_position = 111) +
+  geom_signif(comparisons = list(c("Diet_3", "Diet_5")), 
+              tip_length = 0,
+              annotations = "**", 
+              textsize=3, 
+              y_position = 115) +
+  geom_signif(comparisons = list(c("Diet_3", "Diet_6")), 
+              tip_length = 0,
+              annotations = "p=0.6", 
+              textsize=3, 
+              y_position = 119) +
+  theme(
+    plot.title = element_text(hjust = 0.5),
+    axis.line = element_line(colour = "black"), 
+    panel.grid.major = element_line(colour = "white"),
+    panel.grid.minor = element_line(colour = "white"), 
+    panel.background = element_blank(), 
+    axis.text.x = element_text(angle = 45, hjust = 1), 
+    legend.position='none', 
+    axis.text = element_text(color = "black")) + 
+  scale_x_discrete(labels=c("Diet_3" = "HPM", 
+                            "Diet_4" = "HAPS", 
+                            "Diet_5" = "HAMS", 
+                            "Diet_6" = "HAMSB"))
+alpha_supp_fig <- 
+  grid.arrange(grobs = c(list(obs_div, 
+                              shan_div, 
+                              fish_div)), 
+              layout_matrix = rbind(c(1,2,3),
+                                    c(1,2,3),
+                                    c(1,2,3)))
+ggsave(filename = "alpha_supp_fig.pdf", plot = alpha_supp_fig, width = 7, height = 4, device = "pdf")
+ggsave(filename = "alpha_supp_fig.png", plot = alpha_supp_fig, width = 7, height = 4, device = "png")
+
+#shannon diversity
+shannon <- estimate_richness(physeq = ps, measures = "Shannon")
+write.csv(x = shannon, file = "shannon_values.csv")
+# checked file for formatting
+shannon <- read.csv("shannon_values.csv")
+# ANOVA on shannon div
+summary(aov(Shannon ~ diet, data = shannon)) #p=2.33e-07 ***
+# tukey post hoc
+TukeyHSD(aov(Shannon ~ diet, data = shannon))
+#                    diff         lwr         upr     p adj
+#diet_4-diet_3 -0.5835755 -0.91620876 -0.25094222 0.0001962
+#diet_5-diet_3 -0.8603195 -1.19295277 -0.52768623 0.0000002
+#diet_6-diet_3 -0.2778252 -0.61045842  0.05480811 0.1294054
+
+#fisher diversity
+fisher <- estimate_richness(physeq = ps, measures = "Fisher")
+write.csv(x = fisher, file = "fisher_values.csv")
+fisher <- read.csv("fisher_values.csv")
+#ANOVA of fisher
+summary(aov(Fisher ~ diet, data = fisher)) #p=0.00965 **
+#Tukey post hoc
+TukeyHSD(aov(Fisher ~ diet, data = fisher))
+#                    diff         lwr         upr     p adj
+#diet_4-diet_3 -10.488866 -22.877179  1.899446 0.1216916
+#diet_5-diet_3 -16.040635 -28.428947 -3.652323 0.0068354
+#diet_6-diet_3  -5.724882 -18.113194  6.663430 0.6032352
+
+#observed ASV's
+observed <- estimate_richness(physeq = ps, measures = "Observed")
+write.csv(x = observed, file = "observed_values.csv")
+observed <- read.csv("observed_values.csv")
+#ANOVA
+summary(aov(Observed ~ diet, data = observed)) #p=0.0439 *
+#tukey post hoc
+TukeyHSD(aov(Observed ~ diet, data = observed))
+#                    diff         lwr         upr     p adj
+#diet_4-diet_3 -60.6 -152.2327  31.032698 0.2987931
+#diet_5-diet_3 -99.9 -191.5327  -8.267302 0.0281472
+#diet_6-diet_3 -41.0 -132.6327  50.632698 0.6276989
+```
+```{Beta-diversity}
+# Data rearrangement
+keepOTUs = names(sort(taxa_sums(ps), TRUE))[1:500]
+ps.ex = prune_taxa(keepOTUs, ps)
+ps.dist = phyloseq::distance(ps.ex, "wunifrac", type="Diet")
+# Turn into single column of distances in excel
+# Bring back in:
+wuf.dist.all <- read.csv("diet_3_4_5_6_distance_matrix_diet_all.csv")
+
+# comparison of all followed by posthoc:
+beta_div_wunifrac <- ggplot(wuf.dist.all, aes(x=diet, y=distance)) + 
+  aes(fill=diet) + 
+  scale_fill_manual(values=c("#FF0000", "#00A08A", "#F2AD00", "#5BBCD6", "#F98400")) + 
+  geom_boxplot() + 
+  ylab("Weighted Unifrac Distance") + 
+  geom_signif(comparisons = list(c("diet_3", "diet_4")), annotations = "***", y_position = 0.16) +
+  geom_signif(comparisons = list(c("diet_3", "diet_5")), annotations = "***", y_position = 0.17) +
+  geom_signif(comparisons = list(c("diet_3", "diet_6")), annotations = "***", y_position = 0.18) +
+  xlab("") + 
+  theme_classic(base_size = 13) +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.major = element_line(colour = "white"),
+        panel.grid.minor = element_line(colour = "white"), 
+        axis.text = element_text(color = "black"), 
+        legend.position='none', 
+        axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_x_discrete(labels=c("diet_3" = "HPM", 
+                            "diet_4" = "HAPS", 
+                            "diet_5" = "HAMS", 
+                            "diet_6" = "HAMSB"))
+ggsave(filename = "beta_div_wunifrac.pdf", plot = beta_div_wunifrac, width = 4, height = 6, device = "pdf")
+                            
+fit <- aov(distance ~ diet, data = wuf.dist.all)
+summary(fit)
+attach(wuf.dist.all)
+pairwise.t.test(distance, diet, p.adjust.method = "bonferroni")
+pairwise.t.test(distance, diet, p.adjust.method = "none")
+pairwise.t.test(distance, diet, p.adjust.method = "fdr")
+TukeyHSD(fit)
+#                       diff          lwr           upr     p adj
+#diet_4-diet_3  0.0375724631  0.022995582  5.214934e-02 0.0000000
+#diet_5-diet_3  0.0243183972  0.009741516  3.889528e-02 0.0001373
+#diet_6-diet_3  0.0234516137  0.008874733  3.802849e-02 0.0002578
+
+```
+```{Triplots}
+div_fig <- grid.arrange(grobs = c(list(pcoa_wunifrac_cca, 
+                                      beta_div_wunifrac, 
+                                      alpha_div_faithpd)), 
+                        layout_matrix = rbind(c(1,1,2,3),
+                                              c(1,1,2,3),
+                                              c(1,1,2,3)))
+                                              
+ggsave(filename = "div_triplot.pdf", plot = div_fig, width = 8, height = 4, device = "pdf")
+ggsave(filename = "div_triplot.png", plot = div_fig, width = 8, height = 4, device = "png")
+
+alpha_supp_fig <- 
+  grid.arrange(grobs = c(list(obs_div, 
+                              shan_div, 
+                              fish_div)), 
+              layout_matrix = rbind(c(1,2,3),
+                                    c(1,2,3),
+                                    c(1,2,3)))
+ggsave(filename = "alpha_supp_fig.pdf", plot = alpha_supp_fig, width = 7, height = 4, device = "pdf")
+ggsave(filename = "alpha_supp_fig.png", plot = alpha_supp_fig, width = 7, height = 4, device = "png")
+
+```
+#Figure 2
+```{Genera bar plot by sample}
+# Facet naming
+diet_rename = c("Diet_3" = "HPM", "Diet_4" = "HAPS", "Diet_5" = "HAMS", "Diet_6" = "HAMSB")
+
+# data transformation
+ps.rel <- transform_sample_counts(ps, function(x) x / sum(x) )
+
+# glom transformed counts to genus level
+ps.rel.genus <- tax_glom(physeq = ps.rel, taxrank = "Genus")
+
+# plot basic data to plot
+genus_barplot_by_sample <- plot_bar(prune_taxa(names(sort(taxa_sums(ps.rel.genus), TRUE))[0:12], ps.rel.genus), "Sample", fill = "Genus")
+
+# NULL names are not present, so this doesn't do anything, but is useful for later
+pd <- genus_barplot_by_sample$data %>% 
+      as_tibble %>% #coerce list/matrix to dataframe
+      mutate(Genus = as.character(Genus)) %>% # add new variable and preserve existing
+      replace_na(list(Genus = "unknown")) # 
+
+# for genus, summarize the sum of abundance and order
+genus_abun <- pd %>% 
+      group_by(Genus) %>% # group on genus
+      summarize(Abundance = sum(Abundance)) %>% # reduce mult values down to single
+      arrange(Abundance) # sort variable in descending order
+genus_levels <- genus_abun$Genus
+
+# data is ordered by abundance
+pd0 <- pd %>% mutate(Genus = factor(Genus, genus_levels))
+
+genus_barplot_by_sample <- ggplot(pd0, aes(x = Sample, y = Abundance, fill = Genus)) + 
+    geom_bar(stat = "identity") + 
+  facet_grid("Diet", scales = 'free', labeller = as_labeller(diet_rename)) +
+  theme_bw(base_size = 15) +
+  coord_cartesian(ylim = c(0, 0.75)) +
+  scale_fill_manual(values=brewer.pal(11,"Spectral")) +
+  xlab("") + 
+  ylab("Relative Abundance") + 
+  theme(
+    axis.ticks = element_blank(),
+    axis.text.x = element_blank(),
+    axis.line = element_line(colour = "black"), 
+    panel.grid.major = element_line(colour = "white"),
+    panel.grid.minor = element_line(colour = "white"), 
+    panel.background = element_blank(), 
+    axis.text=element_text(color = "black")
+    )
+ggsave(filename = "genus_barplot_by_sample.pdf", plot = genus_barplot_by_sample, width = 7, height = 5, device = "pdf")
+
+## Family plot
+
+# glom transformed counts to family level
+ps.rel.family <- tax_glom(physeq = ps.rel, taxrank = "Family")
+
+# plot basic data to plot
+family_barplot_by_sample <- 
+    plot_bar( # plot bar
+      prune_taxa( # remove some taxa
+        names( # pull names of result
+          sort( # sort result by descending, keep 12
+            taxa_sums(ps.rel.family), TRUE)
+        )[0:12], ps.rel.family), "Sample", fill = "Family")
+
+# for family, summarize the sum of abundance and order
+family_abun <- pd %>% 
+      group_by(Family) %>% # group on family
+      summarize(Abundance = sum(Abundance)) %>% # reduce mult values down to single
+      arrange(Abundance) # sort variable in descending order
+family_levels <- family_abun$Family
+
+# data is ordered by abundance
+pd0 <- pd %>% mutate(Family = factor(Family, family_levels))
+
+family_barplot_by_sample <- ggplot(pd0, aes(x = Sample, y = Abundance, fill = Family)) + 
+    geom_bar(stat = "identity") + 
+  facet_grid("Diet", scales = 'free', labeller = as_labeller(diet_rename)) +
+  theme_bw(base_size = 15) +
+  coord_cartesian(ylim = c(0, 0.75)) +
+  scale_fill_manual(values=brewer.pal(8,"Spectral")) +
+  xlab("") + 
+  ylab("Relative Abundance") + 
+  theme(
+    axis.ticks = element_blank(),
+    axis.text.x = element_blank(),
+    axis.line = element_line(colour = "black"), 
+    panel.grid.major = element_line(colour = "white"),
+    panel.grid.minor = element_line(colour = "white"), 
+    panel.background = element_blank(), 
+    axis.text=element_text(color = "black")
+    )
+ggsave(filename = "family_barplot_by_sample.pdf", plot = family_barplot_by_sample, width = 7, height = 5, device = "pdf")
+ggsave(filename = "family_barplot_by_sample.png", plot = family_barplot_by_sample, width = 7, height = 5, device = "png")
+```
+#Figure 3
+```{DA setup for all comparisons}
+ps_order <- tax_glom(ps, taxrank = "Order")
+ps_family <- tax_glom(ps, taxrank = "Family")
+ps_genus <- tax_glom(ps, taxrank = "Genus")
+ps_species <- tax_glom(ps, taxrank = "Species")
+
+# Function for differential abundance
+DA_analysis_diet <- function(ps_glom, ps_original, control, treatment, variable, deseq_test, deseq_fit, DAtaxon) {
+  variable <- col
+  dds <- phyloseq_to_deseq2(ps_glom, ~ Diet)
+  dds <- DESeq(dds, test = "Wald", fitType = "local")
+  res <- results(dds, contrast=c("Diet", treatment, control))
+  res <- res[which(res$padj < 0.05), ]
+  sigtab <- res[which(res$padj < 0.05), ]
+  sigtab = cbind(as(sigtab, "data.frame"), as(tax_table(ps_original)[rownames(sigtab), ], "matrix"))
+  res_ordered <- res[order(res$log2FoldChange), ]
+  sigtab$diet <- rep(paste(control, treatment, sep="_"),nrow(sigtab)) # make new column for control vs treatment
+  sigtab$taxon <- rep(x = DAtaxon, nrow(sigtab)) 
+  # make a column to track taxon level of DA
+  sig_filename <- paste("DESeq", deparse(substitute(ps_glom)), control, treatment, deseq_test, deseq_fit, ".csv", sep="")
+  write.csv(x = sigtab, file = sig_filename)
+  return(sigtab)
+}
+```
+```{Updated DA for order}
+order.3.4 <- DA_analysis_diet(ps_glom = ps_order, 
+                 ps_original = ps, 
+                 control = "Diet_3", 
+                 treatment = "Diet_4", 
+                 variable = "Diet", 
+                 deseq_test = "Wald", 
+                 deseq_fit = "local",
+                 DAtaxon = "order")
+order.3.5 <- DA_analysis_diet(ps_glom = ps_order, 
+                 ps_original = ps, 
+                 control = "Diet_3", 
+                 treatment = "Diet_5", 
+                 variable = "Diet", 
+                 deseq_test = "Wald", 
+                 deseq_fit = "local",
+                 DAtaxon = "order")
+order.3.6 <- DA_analysis_diet(ps_glom = ps_order, 
+                 ps_original = ps, 
+                 control = "Diet_3", 
+                 treatment = "Diet_6", 
+                 variable = "Diet", 
+                 deseq_test = "Wald", 
+                 deseq_fit = "local",
+                 DAtaxon = "order")
+order.4.5 <- DA_analysis_diet(ps_glom = ps_order, 
+                 ps_original = ps, 
+                 control = "Diet_4", 
+                 treatment = "Diet_5", 
+                 variable = "Diet", 
+                 deseq_test = "Wald", 
+                 deseq_fit = "local",
+                 DAtaxon = "order")
+order.4.6 <- DA_analysis_diet(ps_glom = ps_order, 
+                 ps_original = ps, 
+                 control = "Diet_4", 
+                 treatment = "Diet_6", 
+                 variable = "Diet", 
+                 deseq_test = "Wald", 
+                 deseq_fit = "local",
+                 DAtaxon = "order")
+order.5.6 <- DA_analysis_diet(ps_glom = ps_order, 
+                 ps_original = ps, 
+                 control = "Diet_5", 
+                 treatment = "Diet_6", 
+                 variable = "Diet", 
+                 deseq_test = "Wald", 
+                 deseq_fit = "local",
+                 DAtaxon = "order")
+```
+```{Updated DA for family}
+family.3.4 <- DA_analysis_diet(ps_glom = ps_family, 
+                 ps_original = ps, 
+                 control = "Diet_3", 
+                 treatment = "Diet_4", 
+                 variable = "Diet", 
+                 deseq_test = "Wald", 
+                 deseq_fit = "local",
+                 DAtaxon = "family")
+family.3.5 <- DA_analysis_diet(ps_glom = ps_family, 
+                 ps_original = ps, 
+                 control = "Diet_3", 
+                 treatment = "Diet_5", 
+                 variable = "Diet", 
+                 deseq_test = "Wald", 
+                 deseq_fit = "local",
+                 DAtaxon = "family")
+family.3.6 <- DA_analysis_diet(ps_glom = ps_family, 
+                 ps_original = ps, 
+                 control = "Diet_3", 
+                 treatment = "Diet_6", 
+                 variable = "Diet", 
+                 deseq_test = "Wald", 
+                 deseq_fit = "local",
+                 DAtaxon = "family")
+family.4.5 <- DA_analysis_diet(ps_glom = ps_family, 
+                 ps_original = ps, 
+                 control = "Diet_4", 
+                 treatment = "Diet_5", 
+                 variable = "Diet", 
+                 deseq_test = "Wald", 
+                 deseq_fit = "local",
+                 DAtaxon = "family")
+family.4.6 <- DA_analysis_diet(ps_glom = ps_family, 
+                 ps_original = ps, 
+                 control = "Diet_4", 
+                 treatment = "Diet_6", 
+                 variable = "Diet", 
+                 deseq_test = "Wald", 
+                 deseq_fit = "local",
+                 DAtaxon = "family")
+family.5.6 <- DA_analysis_diet(ps_glom = ps_family, 
+                 ps_original = ps, 
+                 control = "Diet_5", 
+                 treatment = "Diet_6", 
+                 variable = "Diet", 
+                 deseq_test = "Wald", 
+                 deseq_fit = "local",
+                 DAtaxon = "family")
+```
+```{Updated DA for genus}
+genus.3.4 <- DA_analysis_diet(ps_glom = ps_genus, 
+                 ps_original = ps, 
+                 control = "Diet_3", 
+                 treatment = "Diet_4", 
+                 variable = "Diet", 
+                 deseq_test = "Wald", 
+                 deseq_fit = "local",
+                 DAtaxon = "genus")
+genus.3.5 <- DA_analysis_diet(ps_glom = ps_genus, 
+                 ps_original = ps, 
+                 control = "Diet_3", 
+                 treatment = "Diet_5", 
+                 variable = "Diet", 
+                 deseq_test = "Wald", 
+                 deseq_fit = "local",
+                 DAtaxon = "genus")
+genus.3.6 <- DA_analysis_diet(ps_glom = ps_genus, 
+                 ps_original = ps, 
+                 control = "Diet_3", 
+                 treatment = "Diet_6", 
+                 variable = "Diet", 
+                 deseq_test = "Wald", 
+                 deseq_fit = "local",
+                 DAtaxon = "genus")
+genus.4.5 <- DA_analysis_diet(ps_glom = ps_genus, 
+                 ps_original = ps, 
+                 control = "Diet_4", 
+                 treatment = "Diet_5", 
+                 variable = "Diet", 
+                 deseq_test = "Wald", 
+                 deseq_fit = "local",
+                 DAtaxon = "genus")
+genus.4.6 <- DA_analysis_diet(ps_glom = ps_genus, 
+                 ps_original = ps, 
+                 control = "Diet_4", 
+                 treatment = "Diet_6", 
+                 variable = "Diet", 
+                 deseq_test = "Wald", 
+                 deseq_fit = "local",
+                 DAtaxon = "genus")
+genus.5.6 <- DA_analysis_diet(ps_glom = ps_genus, 
+                 ps_original = ps, 
+                 control = "Diet_5", 
+                 treatment = "Diet_6", 
+                 variable = "Diet", 
+                 deseq_test = "Wald", 
+                 deseq_fit = "local",
+                 DAtaxon = "genus")
+```
+```{Updated DA for species}
+species.3.4 <- DA_analysis_diet(ps_glom = ps_species, 
+                 ps_original = ps, 
+                 control = "Diet_3", 
+                 treatment = "Diet_4", 
+                 variable = "Diet", 
+                 deseq_test = "Wald", 
+                 deseq_fit = "local",
+                 DAtaxon = "species")
+species.3.5 <- DA_analysis_diet(ps_glom = ps_species, 
+                 ps_original = ps, 
+                 control = "Diet_3", 
+                 treatment = "Diet_5", 
+                 variable = "Diet", 
+                 deseq_test = "Wald", 
+                 deseq_fit = "local",
+                 DAtaxon = "species")
+species.3.6 <- DA_analysis_diet(ps_glom = ps_species, 
+                 ps_original = ps, 
+                 control = "Diet_3", 
+                 treatment = "Diet_6", 
+                 variable = "Diet", 
+                 deseq_test = "Wald", 
+                 deseq_fit = "local",
+                 DAtaxon = "species")
+species.4.5 <- DA_analysis_diet(ps_glom = ps_species, 
+                 ps_original = ps, 
+                 control = "Diet_4", 
+                 treatment = "Diet_5", 
+                 variable = "Diet", 
+                 deseq_test = "Wald", 
+                 deseq_fit = "local",
+                 DAtaxon = "species")
+species.4.6 <- DA_analysis_diet(ps_glom = ps_species, 
+                 ps_original = ps, 
+                 control = "Diet_4", 
+                 treatment = "Diet_6", 
+                 variable = "Diet", 
+                 deseq_test = "Wald", 
+                 deseq_fit = "local",
+                 DAtaxon = "species")
+species.5.6 <- DA_analysis_diet(ps_glom = ps_species, 
+                 ps_original = ps, 
+                 control = "Diet_5", 
+                 treatment = "Diet_6", 
+                 variable = "Diet", 
+                 deseq_test = "Wald", 
+                 deseq_fit = "local",
+                 DAtaxon = "species")
+```
+```{Merge DA dataframes and export}
+DAcontrol <- rbind(order.3.4,order.3.5,order.3.6,
+                          family.3.4,family.3.5,family.3.6,
+                          genus.3.4,genus.3.5,genus.3.6,
+                          species.3.4,species.3.5,species.3.6)
+write.csv(x = DAcontrol, file = "DESeq_DAcontrol_feb12.csv")
+DAtreat <- rbind(order.4.5,order.4.6,order.5.6,
+                    family.4.5,family.4.6,family.5.6,
+                    genus.4.5,genus.4.6,genus.5.6,
+                    species.4.5,species.4.6,species.5.6)
+write.csv(x = DAtreat, file = "DESeq_DAtreat_feb12.csv")
+```
+```{Heatmap}
+da_feb12_pivot <- dcast(da_feb12, rec ~ diet, value.var = "log2foldchange")
+da_feb12_pivot[is.na(da_feb12_pivot)] <- 0 #replace NA with 0
+da_feb12_melt <- melt(da_feb12_pivot)
+row.names(da_feb12_pivot) <- da_feb12_pivot$rec # use 'rec' as row name
+da_feb12_pivot <- da_feb12_pivot[,-1] #remove 'rec' as column
+write.csv(x = da_feb12_pivot, file = "DA_feb12_pivot.csv")
+
+diet_rename = c("Diet_3" = "HPM", "Diet_4" = "HAPS", "Diet_5" = "HAMS", "Diet_6" = "HAMSB")
+da_rename = c("3_4" = "HAPS/HPM", "3_5" = "HAMS/HPM", "3_6" = "HAMSB/HPM")
+da_feb12_melt$rec <- 
+  factor(da_feb12_melt$rec,
+    levels=rev(c("o_Bifidobacteriales", 
+            "g_Parabacteroides",
+            "f_S24-7",
+            "f_Turicibacteraceae", 
+            "f_Peptostreptococcaceae", 
+            "Ruminococcus bromii",
+            "g_Sutterella", 
+            "g_Bilophila")))
+heatmap_y <- if (da_feb12_melt$rec == "o_Bifidobacteriales") "green" else
+  if (da_feb12_melt$rec == "g_Parabacteroides") "green" else
+    if (da_feb12_melt$rec == "f_S24-7") "gold" else
+      if (da_feb12_melt$rec == "f_Turicibacteraceae") "blue" else 
+        if (da_feb12_melt$rec == "f_Peptostreptococcaceae") "blue" else
+          if (da_feb12_melt$rec == "Ruminococcus bromii")) "blue" else "orange"
+
+heatmap_theme <- theme(
+    axis.ticks = element_blank(),
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    axis.line = element_line(colour = "black"),
+    panel.border = element_blank(),
+    panel.grid.major = element_line(colour = "white"),
+    panel.grid.minor = element_line(colour = "white"), 
+    panel.background = element_blank(), 
+    axis.text=element_text(color = "black"))
+
+DA_heatmap <- ggplot(data = da_feb12_melt, 
+       aes(x = da_feb12_melt$variable, y = da_feb12_melt$rec)) + 
+  geom_tile(
+    aes(
+      fill = da_feb12_melt$value)) + 
+  scale_x_discrete(
+    labels=c(
+      "3_4" = "HAPS/HPM", 
+      "3_5" = "HAMS/HPM", 
+      "3_6" = "HAMSB/HPM")) +
+  theme_bw(base_size = 15) +
+  xlab("") + 
+  ylab("") +
+  annotate("text", x = 1, y = 7.9, label = "***", color = "white", size = 7) +
+  annotate("text", x = 1, y = 6.9, label = "**", color = "white", size = 7) +
+  annotate("text", x = 1, y = 5.9, label = "***", color = "white", size = 7) +
+  annotate("text", x = 1, y = 4.9, label = "***", color = "white", size = 7) +
+  annotate("text", x = 1, y = 1.9, label = "**", color = "white", size = 7) +
+  annotate("text", x = 2, y = 7.9, label = "**", color = "white", size = 7) +
+  annotate("text", x = 2, y = 4.9, label = "*", color = "white", size = 7) +
+  annotate("text", x = 2, y = 3.9, label = "*", color = "white", size = 7) +
+  annotate("text", x = 2, y = 2.9, label = "***", color = "white", size = 7) +
+  annotate("text", x = 3, y = 6.9, label = "***", color = "white", size = 7) +
+  annotate("text", x = 3, y = 4.9, label = "***", color = "white", size = 7) +
+  annotate("text", x = 3, y = 3.9, label = "***", color = "white", size = 7) +
+  annotate("text", x = 3, y = 2.9, label = "***", color = "white", size = 7) +
+  annotate("text", x = 3, y = 1.9, label = "***", color = "white", size = 7) +
+  annotate("text", x = 3, y = 0.9, label = "*", color = "white", size = 7) +
+  scale_fill_gradient2(
+    low = "dodgerblue4", 
+    mid = "white", 
+    high = "firebrick", 
+    limits=c(-6.5, 6.5), name="") +
+  heatmap_theme
+ggsave(filename = "DA_heatmap.png", plot = DA_heatmap, width = 7, height = 5, device = "png")
+```
+#Table 2
+```{Mean relative abundance}
+# Transform PS object to %
+ps.tsc <- ps %>% transform_sample_counts(function(x) x/sum(x) ) 
+# Create glom'd dataframes
+ps.tsc.rec <- tax_glom(ps.tsc, taxrank = "REC")
+ps.tsc.rec.df <- psmelt(ps.tsc.rec)
+ps.tsc.spe <- tax_glom(ps.tsc, taxrank = "Species")
+ps.tsc.spe.df <- psmelt(ps.tsc.spe)
+ps.tsc.gen <- tax_glom(ps.tsc, taxrank = "Genus")
+ps.tsc.gen.df <- psmelt(ps.tsc.gen)
+ps.tsc.fam <- tax_glom(ps.tsc, taxrank = "Family")
+ps.tsc.fam.df <- psmelt(ps.tsc.fam)
+ps.tsc.ord <- tax_glom(ps.tsc, taxrank = "Order")
+ps.tsc.ord.df <- psmelt(ps.tsc.ord)
+
+#mean
+ps.tsc.rec.mean <- aggregate(Abundance ~ REC + Diet, data = ps.tsc.rec.df, mean)
+ps.tsc.spe.mean <- aggregate(Abundance ~ Species + Diet, data = ps.tsc.spe.df, mean)
+ps.tsc.gen.mean <- aggregate(Abundance ~ Genus + Diet, data = ps.tsc.gen.df, mean)
+ps.tsc.fam.mean <- aggregate(Abundance ~ Family + Diet, data = ps.tsc.fam.df, mean)
+ps.tsc.ord.mean <- aggregate(Abundance ~ Order + Diet + OTU, data = ps.tsc.ord.df, mean)
+ps.tsc.rec.mean.pivot <- cast(ps.tsc.rec.mean, REC ~ Diet)
+ps.tsc.spe.mean.pivot <- cast(ps.tsc.spe.mean, Species ~ Diet)
+ps.tsc.gen.mean.pivot <- cast(ps.tsc.gen.mean, Genus ~ Diet)
+ps.tsc.fam.mean.pivot <- cast(ps.tsc.fam.mean, Family ~ Diet)
+ps.tsc.ord.mean.pivot <- cast(ps.tsc.ord.mean, Order ~ Diet)
+write.csv(ps.tsc.rec.mean.pivot, file = "diet_3_4_5_6_ps.tsc.rec.mean.pivot.csv")
+write.csv(ps.tsc.spe.mean.pivot, file = "diet_3_4_5_6_ps.tsc.spe.mean.pivot.csv")
+write.csv(ps.tsc.gen.mean.pivot, file = "diet_3_4_5_6_ps.tsc.gen.mean.pivot.csv")
+write.csv(ps.tsc.fam.mean.pivot, file = "diet_3_4_5_6_ps.tsc.fam.mean.pivot.csv")
+write.csv(ps.tsc.ord.mean.pivot, file = "diet_3_4_5_6_ps.tsc.ord.mean.pivot.csv")
+
+#SD
+ps.tsc.rec.sd <- aggregate(Abundance ~ REC + Diet, data = ps.tsc.rec.df, sd)
+ps.tsc.spe.sd <- aggregate(Abundance ~ Species + Diet, data = ps.tsc.spe.df, sd)
+ps.tsc.gen.sd <- aggregate(Abundance ~ Genus + Diet, data = ps.tsc.gen.df, sd)
+ps.tsc.fam.sd <- aggregate(Abundance ~ Family + Diet, data = ps.tsc.fam.df, sd)
+ps.tsc.ord.sd <- aggregate(Abundance ~ Order + Diet, data = ps.tsc.ord.df, sd)
+ps.tsc.rec.sd.pivot <- cast(ps.tsc.rec.sd, REC ~ Diet)
+ps.tsc.spe.sd.pivot <- cast(ps.tsc.spe.sd, Species ~ Diet)
+ps.tsc.gen.sd.pivot <- cast(ps.tsc.gen.sd, Genus ~ Diet)
+ps.tsc.fam.sd.pivot <- cast(ps.tsc.fam.sd, Family ~ Diet)
+ps.tsc.ord.sd.pivot <- cast(ps.tsc.ord.sd, Order ~ Diet)
+
+write.csv(ps.tsc.rec.sd.pivot, file = "diet_3_4_5_6_ps.tsc.rec.sd.pivot.csv")
+write.csv(ps.tsc.spe.sd.pivot, file = "diet_3_4_5_6_ps.tsc.spe.sd.pivot.csv")
+write.csv(ps.tsc.gen.sd.pivot, file = "diet_3_4_5_6_ps.tsc.gen.sd.pivot.csv")
+write.csv(ps.tsc.fam.sd.pivot, file = "diet_3_4_5_6_ps.tsc.fam.sd.pivot.csv")
+write.csv(ps.tsc.ord.sd.pivot, file = "diet_3_4_5_6_ps.tsc.ord.sd.pivot.csv")
+
+
+
+
+
+
+taxa.agg.mean <- aggregate(Abundance ~ REC + Diet, data = ps.tsc.rec.df, mean)
+taxa.agg.mean.pivot <- cast(taxa.agg.mean, REC ~ Diet)
+write.csv(taxa.agg.pivot, file = "diet_3_4_5_6_mean_relative_abundance.csv")
+#SD
+taxa.agg.sd <- aggregate(Abundance ~ REC + Diet, data = taxa.df, function(x) sd = sd(x))
+taxa.agg.sd.pivot <- cast(taxa.agg.sd, REC ~ Diet)
+write.csv(taxa.agg.pivot, file = "diet_3_4_5_6_sd_relative_abundance.csv")
+
+taxa.agg <- aggregate(Abundance ~ REC + Diet, 
+                      data = taxa.df, 
+                      function(x) sd = sd(x))
+taxa.agg.pivot <- cast(taxa.agg, REC ~ Diet)
+taxa.agg.pivot
+######
+#Repeat for species-level
+ps.tsc <- ps %>% transform_sample_counts(function(x) x/sum(x) ) 
+ps.sp.tsc <- ps.tsc %>% tax_glom(taxrank = "Species")
+taxa.sp.df <- psmelt(ps.sp.tsc)
+#mean
+taxa.sp.agg.mean <- aggregate(Abundance ~ Species + Diet, data = taxa.sp.df, mean)
+taxa.sp.agg.mean.pivot <- cast(taxa.sp.agg.mean, Species ~ Diet)
+write.csv(taxa.sp.agg.mean.pivot, file = "diet_3_4_5_6_sp_mean_relative_abundance.csv")
+#SD
+taxa.sp.agg.sd <- aggregate(Abundance ~ Species + Diet, 
+                            data = taxa.sp.df, 
+                            function(x) sd = sd(x))
+taxa.sp.agg.sd.pivot <- cast(taxa.sp.agg.sd, Species ~ Diet)
+write.csv(taxa.sp.agg.sd.pivot, file = "diet_3_4_5_6_sp_sd_relative_abundance.csv")
+
+
+
+
+###taxa.agg.test <- aggregate(Abundance ~ REC + Diet, data = taxa.df, FUN = )
+###taxa.agg.mean.pivot <- cast(taxa.agg.mean, REC ~ Diet)
+```
+# Not used:
+```{DA diet_4 diet_5}
+# Order-level DA 4vs5
+dds <- phyloseq_to_deseq2(ps_order, ~ Diet)
+dds <- DESeq(dds, test = "Wald", fitType = "local")
+res <- results(dds, contrast=c("Diet", "Diet_5", "Diet_4"))
+res <- res[which(res$padj < 0.05), ]
+sigtab <- res[which(res$padj < 0.05), ]
+sigtab = cbind(as(sigtab, "data.frame"), as(tax_table(ps)[rownames(sigtab), ], "matrix"))
+res_ordered <- res[order(res$log2FoldChange), ]
+res_ordered
+sigtab
+write.csv(x = sigtab, file = "d_4_5_log2change_order.csv")
+
+# Family-level DA 4vs5
+dds <- phyloseq_to_deseq2(ps_family, ~ Diet)
+dds <- DESeq(dds, test = "Wald", fitType = "local")
+res <- results(dds, contrast=c("Diet", "Diet_5", "Diet_4"))
+res <- res[which(res$padj < 0.05), ]
+sigtab <- res[which(res$padj < 0.05), ]
+sigtab = cbind(as(sigtab, "data.frame"), as(tax_table(ps)[rownames(sigtab), ], "matrix"))
+res_ordered <- res[order(res$log2FoldChange), ]
+res_ordered
+sigtab
+write.csv(x = sigtab, file = "d_4_5_log2change_family.csv")
+
+
+ps_genus <- tax_glom(ps, taxrank = "Genus")
+dds <- phyloseq_to_deseq2(ps_genus, ~ Diet)
+dds <- DESeq(dds, test = "Wald", fitType = "local")
+res <- results(dds, contrast=c("Diet", "Diet_5", "Diet_4"))
+res <- res[which(res$padj < 0.05), ]
+sigtab <- res[which(res$padj < 0.05), ]
+sigtab = cbind(as(sigtab, "data.frame"), as(tax_table(ps)[rownames(sigtab), ], "matrix"))
+res_ordered <- res[order(res$log2FoldChange), ]
+res_ordered
+sigtab
+write.csv(x = sigtab, file = "d_4_5_log2change_genus.csv")
+```
+```{DA diet_4 diet_6}
+ps_order <- tax_glom(ps, taxrank = "Order")
+dds <- phyloseq_to_deseq2(ps_order, ~ Diet)
+dds <- DESeq(dds, test = "Wald", fitType = "local")
+res <- results(dds, contrast=c("Diet", "Diet_6", "Diet_4"))
+res <- res[which(res$padj < 0.05), ]
+sigtab <- res[which(res$padj < 0.05), ]
+sigtab = cbind(as(sigtab, "data.frame"), as(tax_table(ps)[rownames(sigtab), ], "matrix"))
+res_ordered <- res[order(res$log2FoldChange), ]
+res_ordered
+sigtab
+write.csv(x = sigtab, file = "d_4_6_log2change_order.csv")
+
+ps_family <- tax_glom(ps, taxrank = "Family")
+dds <- phyloseq_to_deseq2(ps_family, ~ Diet)
+dds <- DESeq(dds, test = "Wald", fitType = "local")
+res <- results(dds, contrast=c("Diet", "Diet_6", "Diet_4"))
+res <- res[which(res$padj < 0.05), ]
+sigtab <- res[which(res$padj < 0.05), ]
+sigtab = cbind(as(sigtab, "data.frame"), as(tax_table(ps)[rownames(sigtab), ], "matrix"))
+res_ordered <- res[order(res$log2FoldChange), ]
+res_ordered
+sigtab
+write.csv(x = sigtab, file = "d_4_6_log2change_family.csv")
+
+ps_genus <- tax_glom(ps, taxrank = "Genus")
+dds <- phyloseq_to_deseq2(ps_genus, ~ Diet)
+dds <- DESeq(dds, test = "Wald", fitType = "local")
+res <- results(dds, contrast=c("Diet", "Diet_6", "Diet_4"))
+res <- res[which(res$padj < 0.05), ]
+sigtab <- res[which(res$padj < 0.05), ]
+sigtab = cbind(as(sigtab, "data.frame"), as(tax_table(ps)[rownames(sigtab), ], "matrix"))
+res_ordered <- res[order(res$log2FoldChange), ]
+res_ordered
+sigtab
+write.csv(x = sigtab, file = "d_4_6_log2change_genus.csv")
+```
+```{DA diet_5 diet_6}
+ps_order <- tax_glom(ps, taxrank = "Order")
+dds <- phyloseq_to_deseq2(ps_order, ~ Diet)
+dds <- DESeq(dds, test = "Wald", fitType = "local")
+res <- results(dds, contrast=c("Diet", "Diet_6", "Diet_5"))
+res <- res[which(res$padj < 0.05), ]
+sigtab <- res[which(res$padj < 0.05), ]
+sigtab = cbind(as(sigtab, "data.frame"), as(tax_table(ps)[rownames(sigtab), ], "matrix"))
+res_ordered <- res[order(res$log2FoldChange), ]
+res_ordered
+sigtab
+write.csv(x = sigtab, file = "d_5_6_log2change_order.csv")
+
+ps_family <- tax_glom(ps, taxrank = "Family")
+dds <- phyloseq_to_deseq2(ps_family, ~ Diet)
+dds <- DESeq(dds, test = "Wald", fitType = "local")
+res <- results(dds, contrast=c("Diet", "Diet_6", "Diet_5"))
+res <- res[which(res$padj < 0.05), ]
+sigtab <- res[which(res$padj < 0.05), ]
+sigtab = cbind(as(sigtab, "data.frame"), as(tax_table(ps)[rownames(sigtab), ], "matrix"))
+res_ordered <- res[order(res$log2FoldChange), ]
+res_ordered
+sigtab
+write.csv(x = sigtab, file = "d_5_6_log2change_family.csv")
+
+ps_genus <- tax_glom(ps, taxrank = "Genus")
+dds <- phyloseq_to_deseq2(ps_genus, ~ Diet)
+dds <- DESeq(dds, test = "Wald", fitType = "local")
+res <- results(dds, contrast=c("Diet", "Diet_6", "Diet_5"))
+res <- res[which(res$padj < 0.05), ]
+sigtab <- res[which(res$padj < 0.05), ]
+sigtab = cbind(as(sigtab, "data.frame"), as(tax_table(ps)[rownames(sigtab), ], "matrix"))
+res_ordered <- res[order(res$log2FoldChange), ]
+res_ordered
+sigtab
+write.csv(x = sigtab, file = "d_5_6_log2change_genus.csv")
+```
+```{DA diet_3_4 order, family, and genus}
+# diet 3_4 DESeq
+SeqTab_3_4 <- read.table("diet_3_4_merged_table_filtered.txt", header = TRUE, stringsAsFactors = FALSE)
+colnames(SeqTab_3_4) <- gsub("X", "", colnames(SeqTab_3_4))
+row.names(SeqTab_3_4) <- SeqTab_3_4$OTUID
+SeqTab_3_4 <- SeqTab_3_4[,-1]
+SeqTab_3_4 <- as.matrix.data.frame(SeqTab_3_4)
+TaxTab_3_4 <- read.table("taxonomy.csv", header = TRUE, sep = ',', na.strings = NA)
+# format taxon columns
+TaxTab_3_4$Kingdom <- substring(TaxTab_3_4$Kingdom, 4)
+TaxTab_3_4$Phylum <- substring(TaxTab_3_4$Phylum, 4)
+TaxTab_3_4$Class <- substring(TaxTab_3_4$Class, 4)
+TaxTab_3_4$Order <- substring(TaxTab_3_4$Order, 4)
+TaxTab_3_4$Family <- substring(TaxTab_3_4$Family, 4)
+TaxTab_3_4$Genus <- substring(TaxTab_3_4$Genus, 4)
+TaxTab_3_4$Species <- substring(TaxTab_3_4$Species, 4)
+# index TaxTab as Feature ID
+rownames(TaxTab_3_4) <- TaxTab_3_4$FeatureID
+# remove first row
+TaxTab_3_4 <- TaxTab_3_4[,-1]
+# import as matrix dataframe
+TaxTab_3_4 <- as.matrix.data.frame(TaxTab_3_4)
+# read in metadata
+samdf <- read.table("diet_3_4_5_6.tsv", header = TRUE)
+# make diet_3 the control
+samdf$Diet <- relevel(samdf$Diet, "Diet_3")
+# make sampleID the rownames
+rownames(samdf) <- samdf$SampleID
+tree <- read_tree("tree.nwk")
+# merge
+ps_3_4 <- phyloseq(otu_table(SeqTab_3_4, taxa_are_rows = TRUE), tax_table(TaxTab_3_4), sample_data(samdf), read_tree(tree))
+# zeya's code for recommended
+TaxTab_3_4.2 <- as.data.frame(TaxTab_3_4)
+list.g <- as.character(TaxTab_3_4.2$Genus)
+list.f <- as.character(TaxTab_3_4.2$Family)
+list.o <- as.character(TaxTab_3_4.2$Order)
+list.c <- as.character(TaxTab_3_4.2$Class)
+list.p <- as.character(TaxTab_3_4.2$Phylum)
+list.k <- as.character(TaxTab_3_4.2$Kingdom)
+list.REC <- character(length(list.g))
+for(i in 1:dim(TaxTab_3_4.2)[1]){
+  G = which(TaxTab_3_4.2$Genus[i] == "")
+  F = which(TaxTab_3_4.2$Family[i] == "")
+  O = which(TaxTab_3_4.2$Order[i] == "")
+  C = which(TaxTab_3_4.2$Class[i] == "")
+  P = which(TaxTab_3_4.2$Phylum[i] == "")
+  K = which(TaxTab_3_4.2$Kingdom[i] == "")
+  if(length(G) == 0){
+    list.REC[i] <- list.g[i]
+  } else if(length(F) == 0){
+    list.REC[i] <- list.f[i]
+  } else if(length(O) == 0){
+    list.REC[i] <- list.o[i]
+  } else if(length(C) == 0){
+    list.REC[i] <- list.c[i]
+  } else if(length(P) == 0){
+    list.REC[i] <- list.p[i]
+  } else if(length(K) == 0){
+    list.REC[i] <- list.k[i]
+  } else
+    list.REC[i] <- "meow"
+}
+TaxTab_3_4.2$REC <- list.REC
+TaxTab_3_4.2$REC <- factor(TaxTab_3_4.2$REC)
+ps_3_4 <- merge_phyloseq(ps_3_4, TaxTab_3_4.2 %>% as.matrix() %>% tax_table())
+
+# glom at Order level, DA analysis
+ps_3_4_glom <- tax_glom(ps_3_4, taxrank = "Order")
+dds_3_4 <- phyloseq_to_deseq2(ps_3_4_glom, ~ Diet)
+dds_3_4 <- DESeq(object = dds_3_4, test = "Wald", fitType = "local")
+res_3_4 <- results(dds_3_4, alpha = 0.05)
+res_3_4 <- res_3_4[which(res_3_4$padj < 0.05), ]
+sigtab_3_4 <- res_3_4[which(res_3_4$padj < 0.05), ]
+sigtab_3_4 = cbind(as(sigtab_3_4, "data.frame"), as(tax_table(ps_3_4)[rownames(sigtab_3_4), ], "matrix"))
+res_ordered_3_4 <- res_3_4[order(res_3_4$log2FoldChange), ]
+#hist(res_ordered_3_4$padj, breaks=20, col="grey")
+
+# extract as data frame format
+#res_ordered_3_4 <- data.frame(res_ordered_3_4)
+#taxTab_3_4 <- data.frame(tax_table(ps_3_4_glom))
+
+# make sure that the row names of DESeq2 results table and the Phyloseq taxa table is in the same order
+#row.names(res_ordered_3_4) <- sort(row.names(res_ordered_3_4))
+#row.names(taxTab_3_4) <- sort(row.names(taxTab_3_4))
+#row.names(res_ordered_3_4) == row.names(taxTab_3_4)
+# change the row name of DEseq2 resutls table with Order level taxa names
+#for (i in 1:length(res_ordered_3_4$baseMean)) {
+#  row.names(res_ordered_3_4)[i] <- gsub(res_ordered_3_4,
+#                                    row.names(res_ordered_3_4)[i],
+#                                    taxTab_3_4$Order[i])
+#}
+write.csv(x = sigtab_3_4, file = "d_3_4_log2change_order.csv")
+
+# glom at Family level, DA analysis
+ps_3_4_glom <- tax_glom(ps_3_4, taxrank = "Family")
+dds_3_4 <- phyloseq_to_deseq2(ps_3_4_glom, ~ Diet)
+dds_3_4 <- DESeq(object = dds_3_4, test = "Wald", fitType = "local")
+res_3_4 <- results(dds_3_4, alpha = 0.05)
+res_3_4 <- res_3_4[which(res_3_4$padj < 0.05), ]
+sigtab_3_4 <- res_3_4[which(res_3_4$padj < 0.05), ]
+sigtab_3_4 = cbind(as(sigtab_3_4, "data.frame"), as(tax_table(ps_3_4)[rownames(sigtab_3_4), ], "matrix"))
+res_ordered_3_4 <- res_3_4[order(res_3_4$log2FoldChange), ]
+#hist(res_ordered_3_4$padj, breaks=20, col="grey")
+
+# extract as data frame format
+#res_ordered_3_4 <- data.frame(res_ordered_3_4)
+#taxTab_3_4 <- data.frame(tax_table(ps_3_4_glom))
+
+# make sure that the row names of DESeq2 results table and the Phyloseq taxa table is in the same order
+#row.names(res_ordered_3_4) <- sort(row.names(res_ordered_3_4))
+#row.names(taxTab_3_4) <- sort(row.names(taxTab_3_4))
+#row.names(res_ordered_3_4) == row.names(taxTab_3_4)
+
+# change the row name of DEseq2 resutls table with Order level taxa names
+#for (i in 1:length(res_ordered_3_4$baseMean)) {
+#  row.names(res_ordered_3_4)[i] <- gsub(res_ordered_3_4,
+#                                    row.names(res_ordered_3_4)[i],
+#                                    taxTab_3_4$Family[i])
+#}
+write.csv(x = sigtab_3_4, file = "d_3_4_log2change_family.csv")
+
+# glom at Genus level, DA analysis
+ps_3_4_glom <- tax_glom(ps_3_4, taxrank = "Genus")
+dds_3_4 <- phyloseq_to_deseq2(ps_3_4_glom, ~ Diet)
+dds_3_4 <- DESeq(object = dds_3_4, test = "Wald", fitType = "local")
+res_3_4 <- results(dds_3_4, alpha = 0.05)
+res_3_4 <- res_3_4[which(res_3_4$padj < 0.05), ]
+sigtab_3_4 <- res_3_4[which(res_3_4$padj < 0.05), ]
+sigtab_3_4 = cbind(as(sigtab_3_4, "data.frame"), as(tax_table(ps_3_4)[rownames(sigtab_3_4), ], "matrix"))
+res_ordered_3_4 <- res_3_4[order(res_3_4$log2FoldChange), ]
+#hist(res_ordered_3_4$padj, breaks=20, col="grey")
+
+# extract as data frame format
+#res_ordered_3_4 <- data.frame(res_ordered_3_4)
+#taxTab_3_4 <- data.frame(tax_table(ps_3_4_glom))
+
+# make sure that the row names of DESeq2 results table and the Phyloseq taxa table is in the same order
+#row.names(res_ordered_3_4) <- sort(row.names(res_ordered_3_4))
+#row.names(taxTab_3_4) <- sort(row.names(taxTab_3_4))
+#row.names(res_ordered_3_4) == row.names(taxTab_3_4)
+# change the row name of DEseq2 resutls table with Order level taxa names
+#for (i in 1:length(res_ordered_3_4$baseMean)) {
+#  row.names(res_ordered_3_4)[i] <- gsub(res_ordered_3_4,
+#                                    row.names(res_ordered_3_4)[i],
+#                                    taxTab_3_4$Genus[i])
+#}
+write.csv(x = sigtab_3_4, file = "d_3_4_log2change_genus.csv")
+```
+```{DA diet_3_5 order, family, and genus}
+# diet 3_5 DESeq
+
+# glom at Order level, DA analysis
+ps_3_5_glom <- tax_glom(ps_3_5, taxrank = "Order")
+dds_3_5 <- phyloseq_to_deseq2(ps_3_5_glom, ~ Diet)
+dds_3_5 <- DESeq(object = dds_3_5, test = "Wald", fitType = "local")
+res_3_5 <- results(dds_3_5, alpha = 0.05)
+res_3_5 <- res_3_5[which(res_3_5$padj < 0.05), ]
+sigtab_3_5 <- res_3_5[which(res_3_5$padj < 0.05), ]
+sigtab_3_5 = cbind(as(sigtab_3_5, "data.frame"), as(tax_table(ps_3_5)[rownames(sigtab_3_5), ], "matrix"))
+res_ordered_3_5 <- res_3_5[order(res_3_5$log2FoldChange), ]
+#hist(res_ordered_3_5$padj, breaks=20, col="grey")
+
+# extract as data frame format
+#res_ordered_3_5 <- data.frame(res_ordered_3_5)
+#taxTab_3_5 <- data.frame(tax_table(ps_3_5_glom))
+
+# make sure that the row names of DESeq2 results table and the Phyloseq taxa table is in the same order
+#row.names(res_ordered_3_5) <- sort(row.names(res_ordered_3_5))
+#row.names(taxTab_3_5) <- sort(row.names(taxTab_3_5))
+#row.names(res_ordered_3_5) == row.names(taxTab_3_5)
+# change the row name of DEseq2 resutls table with Order level taxa names
+#for (i in 1:length(res_ordered_3_5$baseMean)) {
+#  row.names(res_ordered_3_5)[i] <- gsub(res_ordered_3_5,
+#                                    row.names(res_ordered_3_5)[i],
+#                                    taxTab_3_5$Order[i])
+#}
+write.csv(x = sigtab_3_5, file = "d_3_5_log2change_order.csv")
+
+# glom at Family level, DA analysis
+ps_3_5_glom <- tax_glom(ps_3_5, taxrank = "Family")
+dds_3_5 <- phyloseq_to_deseq2(ps_3_5_glom, ~ Diet)
+dds_3_5 <- DESeq(object = dds_3_5, test = "Wald", fitType = "local")
+res_3_5 <- results(dds_3_5, alpha = 0.05)
+res_3_5 <- res_3_5[which(res_3_5$padj < 0.05), ]
+sigtab_3_5 <- res_3_5[which(res_3_5$padj < 0.05), ]
+sigtab_3_5 = cbind(as(sigtab_3_5, "data.frame"), as(tax_table(ps_3_5)[rownames(sigtab_3_5), ], "matrix"))
+res_ordered_3_5 <- res_3_5[order(res_3_5$log2FoldChange), ]
+#hist(res_ordered_3_5$padj, breaks=20, col="grey")
+
+# extract as data frame format
+#res_ordered_3_5 <- data.frame(res_ordered_3_5)
+#taxTab_3_5 <- data.frame(tax_table(ps_3_5_glom))
+
+# make sure that the row names of DESeq2 results table and the Phyloseq taxa table is in the same order
+#row.names(res_ordered_3_5) <- sort(row.names(res_ordered_3_5))
+#row.names(taxTab_3_5) <- sort(row.names(taxTab_3_5))
+#row.names(res_ordered_3_5) == row.names(taxTab_3_5)
+
+# change the row name of DEseq2 resutls table with Order level taxa names
+#for (i in 1:length(res_ordered_3_5$baseMean)) {
+#  row.names(res_ordered_3_5)[i] <- gsub(res_ordered_3_5,
+#                                    row.names(res_ordered_3_5)[i],
+#                                    taxTab_3_5$Family[i])
+#}
+write.csv(x = sigtab_3_5, file = "d_3_5_log2change_family.csv")
+
+# glom at Genus level, DA analysis
+ps_3_5_glom <- tax_glom(ps_3_5, taxrank = "Genus")
+dds_3_5 <- phyloseq_to_deseq2(ps_3_5_glom, ~ Diet)
+dds_3_5 <- DESeq(object = dds_3_5, test = "Wald", fitType = "local")
+res_3_5 <- results(dds_3_5, alpha = 0.05)
+res_3_5 <- res_3_5[which(res_3_5$padj < 0.05), ]
+sigtab_3_5 <- res_3_5[which(res_3_5$padj < 0.05), ]
+sigtab_3_5 = cbind(as(sigtab_3_5, "data.frame"), as(tax_table(ps_3_5)[rownames(sigtab_3_5), ], "matrix"))
+res_ordered_3_5 <- res_3_5[order(res_3_5$log2FoldChange), ]
+#hist(res_ordered_3_5$padj, breaks=20, col="grey")
+
+# extract as data frame format
+#res_ordered_3_5 <- data.frame(res_ordered_3_5)
+#taxTab_3_5 <- data.frame(tax_table(ps_3_5_glom))
+
+# make sure that the row names of DESeq2 results table and the Phyloseq taxa table is in the same order
+#row.names(res_ordered_3_5) <- sort(row.names(res_ordered_3_5))
+#row.names(taxTab_3_5) <- sort(row.names(taxTab_3_5))
+#row.names(res_ordered_3_5) == row.names(taxTab_3_5)
+# change the row name of DEseq2 resutls table with Order level taxa names
+#for (i in 1:length(res_ordered_3_5$baseMean)) {
+#  row.names(res_ordered_3_5)[i] <- gsub(res_ordered_3_5,
+#                                    row.names(res_ordered_3_5)[i],
+#                                    taxTab_3_5$Genus[i])
+#}
+write.csv(x = sigtab_3_5, file = "d_3_5_log2change_genus.csv")
+```
+```{DA diet_3_6 order, family, and genus}
+# diet 3_6 DESeq
+SeqTab_3_6 <- read.table("diet_3_6_merged_table_filtered.txt", header = TRUE, stringsAsFactors = FALSE)
+colnames(SeqTab_3_6) <- gsub("X", "", colnames(SeqTab_3_6))
+row.names(SeqTab_3_6) <- SeqTab_3_6$OTUID
+SeqTab_3_6 <- SeqTab_3_6[,-1]
+SeqTab_3_6 <- as.matrix.data.frame(SeqTab_3_6)
+TaxTab_3_6 <- read.table("taxonomy.csv", header = TRUE, sep = ',', na.strings = NA)
+# format taxon columns
+TaxTab_3_6$Kingdom <- substring(TaxTab_3_6$Kingdom, 4)
+TaxTab_3_6$Phylum <- substring(TaxTab_3_6$Phylum, 4)
+TaxTab_3_6$Class <- substring(TaxTab_3_6$Class, 4)
+TaxTab_3_6$Order <- substring(TaxTab_3_6$Order, 4)
+TaxTab_3_6$Family <- substring(TaxTab_3_6$Family, 4)
+TaxTab_3_6$Genus <- substring(TaxTab_3_6$Genus, 4)
+TaxTab_3_6$Species <- substring(TaxTab_3_6$Species, 4)
+# index TaxTab as Feature ID
+rownames(TaxTab_3_6) <- TaxTab_3_6$FeatureID
+# remove first row
+TaxTab_3_6 <- TaxTab_3_6[,-1]
+# import as matrix dataframe
+TaxTab_3_6 <- as.matrix.data.frame(TaxTab_3_6)
+# read in metadata
+samdf <- read.table("diet_3_4_5_6.tsv", header = TRUE)
+# make diet_3 the control
+samdf$Diet <- relevel(samdf$Diet, "Diet_3")
+# make sampleID the rownames
+rownames(samdf) <- samdf$SampleID
+tree <- read_tree("tree.nwk")
+# merge
+ps_3_6 <- phyloseq(otu_table(SeqTab_3_6, taxa_are_rows = TRUE), tax_table(TaxTab_3_6), sample_data(samdf), read_tree(tree))
+# zeya's code for recommended
+TaxTab_3_6.2 <- as.data.frame(TaxTab_3_6)
+list.g <- as.character(TaxTab_3_6.2$Genus)
+list.f <- as.character(TaxTab_3_6.2$Family)
+list.o <- as.character(TaxTab_3_6.2$Order)
+list.c <- as.character(TaxTab_3_6.2$Class)
+list.p <- as.character(TaxTab_3_6.2$Phylum)
+list.k <- as.character(TaxTab_3_6.2$Kingdom)
+list.REC <- character(length(list.g))
+for(i in 1:dim(TaxTab_3_6.2)[1]){
+  G = which(TaxTab_3_6.2$Genus[i] == "")
+  F = which(TaxTab_3_6.2$Family[i] == "")
+  O = which(TaxTab_3_6.2$Order[i] == "")
+  C = which(TaxTab_3_6.2$Class[i] == "")
+  P = which(TaxTab_3_6.2$Phylum[i] == "")
+  K = which(TaxTab_3_6.2$Kingdom[i] == "")
+  if(length(G) == 0){
+    list.REC[i] <- list.g[i]
+  } else if(length(F) == 0){
+    list.REC[i] <- list.f[i]
+  } else if(length(O) == 0){
+    list.REC[i] <- list.o[i]
+  } else if(length(C) == 0){
+    list.REC[i] <- list.c[i]
+  } else if(length(P) == 0){
+    list.REC[i] <- list.p[i]
+  } else if(length(K) == 0){
+    list.REC[i] <- list.k[i]
+  } else
+    list.REC[i] <- "meow"
+}
+TaxTab_3_6.2$REC <- list.REC
+TaxTab_3_6.2$REC <- factor(TaxTab_3_6.2$REC)
+ps_3_6 <- merge_phyloseq(ps_3_6, TaxTab_3_6.2 %>% as.matrix() %>% tax_table())
+
+# glom at Order level, DA analysis
+ps_3_6_glom <- tax_glom(ps_3_6, taxrank = "Order")
+dds_3_6 <- phyloseq_to_deseq2(ps_3_6_glom, ~ Diet)
+dds_3_6 <- DESeq(object = dds_3_6, test = "Wald", fitType = "local")
+res_3_6 <- results(dds_3_6, alpha = 0.05)
+res_3_6 <- res_3_6[which(res_3_6$padj < 0.05), ]
+sigtab_3_6 <- res_3_6[which(res_3_6$padj < 0.05), ]
+sigtab_3_6 = cbind(as(sigtab_3_6, "data.frame"), as(tax_table(ps_3_6)[rownames(sigtab_3_6), ], "matrix"))
+res_ordered_3_6 <- res_3_6[order(res_3_6$log2FoldChange), ]
+#hist(res_ordered_3_6$padj, breaks=20, col="grey")
+
+# extract as data frame format
+#res_ordered_3_6 <- data.frame(res_ordered_3_6)
+#taxTab_3_6 <- data.frame(tax_table(ps_3_6_glom))
+
+# make sure that the row names of DESeq2 results table and the Phyloseq taxa table is in the same order
+#row.names(res_ordered_3_6) <- sort(row.names(res_ordered_3_6))
+#row.names(taxTab_3_6) <- sort(row.names(taxTab_3_6))
+#row.names(res_ordered_3_6) == row.names(taxTab_3_6)
+# change the row name of DEseq2 resutls table with Order level taxa names
+#for (i in 1:length(res_ordered_3_6$baseMean)) {
+#  row.names(res_ordered_3_6)[i] <- gsub(res_ordered_3_6,
+#                                    row.names(res_ordered_3_6)[i],
+#                                    taxTab_3_6$Order[i])
+#}
+write.csv(x = sigtab_3_6, file = "d_3_6_log2change_order.csv")
+
+# glom at Species level, DA analysis
+ps_3_6_species <- tax_glom(ps_3_6, taxrank = "Species")
+dds_3_6_species <- phyloseq_to_deseq2(ps_3_6_species, ~ Diet)
+dds_3_6_species <- DESeq(object = dds_3_6_species, test = "Wald", fitType = "local")
+res_3_6_species <- results(dds_3_6_species, alpha = 0.05)
+res_3_6_species <- res_3_6_species[which(res_3_6_species$padj < 0.05), ]
+sigtab_3_6_species <- res_3_6_species[which(res_3_6_species$padj < 0.05), ]
+sigtab_3_6_species = cbind(as(sigtab_3_6_species, "data.frame"), as(tax_table(ps_3_6)[rownames(sigtab_3_6_species), ], "matrix"))
+
+# glom at Family level, DA analysis
+ps_3_6_glom <- tax_glom(ps_3_6, taxrank = "Family")
+dds_3_6 <- phyloseq_to_deseq2(ps_3_6_glom, ~ Diet)
+dds_3_6 <- DESeq(object = dds_3_6, test = "Wald", fitType = "local")
+res_3_6 <- results(dds_3_6, alpha = 0.05)
+res_3_6 <- res_3_6[which(res_3_6$padj < 0.05), ]
+sigtab_3_6 <- res_3_6[which(res_3_6$padj < 0.05), ]
+sigtab_3_6 = cbind(as(sigtab_3_6, "data.frame"), as(tax_table(ps_3_6)[rownames(sigtab_3_6), ], "matrix"))
+res_ordered_3_6 <- res_3_6[order(res_3_6$log2FoldChange), ]
+#hist(res_ordered_3_6$padj, breaks=20, col="grey")
+
+# extract as data frame format
+#res_ordered_3_6 <- data.frame(res_ordered_3_6)
+#taxTab_3_6 <- data.frame(tax_table(ps_3_6_glom))
+
+# make sure that the row names of DESeq2 results table and the Phyloseq taxa table is in the same order
+#row.names(res_ordered_3_6) <- sort(row.names(res_ordered_3_6))
+#row.names(taxTab_3_6) <- sort(row.names(taxTab_3_6))
+#row.names(res_ordered_3_6) == row.names(taxTab_3_6)
+
+# change the row name of DEseq2 resutls table with Order level taxa names
+#for (i in 1:length(res_ordered_3_6$baseMean)) {
+#  row.names(res_ordered_3_6)[i] <- gsub(res_ordered_3_6,
+#                                    row.names(res_ordered_3_6)[i],
+#                                    taxTab_3_6$Family[i])
+#}
+write.csv(x = sigtab_3_6, file = "d_3_6_log2change_family.csv")
+
+# glom at Genus level, DA analysis
+ps_3_6_genus <- tax_glom(ps_3_6, taxrank = "Genus")
+dds_3_6_genus <- phyloseq_to_deseq2(ps_3_6_genus, ~ Diet)
+dds_3_6_genus <- DESeq(object = dds_3_6_genus, test = "Wald", fitType = "local")
+res_3_6_genus <- results(dds_3_6_genus, alpha = 0.05)
+res_3_6_genus <- res_3_6_genus[which(res_3_6_genus$padj < 0.05), ]
+sigtab_3_6_genus <- res_3_6_genus[which(res_3_6_genus$padj < 0.05), ]
+sigtab_3_6_genus = cbind(as(sigtab_3_6_genus, "data.frame"), as(tax_table(ps_3_6)[rownames(sigtab_3_6_genus), ], "matrix"))
+res_ordered_3_6 <- res_3_6[order(res_3_6_genus$log2FoldChange), ]
+#hist(res_ordered_3_6$padj, breaks=20, col="grey")
+
+# extract as data frame format
+#res_ordered_3_6 <- data.frame(res_ordered_3_6)
+#taxTab_3_6 <- data.frame(tax_table(ps_3_6_glom))
+
+# make sure that the row names of DESeq2 results table and the Phyloseq taxa table is in the same order
+#row.names(res_ordered_3_6) <- sort(row.names(res_ordered_3_6))
+#row.names(taxTab_3_6) <- sort(row.names(taxTab_3_6))
+#row.names(res_ordered_3_6) == row.names(taxTab_3_6)
+# change the row name of DEseq2 resutls table with Order level taxa names
+#for (i in 1:length(res_ordered_3_6$baseMean)) {
+#  row.names(res_ordered_3_6)[i] <- gsub(res_ordered_3_6,
+#                                    row.names(res_ordered_3_6)[i],
+#                                    taxTab_3_6$Genus[i])
+#}
+write.csv(x = sigtab_3_6, file = "d_3_6_log2change_genus.csv")
+```

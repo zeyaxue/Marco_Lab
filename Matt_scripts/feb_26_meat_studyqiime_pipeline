@@ -1,0 +1,213 @@
+#!/bin/bash
+
+# This script processes 16S data from raw read to standard diversity measures
+
+# activate qiime2 environment — this may be different on your system
+source activate qiime2-2018.4
+
+version=2.0
+if [ $1 == -h ] || [ $1 == --help ]; then
+        echo "An automated qiime2 pipeline for the Marco Lab"
+        echo "Usage: ./qiime2_marcolab_v${version}.sh -1 -2 -3 -4 -5"
+        echo ""
+        echo "  -1, Forward library"
+        echo "  -2, Experiment basename"
+        echo "  -3, Length of barcode"
+	echo "	-4, Experimental variable"
+        echo ""
+        echo "Example:"
+        echo "qiime2_marcolab_v${version}.sh \\"
+        echo "/home/path/forward.fq \\"
+        echo "diet_1_2 \\"
+        echo "8 \\"
+	echo "Diet"
+        echo ""
+        echo "Make sure you create a directory for your experiment, which is exactly the basename."
+        echo "Make sure mapping file is in the directory of your experiment (basename), and has the title basename.tsv"
+	exit 1
+fi
+
+# main variables
+raw_read_1=$1
+title=$2
+main_exp=$PWD/${title}
+metadata=${main_exp}/${title}.tsv
+sample_var=$4 # which column in the metadata file should be used as ind var (x-axis)
+
+echo 'pwd = '$PWD
+echo "File 1 = ${raw_read_1}"
+echo "Experiment folder = ${main_exp}"
+echo "Metadata used = ${metadata}"
+echo "Experimental variable = ${sample_var}"
+
+#total_seq_F=`grep -c '>' ${main_exp}/raw_data_F/sequences.fastq`
+
+(qiime tools import \
+--type EMPSingleEndSequences \
+--input-path $1 \
+--output-path ${main_exp}/${title}_imported_seqs_F.qza) &
+echo 'Importing...'
+wait
+
+import_seq_F=${main_exp}/${title}_imported_seqs_F.qza
+echo "Sequences imported."
+echo "${import_seq_F}"
+
+# demultiplex the libraries
+(
+qiime demux emp-single \
+--i-seqs ${import_seq_F} \
+--m-barcodes-file $metadata \
+--m-barcodes-column BarcodeSequence \
+--p-rev-comp-barcodes \
+--o-per-sample-sequences $main_exp/${title}_demux_F.qza
+) &
+wait
+
+dmux_F=${main_exp}/${title}_demux_F.qza
+echo "Demultiplexed successfully."
+
+# Check quality scores of reads
+qiime demux summarize \
+--i-data $dmux_F \
+--o-visualization $main_exp/${title}_demux_F.qzv
+
+echo "Demultiplex visualized in '${title}_demux_F.qzv' and '${title}_demux_R.qzv'."
+echo 'Check quality value of these for the next input'
+
+# User input for trimming
+read -p 'How much should we trim left of F reads?: ' trim_left_F
+read -p 'How much should we trim right of F reads?: ' trim_right_F
+
+# If you want to bypass the above, unhash (#) the next two lines and hash the previous 4.
+#trim_left_F=21
+#trim_right_F=270
+
+# denoise and create ASV's, feature tables
+echo "Denoising and creating ASVs. This takes approx 30min/1M seqs."
+qiime dada2 denoise-single \
+--i-demultiplexed-seqs ${dmux_F} \
+--p-trim-left ${trim_left_F} \
+--p-trunc-len ${trim_right_F} \
+--p-n-threads 20 \
+--o-representative-sequences ${main_exp}/${title}_rep_seqs_F.qza \
+--o-table ${main_exp}/${title}_table_F.qza \
+--o-denoising-stats ${main_exp}/${title}_stats_F.qza
+
+rep_seq_F=${main_exp}/${title}_rep_seqs_F.qza
+table_F=$main_exp/${title}_table_F.qza
+stats_F=${main_exp}/${title}_stats_F.qza
+
+echo 'Dada2 completed. Almost done!'
+
+# create table of representative sequences and view stats
+qiime metadata tabulate \
+--m-input-file ${main_exp}/${title}_stats_F.qza \
+--o-visualization ${main_exp}/${title}_stats_F.qzv
+qiime feature-table summarize \
+--i-table ${table_F} \
+--o-visualization ${main_exp}/${title}_table_F.qzv
+
+
+# The following is possible if a stats file of merged table can be made{
+# export table to biom table
+#qiime tools export --output-dir ./ ${stats}
+
+# the stats are searched for the lowest sample depth value:
+# sample_depth=`sort -k 5 stats.tsv | awk 'NR ==1 {print $5}'`
+# echo "The sample depth was found to be ${sample_depth}."
+# echo "You should check sample table details to verify this is what you want."
+
+echo "View the '${main_exp}/${title}_table_F.qzv' to find your sampling depth."
+read -p 'What is your sampling depth?: ' sample_depth
+
+# Alignment, masking, tree-building, and rooting
+
+qiime alignment mafft \
+--i-sequences ${rep_seq_F} \
+--o-alignment ${main_exp}/rep_seq_align.qza \
+--p-n-threads 8
+echo "Aligned."
+
+qiime alignment mask \
+--i-alignment ${main_exp}/rep_seq_align.qza \
+--o-masked-alignment ${main_exp}/rep_seq_align_mask.qza
+echo "Masked."
+
+qiime phylogeny fasttree \
+--i-alignment ${main_exp}/rep_seq_align_mask.qza \
+--o-tree ${main_exp}/${title}_unrooted_tree.qza
+echo "Tree created successfully. Rooting now."
+
+qiime tools export \
+${main_exp}/${title}_unrooted_tree.qza \
+--output-dir exported_tree
+
+qiime phylogeny midpoint-root \
+--i-tree ${main_exp}/${title}_unrooted_tree.qza \
+--o-rooted-tree ${main_exp}/${title}_rooted_tree.qza
+
+rooted_tree=${main_exp}/${title}_rooted_tree.qza
+
+# generate diversity artifact files
+qiime diversity core-metrics-phylogenetic \
+--i-phylogeny ${rooted_tree} \
+--i-table ${main_exp}/${title}_table_F.qza \
+--p-sampling-depth ${sample_depth} \
+--m-metadata-file ${metadata} \
+--output-dir ${main_exp}/core_metric_results
+
+diversity=${main_exp}/core_metric_results
+
+# faith_pd
+# metadata needs sample with string value
+qiime diversity alpha-group-significance \
+--i-alpha-diversity ${diversity}/faith_pd_vector.qza \
+--m-metadata-file ${metadata} \
+--o-visualization ${diversity}/${title}_faith_pd_group_sig.qzv
+
+#evenness
+qiime diversity alpha-group-significance \
+--i-alpha-diversity ${diversity}/evenness_vector.qza \
+--m-metadata-file ${metadata} \
+--o-visualization ${diversity}/${title}_evenness_group_sig.qzv
+
+#unifrac unweighted
+qiime diversity beta-group-significance \
+--i-distance-matrix ${diversity}/unweighted_unifrac_distance_matrix.qza \
+--m-metadata-file ${metadata} \
+--m-metadata-column ${sample_var} \
+--o-visualization ${diversity}/${title}_unweighted_unifrac_body_site_significance.qzv \
+--p-pairwise
+
+#alpha rarefaction curve
+qiime diversity alpha-rarefaction \
+--i-table ${merged_table} \
+--i-phylogeny ${rooted_tree} \
+--p-max-depth ${sample_depth} \
+--m-metadata-file ${metadata} \
+--o-visualization ${diversity}/${title}_alpha_rarefaction.qzv
+
+classifier=~/matt_wright/rat_crc_study/gg-13-8-99-515-806-nb-classifier.qza
+
+#assign taxonomy
+qiime feature-classifier classify-sklearn \
+--i-classifier ${classifier} \
+--i-reads ${rep_seq} \
+--o-classification ${main_exp}/taxonomy.qza
+
+taxonomy=${main_exp}/taxonomy.qza
+
+qiime metadata tabulate \
+--m-input-file ${taxonomy} \
+--o-visualization ${main_exp}/taxonomy.qzv
+
+#barplot
+qiime taxa barplot \
+--i-table ${merged_table} \
+--i-taxonomy ${taxonomy} \
+--m-metadata-file ${metadata} \
+--o-visualization ${main_exp}/${title}_taxa_bar_plots.qzv
+
+echo 'All done!'
+exit 0
