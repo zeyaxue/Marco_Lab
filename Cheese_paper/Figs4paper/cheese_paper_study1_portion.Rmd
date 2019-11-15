@@ -129,8 +129,10 @@ otuq <- ps.milk %>% transform_sample_counts(function(x) x/sum(x) )  %>%
 otuq$Sampleid <- row.names(otuq)
 colnames(otuq) <- gsub("X","",colnames(otuq))
 otu.q <- merge(x = qPCR, y = otuq, by.x = "SampleID", by.y = "Sampleid")
-coln <- colnames(otu.q[,c(20:91)]) #  character vector with all feature names
-otu.q2 <- otu.q %>% mutate_at(.vars =  coln, .funs = funs(.*log10(Corrected_qPCR_cells_ml)))
+coln <- colnames(otu.q[,c(20:length(otu.q))]) #  character vector with all feature names
+otu.q2 <- otu.q %>% mutate_at(.vars =  coln, .funs = funs(log10(.*Corrected_qPCR_cells_ml)))
+otu.q2[otu.q2 == -Inf] <- 0 # replace -Inf (due to log) with 0 values
+
 row.names(otu.q2) <- otu.q2[,1] #sample id as row names for formatting with phyloseq
 otu.q3 <- otu.q2[,-c(1:19)] #remove all the meta information so the resulting otu table can be transformed into a numeric matrix
 otu.q3 <- as.matrix(otu.q3)
@@ -149,6 +151,8 @@ ps.milkqY <- subset_samples(ps.milkq, PMA %in% "Y")
 ps.milkqY # 94 taxa and 129 samples 
 ps.milkqN <- subset_samples(ps.milkq, PMA %in% "N")
 ps.milkqN # 94 taxa and 133 samples
+
+
 ################################ 3. Cheddar cheese ############################
 ps.cheese <- subset_samples(ps.REC.glom, SampleType %in% c("Cheese_0D","Cheese_120D","Cheese_30D","Cheese_90D"))
 ps.cheese # 94 taxa and 144 samples
