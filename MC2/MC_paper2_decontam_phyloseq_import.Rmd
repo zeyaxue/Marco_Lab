@@ -1060,6 +1060,14 @@ AlphaBox(subset_samples(psList.rare[[6]], SampleID != "10TB.1" & SampleID != "10
                                    "SampleOrCtrl","LYSING","Chemical_time",
                                    "Bead_beat_speed_time","vortex_time","Description"),
          lvl = c("Expected","30ml","10ml","1ml","200uL"))
+## change sample from small to largest vol
+AlphaBox(subset_samples(psList.rare[[6]], SampleID != "10TB.1" & SampleID != "10TB.2" & SampleID != "10TB.3"),
+         # subset to include only one set of 10ml samples 
+         alpha_measures = c("Observed", "Shannon"),
+         var1 = "For_AVE", var = c("KIT","For_AVE","STORAGE","MATRIX","PMA",
+                                   "SampleOrCtrl","LYSING","Chemical_time",
+                                   "Bead_beat_speed_time","vortex_time","Description"),
+         lvl = c("Expected","200uL","1ml","10ml","30ml"))
 
 # Alpha box plot on ps 4 (PMA)
 AlphaBox(psList.rare[[4]], alpha_measures = c("Observed", "Shannon"),
