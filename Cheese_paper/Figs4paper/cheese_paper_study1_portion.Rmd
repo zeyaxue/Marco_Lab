@@ -401,7 +401,7 @@ ChouBar <- function(ps, taxa, mycol, samType,lvl, w, h, path.out){
 ChouBar(ps.milk4Y %>% transform_sample_counts(function(x) x/sum(x) ), 
         taxa = comm17, mycol = col17, lvl = c("HTST_feed", "HTST_milk"),
         samType = "PMA treated HTST milk", w = 6, h = 5,
-        path.out = file.path(path, "Mar_2019/milkq4Y_cheeseOutcome.pdf"))
+        path.out = file.path(path, "Mar_2019/milk4Y_cheeseOutcome.pdf"))
 ChouBar(ps.milkq4N, taxa = comm17, mycol = col17, lvl = c("HTST_feed", "HTST_milk"),
         samType = "PMA untreated HTST milk", w = 6, h = 5,
         path.out = file.path(path, "Mar_2019/milkq4N_cheeseOutcome.pdf"))

@@ -29,6 +29,8 @@ library(superheat)
 library(plyr)
 library(dplyr)
 library(DESeq2)
+
+path <- "~/Google Drive File Stream/My Drive/UC_Davis/Marco_lab/milk_microbiota/Mock_community/MC_paper2_QIIME2/"
 ```
 
 
@@ -38,23 +40,23 @@ library(DESeq2)
 # Transpose the QIIME2 output in excel
 # For the theoretical values, I can adjust its absolute reads to suit data set by
 # changing values in the feature table
-SeqTab <- read.table(file.path("data/5file-combined_table-dada2-mc2.txt"), header = TRUE, stringsAsFactors = FALSE)
+SeqTab <- read.table(file.path(path, "mapping/5file-combined_table-dada2-mc2.txt"), header = TRUE, stringsAsFactors = FALSE)
 colnames(SeqTab) <- gsub("X","",colnames(SeqTab))
 row.names(SeqTab) <- SeqTab$OTUID
 SeqTab <- SeqTab[,-1]
 SeqTab <- as.matrix.data.frame(SeqTab)
 
 # Read in metadata file
-samdf <- read.csv(file.path("data/5file-MC_paper2_samdf.csv"))
+samdf <- read.csv(file.path(path, "mapping/5file-MC_paper2_samdf.csv"))
 rownames(samdf) <- samdf$SampleID
 
 # Read in exported rooted tree 
-tree <- read_tree(file.path("data/5file-tree.nwk"))
+tree <- read_tree(file.path(path, "mapping/5file-tree.nwk"))
 
 # Parse out taxonomic assignment in excel and remove confidence column
 # keep only taxa included in the "feature-table-mc2.csv" file
 # Species column removed
-TaxTab <- read.table(file.path("data/5file-taxonomy-mc2.tsv"), header = TRUE, sep = '\t', na.strings = NA)
+TaxTab <- read.table(file.path(path, "mapping/5file-taxonomy-mc2.tsv"), header = TRUE, sep = '\t', na.strings = NA)
 rownames(TaxTab) <- TaxTab$FeatureID
 TaxTab <- TaxTab[,-1]
 TaxTab <- as.matrix.data.frame(TaxTab)
@@ -225,8 +227,8 @@ TaxBar <- function(ps, var1, var2, lvl = NULL, lvl2 = NULL){
   TaxTab <- tax_table(ps) %>% as.data.frame()
   taxa_names(ps) <- TaxTab$REC 
   allTaxa <- taxa_names(ps)
-  ps.other <- prune_taxa(allTaxa[!(allTaxa %in% ExpTaxa)], ps)
-  taxa.other <- ps.other@tax_table[,7] %>% as.character() # 7 for REC level 
+  #ps.other <- prune_taxa(allTaxa[!(allTaxa %in% ExpTaxa)], ps)
+  #taxa.other <- ps.other@tax_table[,7] %>% as.character() # 7 for REC level 
   
   # change the taxa that are not the expected taxa to "Other" 
   TaxTab2 <- psmelt(ps)
@@ -237,7 +239,7 @@ TaxBar <- function(ps, var1, var2, lvl = NULL, lvl2 = NULL){
   colnames(TaxTab2_agg)[1] <- var1
   colnames(TaxTab2_agg)[2] <- var2
   TaxTab2_agg$REC <- as.character(TaxTab2_agg$REC)
-  TaxTab2_agg[TaxTab2_agg$REC %in% taxa.other,]$REC <- "Other"
+  #TaxTab2_agg[TaxTab2_agg$REC %in% taxa.other,]$REC <- "Other"
   
   # Set colors for plotting
   mycol = c("#a6cee3","#1f78b4","#b2df8a","#33a02c","#fb9a99","#e31a1c",
@@ -272,6 +274,31 @@ TaxBar <- function(ps, var1, var2, lvl = NULL, lvl2 = NULL){
   # plot result
   grid::grid.draw(gp)
 }
+
+### Average plot for all samples for BCMC
+sample_data(ps.REC.glom)$SampleOrCtrl <- factor(sample_data(ps.REC.glom)$SampleOrCtrl, levels = c("Theoretical_value", "Sample"))
+pdf(file.path(path, "feature_table/All_BCMC1_BCMC2.pdf"), w=5.75, h=4.1)
+TaxBar(ps.REC.glom %>% 
+         subset_samples(SampleOrCtrl %in% c("Sample","Theoretical_value")) %>% 
+         subset_taxa(REC %in% c("Bacillaceae","Bacillus","Corynebacterium","Clostridiaceae",
+               "Clostridium","Enterococcus","Escherichia","Lactococcus",
+               "Pseudomonas","Staphylococcus","Streptococcus")),
+       var1 = "SampleOrCtrl", var2 = "Description")
+dev.off()
+
+### Average plot for samples prepared in the same way between BCMCs
+ps_same <- ps.REC.glom %>% 
+  subset_samples(KIT %in% c("Theoretical_value", "Total")) %>% 
+  subset_samples(Description %in% c("BCMC1", "BCMC2")) %>% 
+  subset_samples(Bead_beat_speed_time %in% c("Theoretical_value", "6.5_2min"))
+pdf(file.path(path, "feature_table/Same_BCMC1_BCMC2.pdf"), w=5.75, h=4.1)
+TaxBar(ps_same %>% 
+         subset_taxa(REC %in% c("Bacillaceae","Bacillus","Corynebacterium","Clostridiaceae",
+               "Clostridium","Enterococcus","Escherichia","Lactococcus",
+               "Pseudomonas","Staphylococcus","Streptococcus")),
+       var1 = "SampleOrCtrl", var2 = "Description")
+dev.off()
+
 
 
 # Plot for AVERAGE cell lysis method (ps1)(phase2, harsh cell lysis method)
@@ -448,7 +475,7 @@ TaxDot(ps7.merge, var1 = "For_AVE", var2 = "Kit",
 #### Fold change analysis compared to the expected 
 ```{r}
 # relative abundance = (taxa - exp)/exp
-FoldDot <- function(ps, var1, var2, lvl = NULL, lvl2 = NULL) {
+FoldDot <- function(ps, var1, var2, lvl = NULL, lvl2 = NULL, path.out) {
   ps <-  ps %>% transform_sample_counts(function(x) x/sum(x) ) 
   TaxTab <- tax_table(ps) %>% as.data.frame()
   taxa_names(ps) <- TaxTab$REC
@@ -480,6 +507,7 @@ FoldDot <- function(ps, var1, var2, lvl = NULL, lvl2 = NULL) {
   row.names(df3) <- row.names(df)
   df3["Other",] <- df2["Other",] # replace Inf other with pre-division numbers
   df4 <- subset(df3, df3[,1] != Inf)
+  write.csv(df4, path.out)
   
   # merge as new phyloseq object 
   ps <- phyloseq(otu_table(df4, taxa_are_rows = TRUE), sample_data(ps), tax_table(TaxTab))
@@ -517,15 +545,66 @@ FoldDot(ps7.merge, var1 = "For_AVE", var2 = "Kit",
                  "Microbiome_Chemical_Bead_beating_","Microbiome_Chemical_Bead_beating_Rnase_ammonium_acetate",
                  "Microbiome_Vortex_","Microbiome_Vortex_Rnase_ammonium_acetate",
                  "Microbiome_Chemical_Vortex_","Microbiome_Chemical_Vortex_Rnase_ammonium_acetate"),
-        lvl2 = c("Expected", "Total_phase3", "Total_ProteinaseK"))
+        lvl2 = c("Expected", "Total_phase3", "Total_ProteinaseK"),
+        path.out = file.path(path,"feature_table/DotPlot/WeightedDiff_ps7.csv"))
 
 FoldDot(ps3.merge, var1 = "For_AVE", var2 = "KIT", 
         lvl = c("Total_Bead_beating_6.5_2min","Total_Vortex_NA","Total_Chemical_NA",
                "Core_Bead_beating_6.5_2min","Core_Vortex_","Core_Chemical_",
                "Ultra2_Bead_beating_6.5_2min","Ultra2_Vortex_","Ultra2_Chemical_"),
-        lvl2 = c("Total", "Core","Ultra2"))
+        lvl2 = c("Total", "Core","Ultra2"),
+        path.out = file.path(path,"feature_table/DotPlot/WeightedDiff_ps3.csv"))
 
+### write the csv with triplicate values
+psList[[3]] <- psList[[3]] %>% transform_sample_counts(function(x) x/sum(x) )
+TaxTab3 <- psList[[3]] %>% tax_table() %>% as.data.frame()
+taxa_names(psList[[3]]) <- TaxTab3$REC
+TaxTab3 <- tax_table(psList[[3]]) %>% as.data.frame() %>% subset(REC %in% ExpTaxa) %>% 
+  rbind(data.frame(Kingdom = "Other",Phylum = "Other",
+                   Class = "Other",Order = "Other",
+                            Family = "Other", Genus = "Other",
+                            REC = "Other"))
+row.names(TaxTab3)[row.names(TaxTab3) == '1'] <- 'Other' # Change to "Other"
+df <- otu_table(psList[[3]]) %>% as.data.frame() 
+df <- df %>% subset(row.names(df) %in% ExpTaxa) # expected only
+df <- rbind(df, 1-colSums(df[,1:ncol(df)])) # proportion of other bacteria
+row.names(df)[row.names(df) == '10'] <- 'Other' # Change to "Other"
+## Calculate for relative difference
+df2 <- df[,1:ncol(df)] %>% mutate_all(funs(. - df[,"Theo2.1"]))
+df2 <- select(df2, -Theo2.1)
+row.names(df2) <- row.names(df)
+df3 <- df2[,1:ncol(df2)] %>% mutate_all(funs(. / df[,"Theo2.1"]))
+row.names(df3) <- row.names(df)
+df3["Other",] <- df2["Other",] # replace Inf other with pre-division numbers
+df4 <- subset(df3, df3[,1] != Inf)
+write.csv(df4, file.path(path, "feature_table/DotPlot/WeightedDiff_ps3_triplicate.csv"))
 ```
+
+```{r}
+psList[[7]] <- psList[[7]] %>% transform_sample_counts(function(x) x/sum(x) )
+TaxTab3 <- psList[[7]] %>% tax_table() %>% as.data.frame()
+taxa_names(psList[[7]]) <- TaxTab3$REC
+TaxTab3 <- tax_table(psList[[7]]) %>% as.data.frame() %>% subset(REC %in% ExpTaxa) %>% 
+  rbind(data.frame(Kingdom = "Other",Phylum = "Other",
+                   Class = "Other",Order = "Other",
+                            Family = "Other", Genus = "Other",
+                            REC = "Other"))
+row.names(TaxTab3)[row.names(TaxTab3) == '1'] <- 'Other' # Change to "Other"
+df <- otu_table(psList[[7]]) %>% as.data.frame() 
+df <- df %>% subset(row.names(df) %in% ExpTaxa) # expected only
+df <- rbind(df, 1-colSums(df[,1:ncol(df)])) # proportion of other bacteria
+row.names(df)[row.names(df) == '10'] <- 'Other' # Change to "Other"
+## Calculate for relative difference
+df2 <- df[,1:ncol(df)] %>% mutate_all(funs(. - df[,"Theo2.1"]))
+df2 <- select(df2, -Theo2.1)
+row.names(df2) <- row.names(df)
+df3 <- df2[,1:ncol(df2)] %>% mutate_all(funs(. / df[,"Theo2.1"]))
+row.names(df3) <- row.names(df)
+df3["Other",] <- df2["Other",] # replace Inf other with pre-division numbers
+df4 <- subset(df3, df3[,1] != Inf)
+write.csv(df4, file.path(path, "feature_table/DotPlot/WeightedDiff_ps7_triplicate.csv"))
+```
+
 
 #### Fold change analysis compared to the B1
 ```{r}
@@ -565,6 +644,28 @@ FoldB1Bar(RelDiffB1)
 gmMean = function(x, na.rm=TRUE){
   exp(sum(log(x[x > 0]), na.rm=na.rm) / length(x))
 }
+
+### Comparing samples that were treated the same between BCMC1 and BCMC2
+psdds <- phyloseq_to_deseq2(ps_same %>% 
+                              subset_samples(SampleOrCtrl %in% c("Sample","Theoretical_value")) %>%       
+                              subset_samples(Description %in% c("BCMC2")) %>% 
+                              subset_taxa(REC %in% c("Bacillaceae","Bacillus","Corynebacterium","Clostridiaceae",
+                                                     "Clostridium","Enterococcus","Escherichia","Lactococcus",
+                                                     "Pseudomonas","Staphylococcus","Streptococcus")),  
+                            ~ SampleOrCtrl)
+geoMeans <- apply(counts(psdds), 1, gmMean)
+psdds <- estimateSizeFactors(psdds, geoMeans = geoMeans)
+  
+dds <- DESeq(psdds, test = "Wald", fitType = "local") 
+plotDispEsts(dds, ylim = c(1e-6, 1e2)) 
+alpha <- 0.1 #  padj for indepenent filtering and expect FDR < alpha
+results(dds, alpha = alpha, lfcThreshold = log2(1.5), altHypothesis = "greaterAbs") %>% f() %>% 
+  write.csv(file.path(path,"deseq_table/same_BCMC2.csv"))
+# Sample numbers
+ps_same %>% 
+  subset_samples(SampleOrCtrl %in% c("Sample")) %>%  
+  subset_samples(Description %in% c("BCMC1")) %>% 
+  sample_data() %>% nrow()
 
 # Define function for harsh cell lysis method (ps1)
 HarshLyseDA <- function(ps, path.out) {
@@ -1044,7 +1145,7 @@ AlphaBox <- function(ps, alpha_measures, var1, var, lvl){
               variable.name = "measure", value.name = "value")
   dfm[[var1]] <- factor(dfm[[var1]], levels = lvl)
   
-  p<- ggboxplot(dfm, x = var1, y = "value", add = "jitter", palette = "Set3",
+  p<- ggboxplot(dfm, x = var1, y = "value", add = "jitter", fill = "Lysis", palette = "Set3",
                 font.label = list(size = 18, face = "plain"), ggtheme = theme_bw())+
     stat_compare_means(method = "t.test", ref.group = "Expected", 
                        hide.ns = TRUE,  label = "p.signif")
@@ -1076,6 +1177,46 @@ AlphaBox(psList.rare[[4]], alpha_measures = c("Observed", "Shannon"),
                                    "Bead_beat_speed_time","vortex_time","Description"),
          lvl = c("Expected","Untreated","Live","Half","Dead"))
 
+# combine ps3 and ps7
+psList.rare[[3]]
+psList.rare[[7]]
+ps37 <- merge_phyloseq(psList.rare[[3]], 
+                       subset_samples(psList.rare[[7]], !(SampleID %in% c("Theo2.1","Theo2.2","Theo2.3"))))
+ps37
+#ps37 %>% sample_data() %>% write.csv(file.path(path,"feature_table/sample_data_37.csv"))
+# I manually corrected the lysis methods 
+sam37 <- read.csv(file.path(path,"feature_table/sample_data_37.csv"), row.names=1)
+ps37 <- merge_phyloseq(otu_table(ps37), 
+                       sample_data(sam37))
+sample_data(ps37)$Lysis <- factor(sample_data(ps37)$Lysis,
+                                  levels = c("B1","V1","C1",
+                                             "Bead beat: 10s x 4m/s",
+                                             "Chemical + Bead beat: 1hr + 10s x 4m/s",
+                                             "Vortex: 30s",
+                                             "Chemical + Vortex: 1hr + 30s ", 
+                                             "Expected"))
+
+pdf(file.path(path,"alpha/ps37_for_AVE_lysis.pdf"), w=16,h=5)
+AlphaBox(ps37, alpha_measures = c("Observed", "Shannon"),
+         var1 = "For_AVE", var = c("KIT","For_AVE","VOL","STORAGE","MATRIX","PMA",
+                                   "SampleOrCtrl","LYSING","Chemical_time",
+                                   "Bead_beat_speed_time","vortex_time","Description",
+                                   "Rnase", "Protein_cleanup","Kit", "Lysis" ),
+         lvl = c("Expected","Total_Bead_beating_6.5_2min", "Total_Vortex_NA", "Total_Chemical_NA", 
+                 "Core_Bead_beating_6.5_2min", "Core_Vortex_", "Core_Chemical_", 
+                "Ultra2_Bead_beating_6.5_2min", "Ultra2_Vortex_", "Ultra2_Chemical_", 
+                "Total_Bead_beating_","Total_Bead_beating_Rnase_ammonium_acetate","Total_Chemical_Bead_beating_",
+                "Total_Chemical_Bead_beating_Rnase_ammonium_acetate",
+                "Total_Vortex_",
+                "Total_Vortex_Rnase_ammonium_acetate",
+                "Total_Chemical_Vortex_","Total_Chemical_Vortex_Rnase_ammonium_acetate", 
+                "Microbiome_Bead_beating_","Microbiome_Bead_beating_Rnase_ammonium_acetate",
+                "Microbiome_Chemical_Bead_beating_",
+                "Microbiome_Chemical_Bead_beating_Rnase_ammonium_acetate",
+                "Microbiome_Vortex_","Microbiome_Vortex_Rnase_ammonium_acetate",
+                "Microbiome_Chemical_Vortex_","Microbiome_Chemical_Vortex_Rnase_ammonium_acetate"))
+dev.off()
+
 ```
 
 
@@ -1094,7 +1235,7 @@ print(ggboxplot(PMA.conc, x = "Treatment", y = "Ct_diff",
         stat_compare_means(method = "kruskal", hide.ns = TRUE, label = "p.signif"))
 
 # PMA on 3 species strain 
-PMA.T <- read.csv(file.path("data/50uM_time.csv"))
+PMA.T <- read.csv(file.path(file.path(path, "qPCR/50uM_time.csv")))
 PMA.T$Cell_state <- factor(PMA.T$Cell_state, levels = c("Live", "Half", "Dead"))
 ## make a df to p value annotation
 df.anno <- compare_means(PerOf_untreated ~ Treatment, method = "kruskal.test",
@@ -1106,6 +1247,25 @@ print(ggboxplot(subset(PMA.T, PerOf_untreated != "NA"),
                 font.label = list(size = 18, face = "plain"), 
                 palette = "jco", ggtheme = theme_bw()) +
         facet_wrap(~Species, scales = "free_x"))
+
+# PMA on 3 species strain, only use dead cells
+pdf(file.path(path,"qPCR/50uM_time_dead.pdf"), w=5.5, h=3)
+print(ggboxplot(subset(PMA.T, PerOf_untreated != "NA") %>% 
+                  subset(Cell_state == "Dead"), 
+                x = "Treatment", y = "PerOf_untreated",
+                font.label = list(size = 18, face = "plain"), 
+                palette = "jco", ggtheme = theme_bw()) +
+        facet_wrap(~Species, scales = "free_x"))
+dev.off()
+compare_means(PerOf_untreated ~ Treatment, method = "kruskal.test",
+              data = subset(PMA.T, Species == "Escherichia coli") %>% 
+                subset(Cell_state == "Dead")) 
+compare_means(PerOf_untreated ~ Treatment, method = "kruskal.test",
+              data = subset(PMA.T, Species == "Bacillus subtilis") %>% 
+                subset(Cell_state == "Dead")) 
+compare_means(PerOf_untreated ~ Treatment, method = "kruskal.test",
+              data = subset(PMA.T, Species == "Enterococcus faecalis") %>% 
+                subset(Cell_state == "Dead")) 
 
 
 # PMA on MC 
